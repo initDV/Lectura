@@ -1,69 +1,65 @@
 # Ajouter un personnage
 
 Aucun code à modifier : deux fichiers à créer, une commande à lancer.
+Tous les personnages partagent le même robot (mêmes proportions, mêmes articulations, même style « contour »).
+Seuls changent la couleur du contour et des yeux, et un ou deux accessoires en traits simples.
 
-## 1. Copier un personnage existant
+## 1. Copier le robot de référence
 
 ```bash
 cd characters
-cp robot.svg mon_perso.svg
-cp robot.json mon_perso.json
+cp robot_lectura.svg mon_robot.svg
+cp robot_lectura.json mon_robot.json
 ```
 
-## 2. Dessiner le SVG
+`robot_lectura.svg` est la référence exacte : ne le modifie pas, pars toujours d'une copie.
 
-Règles de style (identiques pour tous) : pictogramme plat, sans dégradé, corps `#3a3f4b`, mêmes proportions.
-Seuls changent la couleur d'accent et un ou deux accessoires.
+## 2. Adapter le SVG
 
-Le fichier doit garder cette structure, avec ces identifiants exacts :
+Style : contour fin (épaisseur 3) sur remplissage sombre `#1c1830`, aucun dégradé, aucune ombre floue.
+Repère : `viewBox="0 0 240 600"`.
 
-```xml
-<svg id="lectura-char" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
-  <g id="char" fill="#3a3f4b">
-    <g id="leg-l">…</g>   <g id="leg-r">…</g>
-    <g id="arm-l">…</g>   <g id="arm-r">…</g>
-    <g id="torso">…</g>
-    <g id="head">
-      …
-      <rect id="visor" x="124" y="47" width="52" height="14" rx="7" fill="#ff4d4d"/>
-      <path id="visor-happy" …/>
-    </g>
-  </g>
-</svg>
-```
+Le fichier doit garder ces groupes et ces identifiants, que l'animation utilise :
 
-- Pièces obligatoires : `#char`, `#head`, `#visor`, `#torso`, `#arm-l`, `#arm-r`, `#leg-l`, `#leg-r`.
-  S'il en manque une, l'application affiche un message qui la nomme.
-- Un groupe `<g id="back">` placé avant les jambes peut porter un accessoire dans le dos (cape, sac).
-- Interdits : scripts, liens externes, images incorporées. Ils sont retirés au chargement.
-- Repères par défaut : épaules (115,122) et (185,122), cou (150,95), hanches (135,200) et (165,200),
-  centre de la visière (150,54).
+| Identifiant | Rôle | Animation |
+|---|---|---|
+| `#body` | torse, antenne, tête et visage | respiration |
+| `#arm-l`, `#arm-r` | bras gauche et droit | balancement pendant la parole, gestes |
+| `#legs` | jambes (facultatif) | suit le corps pour les styles flottant et ondulant |
+| `#mouth` | bouche (`rect`) | hauteur selon le son |
+| `#eye-l`, `#eye-r` | yeux (`circle`) | taille selon l'expression, clignement |
+| `#brow-l`, `#brow-r` | sourcils | montent ou descendent selon l'expression |
+
+S'il manque `#body`, `#arm-l`, `#arm-r`, `#mouth`, `#eye-l`, `#eye-r`, `#brow-l` ou `#brow-r`, l'application
+affiche un message qui nomme la pièce manquante.
+
+Règles pratiques :
+
+- **Changer la couleur** : remplace `#9b45e0` (contour) partout, et `#3ddc84` (yeux) si tu veux.
+- **Accessoire qui suit un bras** (loupe, crochet) : place-le dans `#arm-l` ou `#arm-r`.
+- **Accessoire sur la tête ou le torse** : place-le dans `#body`. Dessiné avant le cercle de la tête il passe
+  derrière, dessiné après il passe devant.
+- **Reflets des yeux** : les petits cercles sans identifiant placés juste après les yeux (rayon 4 ou moins) sont
+  masqués pendant le clignement. Ne mets pas d'autre petit cercle sans identifiant à cet endroit.
+- **Fichier autonome** : aucune image, police ou feuille de style externe, aucun script. Le dessin est converti en
+  image pour la capture et la vidéo ; une référence externe casserait l'export. Les balises non autorisées sont
+  retirées au chargement.
+- Pivots des épaules par défaut : (34,224) et (208,224).
 
 ## 3. Remplir le JSON
 
 ```json
-{
-  "id": "mon_perso",
-  "nom": "Mon perso",
-  "role": "base",
-  "pro": false,
-  "svg": "mon_perso.svg",
-  "couleurCorps": "#3a3f4b",
-  "couleurAccent": "#ff4d4d",
-  "pieces": ["torse", "tete", "bras_g", "bras_d", "jambe_g", "jambe_d"],
-  "pivots": { "epaule_g": [115, 122], "epaule_d": [185, 122], "cou": [150, 95], "hanche_g": [135, 200], "hanche_d": [165, 200] },
-  "visiere": { "centre": [150, 54], "largeur": 52, "hauteur": 14 },
-  "mouvements": { "vitesseIdle": 1, "amplitudeBras": 1, "style": "fluide" },
-  "voixSuggeree": { "hauteur": 1, "vitesse": 1 },
-  "accessoires": []
-}
+{"id":"mon_robot","nom":"Mon robot","role":"pro","pro":true,"svg":"mon_robot.svg",
+ "couleurContour":"#ff4d4d","couleurRemplissage":"#1c1830","couleurYeux":"#ffd23f","couleurBouche":"#38bdf8",
+ "pivots":{"epaule_g":[34,224],"epaule_d":[208,224]},
+ "mouvements":{"vitesseIdle":1,"amplitudeBras":1,"style":"fluide"},
+ "voixSuggeree":{"hauteur":1,"vitesse":1}}
 ```
 
 - `id` doit être identique au nom du fichier.
-- `pro: true` réserve le personnage à Lectura Pro.
+- `pro: true` réserve le personnage à Lectura Pro. Gratuits aujourd'hui : `robot_lectura` et `robot_rouge`.
 - `mouvements.style` : `fluide`, `saccade`, `sec`, `frappe`, `flottant`, `ondulant`, `calme` ou `expressif`.
-- Réglages facultatifs : `vitesseGestes`, `amplitudeTete`, `paliers`, `flottement`, `ondulation`,
-  et `posture` (`inclinaison` en degrés, `brasRepos`).
+- `vitesseIdle` et `amplitudeBras` multiplient la vitesse et l'ampleur des mouvements.
 
 ## 4. Enregistrer et vérifier
 
@@ -72,5 +68,5 @@ npm run characters        # vérifie chaque personnage et met à jour characters
 npm start                 # puis ouvrir http://localhost:5173/tests/manual/personnages.html
 ```
 
-La planche montre tous les personnages côte à côte, en SVG et en rendu d'export. Paramètres utiles dans l'adresse :
-`?expr=content`, `?parle=1`, `?fige=1`.
+La planche montre chaque personnage deux fois : le SVG animé, et l'image produite pour l'export. Les deux doivent
+être identiques. Paramètres utiles dans l'adresse : `?expr=surpris`, `?parle=1`, `?fige=1`.

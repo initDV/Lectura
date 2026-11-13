@@ -6,6 +6,7 @@
 index.html ── src/boot.js (garde de démarrage)
            └─ src/main.js → src/app.js (états, réglages, licence)
                               ├─ src/router.js  → src/ui/<écran>.js   (chargés à la demande)
+                              │    scene (écran principal) · projets · personnages · reglages · pro · apropos
                               ├─ src/state.js     bus d'événements + état partagé
                               └─ src/modules/*    logique sans interface
 sw.js        service worker (réseau d'abord, copie locale hors ligne)
@@ -33,6 +34,9 @@ source audio ──timeMs()──▶ Timeline.charAt(ms) ──▶ Terminal.reve
                     └─ viseme() ──▶ bouche du personnage
 ```
 
+Les lignes « $ » (commande) et « # » (commentaire) sont affichées mais jamais prononcées : `timeline.js` les repère
+(`typeLigne`), la file de la voix les fait défiler en silence, et la bouche du robot reste fermée.
+
 À chaque image (`requestAnimationFrame`, dans `src/ui/scene.js`), la scène demande le temps à la source, en déduit le
 nombre de caractères à montrer, puis met à jour le terminal et le personnage. Reculer, avancer, mettre en pause ou
 tourner l'écran ne peut donc jamais désynchroniser le texte.
@@ -59,8 +63,8 @@ quelque chose manque.
 | `project.js` | Format `.lectura` (création, validation, export, import). |
 | `audio.js` | Un seul `AudioContext`, lecture par `<audio>`, analyse du volume, encodage WAV. |
 | `lipsync.js` | Volume → ouverture de bouche (4 niveaux), formes de bouche par bandes (Pro). |
-| `character.js`, `character-loader.js` | Chargement, nettoyage et animation des personnages. |
-| `capture.js`, `recorder.js`, `svgcanvas.js` | Capture PNG et enregistrement vidéo sur canvas. |
+| `character.js`, `character-loader.js` | Chargement, nettoyage et animation des robots. |
+| `capture.js`, `recorder.js`, `svgframe.js` | Capture PNG et enregistrement vidéo sur canvas ; le robot vient du SVG vivant sérialisé. |
 | `voice/webspeech.js`, `voice/queue.js` | Voix du système, file de phrases, reprise, chien de garde. |
 | `voice/piper.js`, `piper-store.js`, `piper-worker.js` | Voix HD : téléchargement, cache, synthèse dans un worker. |
 | `voice/g2p_fr.js`, `g2p_lexique.js`, `nombres.js` | Texte français → phonèmes. |
@@ -69,6 +73,19 @@ quelque chose manque.
 | `pwa.js` | Service worker, installation, quota, verrou d'écran. |
 | `errors.js` | Journal local et messages à l'écran. |
 | `i18n.js` + `src/i18n/` | Textes français et anglais. |
+
+## Interface (`src/ui/`)
+
+| Fichier | Rôle |
+|---|---|
+| `scene.js` | Écran principal : préparation, boucle d'animation, Lancer / Arrêter, raccourcis. |
+| `scene-controls.js` | Les lignes sous la scène : capture, vitesse, voix, texte, actions. |
+| `scene-export.js` | Capture PNG et enregistrement vidéo. |
+| `voix-liste.js` | Liste des voix françaises et import d'un fichier audio. |
+| `menu.js`, `modale.js` | Menu discret et fenêtre modale accessible. |
+| `projet-actions.js` | Enregistrer, importer, exporter le projet et les sous-titres. |
+| `projets.js`, `personnages.js`, `reglages.js`, `pro.js`, `apropos.js` | Écrans ouverts depuis le menu. |
+| `styles/tokens.css` | Variables de design (D1). |
 
 ## Bus d'événements (`src/state.js`)
 

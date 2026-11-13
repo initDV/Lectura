@@ -50,5 +50,5 @@ le projet refuse par principe.
 
 ## Ce que Pro débloque
 
-11 personnages supplémentaires, expressions avancées, lip-sync par bandes, catégories de mots-clés personnalisées,
+11 robots supplémentaires, expressions avancées, lip-sync par bandes, catégories de mots-clés personnalisées,
 export vidéo en 16:9 et 9:16, thèmes et police du terminal, import/export `.srt` et `.vtt`, suppression du filigrane.

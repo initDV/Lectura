@@ -1,8 +1,8 @@
 # Lectura
 
-Un personnage animé parle à côté d'un faux terminal où ton texte s'affiche comme des sous-titres, avec les mots
-importants colorés. Tu filmes l'écran ou tu exportes la vidéo. Application web gratuite, installable, qui fonctionne
-hors ligne. Aucun compte, aucun serveur, aucune statistique.
+Un robot animé parle à côté d'un faux terminal où ton texte s'affiche au fil de la lecture. Tu colles ton texte,
+tu appuies sur « Lancer », tu filmes l'écran ou tu exportes la vidéo. Application web gratuite, installable, qui
+fonctionne hors ligne. Aucun compte, aucun serveur, aucune statistique.
 
 ## Démarrer (Ubuntu, terminal)
 
@@ -15,7 +15,7 @@ Pour les tests, la vérification du code et le build :
 
 ```bash
 npm install                   # une seule fois (≈ 60 Mo, outils de développement uniquement)
-npm test                      # 49 tests
+npm test                      # 55 tests
 npm run lint
 npm run build                 # crée dist/
 npm run preview               # sert dist/ sur http://localhost:5173
@@ -52,16 +52,41 @@ Commande de build : `npm ci && npm run voice && npm run build` — dossier de so
 
 ## Utilisation
 
-1. **Accueil** : nouveau projet, ouvrir un fichier `.lectura`, ou essayer l'exemple.
-2. **Éditeur** : colle ton texte, choisis « Mon fichier audio » ou « Voix Lectura », choisis un personnage.
-3. **Scène** : Lecture, puis filme l'écran (mode présentation) ou enregistre la vidéo (Pro).
+Tout se passe sur un seul écran : la scène en haut (robot à gauche, terminal à droite), les commandes en dessous.
 
-Raccourcis dans la scène : `Espace` lecture/pause · `←` `→` ±5 s · `P` présentation · `S` capture PNG ·
-`R` enregistrer · `M` couper le son · `F` plein écran · `E` expression suivante.
+1. **Colle ton texte** dans la zone du bas.
+2. **Choisis la voix** dans la ligne voix (la voix de l'appareil est utilisée par défaut, sans fichier audio).
+3. **Lancer** : le robot parle et le terminal affiche les lignes dans l'ordre. **Arrêter** coupe la voix.
+4. **Capturer l'écran** masque les commandes pour filmer. Un appui = lecture/pause, deux appuis = retour.
+
+### Écrire le texte
+
+| La ligne commence par | Elle est | À l'écran | Prononcée |
+|---|---|---|---|
+| `$ ` | une commande | prompt violet + commande en couleur d'accent | non |
+| `# ` | un commentaire | grise | non |
+| autre chose | du texte parlé | texte normal, mots importants colorés | oui |
+
+```text
+Aujourd'hui, on apprend à repérer les machines d'un réseau.
+# Étape 1 : lister les ports ouverts
+$ nmap -sV 192.168.1.10
+Bravo, tu as réussi ton premier scan !
+```
+
+### Les autres commandes
+
+- **Vitesse** (0.5x à 2.0x) : agit sur la voix et sur le défilement du terminal.
+- **Œil** dans la barre du terminal : masque ou affiche le texte, pour ne montrer que le robot.
+- **Menu « ⋮ »** en haut à gauche de la scène : projets, import/export, aperçu sans son, capture PNG, export vidéo,
+  personnages, réglages, licence Pro, à propos.
+
+Raccourcis clavier (hors zone de texte) : `Espace` lancer/pause · `←` `→` ±5 s · `P` mode capture · `S` capture PNG ·
+`R` enregistrer la vidéo · `M` couper le son · `F` plein écran · `E` expression suivante.
 
 ### Le son
 
-- **Mon fichier audio** (mp3, wav, ogg, m4a, webm) : le texte suit exactement ton enregistrement.
+- **Fichier audio** en option (bouton à droite de la ligne voix ; mp3, wav, ogg, m4a, webm) : le texte suit exactement ton enregistrement.
 - **Voix du système** : rien à télécharger. Sur Android, il faut une voix française installée dans les réglages
   du téléphone.
 - **Voix Lectura HD** : voix naturelle hors ligne, à télécharger une fois depuis Réglages (≈ 71 Mo, Wi-Fi conseillé).
@@ -72,9 +97,9 @@ Raccourcis dans la scène : `Espace` lecture/pause · `←` `→` ±5 s · `P` p
 
 | Gratuit | Pro |
 |---|---|
-| 2 personnages (Professeur, Robot) | 11 personnages de plus |
+| 2 robots (Robot Lectura, Robot rouge) | 11 robots de plus |
 | Fichier audio, voix du système, voix HD | Voix HD enregistrée dans la vidéo |
-| Terminal coloré, mode présentation, raccourcis | Thèmes, police et vitesse du terminal |
+| Terminal coloré, mode capture, raccourcis | Thèmes, police et vitesse du terminal |
 | Capture PNG | Export vidéo MP4 ou WebM, en 16:9 et 9:16 |
 | Projets locaux, export/import `.lectura` | Import/export `.srt` et `.vtt` |
 | Lip-sync à 4 niveaux | Lip-sync plus fin, expressions avancées |

@@ -7,10 +7,9 @@ Règle du projet : uniquement des licences MIT, Apache-2.0, BSD, ISC, MPL, OFL o
 
 | Composant | Rôle | Licence | Source |
 |---|---|---|---|
-| Inter (variable, sous-ensemble latin) | Police de l'interface | SIL Open Font License 1.1 (`fonts/OFL-Inter.txt`) | https://github.com/rsms/inter, paquet `@fontsource-variable/inter` 5.3.0 |
-| JetBrains Mono (variable, sous-ensemble latin) | Police du terminal | SIL Open Font License 1.1 (`fonts/OFL-JetBrainsMono.txt`) | https://github.com/JetBrains/JetBrainsMono, paquet `@fontsource-variable/jetbrains-mono` 5.3.0 |
+| JetBrains Mono (variable, sous-ensemble latin) | Police de toute l'interface | SIL Open Font License 1.1 (`fonts/OFL-JetBrainsMono.txt`) | https://github.com/JetBrains/JetBrainsMono, paquet `@fontsource-variable/jetbrains-mono` 5.3.0 |
 
-Tout le reste du dossier publié (code, personnages SVG, icônes de l'interface, icônes de l'application, dictionnaires de
+Tout le reste du dossier publié (code, robots SVG, icônes de l'interface, icônes de l'application, dictionnaires de
 mots-clés, textes d'exemple, convertisseur texte → phonèmes) a été écrit ou dessiné pour Lectura : licence MIT.
 Aucune bibliothèque JavaScript tierce n'est chargée au démarrage.
 

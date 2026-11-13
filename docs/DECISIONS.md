@@ -3,6 +3,49 @@
 Chaque fois que le cahier des charges laissait un choix, ou qu'une consigne ne pouvait pas être suivie telle quelle,
 la solution la plus simple, gratuite et hors ligne a été retenue. Tout est noté ici.
 
+## 0. Refonte « robot + écran unique » (parties B et D révisées)
+
+Les parties B (personnage) et D (interface) du cahier des charges ont été remplacées. Ce qui a changé :
+
+- **Personnage** : le bonhomme pictogramme est supprimé. `robot_lectura.svg` reproduit la référence B2 à l'identique.
+  Les 12 autres robots en dérivent (même corps, couleur et accessoires différents).
+- **Personnage gratuit en plus de `robot_lectura`** : `robot_rouge`, le plus proche du robot de base.
+- **Anciens projets** : `professor_1` devient `robot_lectura`, `robot` devient `robot_rouge`, l'ancien fond devient `#0d0d12`.
+- **`character.js`** : le code de référence B3 est repris (hauteurs de bouche, respiration, bras, clignement,
+  expressions). Ajouts, sans le contourner : style de mouvement lu dans la fiche JSON, geste sur les mots-clés,
+  expressions Pro, largeur de bouche (Pro). Correction : les reflets des yeux sont masqués pendant le clignement
+  (sinon un point blanc reste affiché).
+- **Export (B5)** : le robot n'est plus redessiné à la main. Son SVG vivant est sérialisé puis dessiné sur le canvas,
+  une image sur deux, sans jamais lancer deux conversions à la fois. Précaution ajoutée : largeur et hauteur sont
+  écrites dans le SVG sérialisé, car Firefox est connu pour ne pas dessiner un SVG sans dimensions (non testé ici).
+- **Écran principal unique** (D2) : scène en deux colonnes même en vertical (robot 38 %, terminal 62 %), puis
+  « Capturer l'écran », « Vitesse », ligne voix, zone de texte, barre d'actions. Les anciens écrans Accueil et
+  Éditeur n'existent plus.
+- **Hauteur de la scène** : 70 % de l'écran au plus, réduite juste assez pour que le bouton « Lancer » reste visible
+  sans faire défiler la page (64 % sur un téléphone de 844 px de haut).
+- **Menu discret** : un bouton « ⋮ » en haut à gauche de la scène. C'est le seul élément ajouté à l'écran de la
+  capture ; sans lui, les réglages avancés seraient inaccessibles. Il ouvre : projet (titre, enregistrer, importer,
+  exporter), aperçu sans son, capture PNG, export vidéo, puis Personnages, Réglages, Pro, À propos.
+- **Bouton « Lancer »** : pendant la lecture il devient « Pause », puis « Reprendre ». « Arrêter » coupe la voix,
+  remet le robot au repos et garde le texte affiché ; « Lancer » repart alors du début.
+- **Lignes « $ » et « # »** : affichées, jamais prononcées. Avec une voix, elles défilent en silence à la vitesse de
+  frappe du terminal (28 caractères/s × vitesse) puis la voix reprend. Avec un fichier audio, elles apparaissent d'un
+  coup entre deux phrases, car elles ne sont pas dans l'enregistrement. Pendant ces lignes, la bouche reste fermée.
+- **Plus de prompt automatique** : seules les lignes « $ » portent un prompt, celui écrit dans le texte.
+- **Vitesse** : pas de 0,25 entre 0,5x et 2,0x. Elle agit sur la voix et sur le défilement des lignes « $ » et « # ».
+- **Couleurs** : les variables D1 sont appliquées telles quelles. Deux teintes dérivées ont été ajoutées pour rester
+  lisible (contraste AA) : `--muted-text` `#8a8a98` pour les petits textes gris (`--muted` `#6b6b78` reste pour le
+  décor et l'interrupteur éteint) et `--accent-text` `#c08cf5` pour le texte des commandes (le violet `#9b45e0` reste
+  pour le prompt, les contours et les boutons).
+- **Police** : tout est en JetBrains Mono ; Inter a été retirée du projet.
+- **Taille du texte du terminal** : la taille réglée est plafonnée pour garder une trentaine de colonnes dans la
+  colonne étroite d'un téléphone.
+- **Messages** : affichés en haut de l'écran. En bas, ils recouvraient « Lancer » et « Arrêter ».
+- **Brouillon** : enregistré toutes les 5 s, il est rouvert automatiquement au démarrage (plus de question
+  « reprendre le brouillon ? »). L'avertissement avant fermeture n'apparaît que si la dernière modification n'est pas
+  encore sauvegardée.
+- **Titre du terminal** : `rhak_override@sentinel: ~/cours` par défaut, modifiable dans Réglages.
+
 ## 1. Écarts par rapport au cahier des charges (à lire en premier)
 
 | Demandé | Fait | Pourquoi |
@@ -11,6 +54,7 @@ la solution la plus simple, gratuite et hors ligne a été retenue. Tout est not
 | ffmpeg.wasm à la demande pour le MP4 | MP4 produit directement par le navigateur (`MediaRecorder`) quand il le sait, sinon WebM | ffmpeg.wasm : cœur GPL/LGPL, ≈ 30 Mo, lent sur téléphone. Chrome récent enregistre le MP4 seul. |
 | Voix C de secours (Kokoro-js ou meSpeak) | Non incluse | meSpeak dérive d'espeak (GPL). Kokoro n'a pas de voix française de qualité et pèse plus de 80 Mo. |
 | Icônes Lucide | Icônes redessinées dans `src/ui/icons.js` | Zéro dépendance, zéro fichier externe. |
+| `img.decode()` à chaque image (B5) | Une conversion toutes les 2 images, jamais deux à la fois | Le décodage est asynchrone : l'attendre dans la boucle d'animation bloquerait la vidéo. |
 | Vite pour la production | Vite seulement pour le développement et les tests ; production sans bundler | Voir point 2. |
 | Terminal virtualisé « 80 lignes » | 40 lignes montées, paragraphes de plus de 600 caractères affichés une phrase par ligne | Mesure : 25 000 caractères passent de 10 à 60 images/s. |
 | Voix HD multilingue | Voix HD en français uniquement | Le convertisseur maison ne couvre que le français. L'interface anglaise utilise la voix du système. |
@@ -24,7 +68,7 @@ Chaque échec affiche un message en français avec les boutons pour passer à la
 - `tools/build.mjs` copie les fichiers dans `dist/`, calcule une empreinte, réécrit `VERSION` et `SHELL` dans `sw.js`
   et `BUILD` dans `src/version.js`. Aucune dépendance npm n'est nécessaire pour construire.
 - `tools/serve.mjs` est un serveur statique sans dépendance : on peut développer sans `npm install`.
-- Poids mesuré : 189 Ko compressés pour tout le code, les styles et les deux polices (objectif : moins de 300 Ko).
+- Poids mesuré : 150 Ko compressés pour tout le code, les styles et la police (objectif : moins de 300 Ko).
 - Conséquence : ~70 petits fichiers au premier chargement. Sur HTTP/2 (GitHub Pages, Cloudflare) c'est sans effet
   mesurable, et le service worker les garde ensuite hors ligne.
 
@@ -71,19 +115,17 @@ Chaque échec affiche un message en français avec les boutons pour passer à la
 
 ## 6. Personnages et rendu
 
-- Le fichier JSON d'un personnage accepte des champs en plus de la référence : `posture`, mouvements détaillés,
-  `renduCanvas`. Les SVG sont nettoyés par liste blanche avant d'être insérés dans la page.
-- L'export image/vidéo redessine le SVG vivant sur un canvas (`svgcanvas.js`). `professor_1` garde la fonction de
-  dessin de référence.
+- Les SVG sont nettoyés par liste blanche avant d'être insérés dans la page.
+- L'export image/vidéo dessine le SVG vivant sérialisé (`svgframe.js`), voir la section 0.
 - Expressions Pro : sceptique, fatigué, triste. Thèmes du terminal : sombre, matrix, ambre, océan.
 
 ## 7. Scène
 
 - Touche E : fait défiler une expression forcée, puis revient en automatique.
-- Mode présentation : un appui = lecture/pause, deux appuis = réafficher les commandes.
+- Mode capture (« Capturer l'écran ») : un appui = lecture/pause, deux appuis ou Échap = réafficher les commandes.
 - L'enregistrement vidéo repart toujours du début, pour produire un fichier complet.
-- La carte d'erreur propose toujours : réessayer, ouvrir les réglages, aperçu sans son, retour à l'éditeur.
-- Liste des expressions par phrase limitée à 200 lignes dans l'éditeur ; les suivantes restent en automatique.
+- La carte d'erreur propose toujours : réessayer, ouvrir les réglages, aperçu sans son, fermer.
+- Liste des expressions par phrase (écran Personnages) limitée à 200 lignes ; les suivantes restent en automatique.
 
 ## 8. Licence Pro
 
@@ -93,5 +135,5 @@ Chaque échec affiche un message en français avec les boutons pour passer à la
 
 ## 9. Réglages ajoutés
 
-`policeTerminal`, `tutorielVu`, `motsPerso`, `formatVideo`. Événements ajoutés au bus : `app:state`, `ui:toast`,
+`policeTerminal`, `tutorielVu`, `motsPerso`, `formatVideo`, `personnageId`, `titreTerminal`. Événements ajoutés au bus : `app:state`, `ui:toast`,
 `settings:changed`, `pwa:installable`, `pwa:installed`.
