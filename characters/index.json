@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "personnages": [
+    "professor_1",
+    "robot",
+    "hacker",
+    "ninja",
+    "astronaute",
+    "detective",
+    "scientifique",
+    "pirate",
+    "cyborg",
+    "professeur_senior",
+    "etudiante",
+    "garde",
+    "alien"
+  ]
+}
