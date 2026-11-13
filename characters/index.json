@@ -1,8 +1,8 @@
 {
-  "version": 1,
+  "version": 2,
   "personnages": [
-    "professor_1",
-    "robot",
+    "robot_lectura",
+    "robot_rouge",
     "hacker",
     "ninja",
     "astronaute",

@@ -7,7 +7,7 @@ const BALISES = new Set(['svg', 'g', 'defs', 'rect', 'circle', 'ellipse', 'line'
 const ATTRIBUTS = new Set(['id', 'x', 'y', 'width', 'height', 'rx', 'ry', 'cx', 'cy', 'r', 'x1', 'y1', 'x2', 'y2', 'd', 'points', 'fill',
   'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'opacity', 'fill-opacity', 'stroke-opacity', 'transform', 'viewBox',
   'role', 'aria-label', 'display']);
-const PIECES = ['#char', '#head', '#visor', '#torso', '#arm-l', '#arm-r', '#leg-l', '#leg-r'];
+const PIECES = ['#body', '#arm-l', '#arm-r', '#mouth', '#eye-l', '#eye-r', '#brow-l', '#brow-r'];
 const BASE = 'characters/';
 let cache = null;
 
@@ -80,7 +80,7 @@ async function lireSvg(def, mode) {
   for (const sel of PIECES) {
     if (!svg.querySelector(sel)) throw new Error(`Personnage « ${def.nom} » incomplet : la pièce ${sel} manque dans ${def.svg}.`);
   }
-  if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', '0 0 300 400');
+  if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', '0 0 240 600');
   return svg;
 }
 
@@ -92,13 +92,9 @@ export async function loadCharacterSvg(def) {
   return svg;
 }
 
-/** Vignette (data URL) du personnage en pose de repos, pour les listes de choix. */
+/** Vignette (data URL) du personnage au repos, pour les listes de choix. */
 export async function thumbnailUrl(def) {
   const svg = await lireSvg(def, 'vignette');
-  const [g, d] = def.posture?.brasRepos || [-35, 35];
-  const pv = def.pivots || {}, eg = pv.epaule_g || [115, 122], ed = pv.epaule_d || [185, 122];
-  svg.querySelector('#arm-l').setAttribute('transform', `rotate(${g} ${eg[0]} ${eg[1]})`);
-  svg.querySelector('#arm-r').setAttribute('transform', `rotate(${d} ${ed[0]} ${ed[1]})`);
   svg.setAttribute('xmlns', NS);
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg));
 }

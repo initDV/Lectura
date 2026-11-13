@@ -1,7 +1,5 @@
-{"id":"professeur_senior","nom":"Professeur senior","role":"pro","pro":true,"svg":"professeur_senior.svg",
- "couleurCorps":"#3a3f4b","couleurAccent":"#a76bff",
- "pieces":["torse","tete","bras_g","bras_d","jambe_g","jambe_d"],
- "pivots":{"epaule_g":[115,122],"epaule_d":[185,122],"cou":[150,95],"hanche_g":[135,200],"hanche_d":[165,200]},
- "visiere":{"centre":[150,54],"largeur":52,"hauteur":14},
- "mouvements":{"vitesseIdle":1,"amplitudeBras":1,"style":"calme"},
- "voixSuggeree":{"hauteur":0.8,"vitesse":0.9},"accessoires":["barbe","noeud_papillon"]}
+{"id": "professeur_senior", "nom": "Professeur senior", "role": "pro", "pro": true, "svg": "professeur_senior.svg",
+ "couleurContour": "#a76bff", "couleurRemplissage": "#1c1830", "couleurYeux": "#3ddc84", "couleurBouche": "#38bdf8",
+ "pivots": {"epaule_g": [34, 224], "epaule_d": [208, 224]},
+ "mouvements": {"vitesseIdle": 1, "amplitudeBras": 1, "style": "calme"},
+ "voixSuggeree": {"hauteur": 0.8, "vitesse": 0.85}, "accessoires": ["barbe", "noeud_papillon"]}

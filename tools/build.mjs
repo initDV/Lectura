@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 const racine = join(dirname(fileURLToPath(import.meta.url)), '..'), dist = join(racine, 'dist');
 const A_COPIER = ['index.html', 'offline.html', 'manifest.webmanifest', 'sw.js', 'LICENSE', 'THIRD_PARTY_LICENSES.md', 'src', 'characters', 'data', 'icons', 'fonts'];
-const PIECES = ['#char', '#head', '#visor', '#torso', '#arm-l', '#arm-r', '#leg-l', '#leg-r'];
+const PIECES = ['#body', '#arm-l', '#arm-r', '#mouth', '#eye-l', '#eye-r', '#brow-l', '#brow-r'];
 
 /** Vérifie chaque personnage (JSON + SVG) et réécrit characters/index.json : aucun code à modifier pour en ajouter un. */
 function indexPersonnages() {
@@ -20,15 +20,16 @@ function indexPersonnages() {
     try {
       const def = JSON.parse(readFileSync(join(dossier, f), 'utf8')), id = f.slice(0, -5);
       if (def.id !== id) throw new Error(`"id" vaut "${def.id}" mais le fichier s'appelle ${f}`);
-      for (const k of ['nom', 'svg', 'couleurCorps', 'couleurAccent', 'mouvements']) if (!def[k]) throw new Error(`champ "${k}" manquant`);
+      for (const k of ['nom', 'svg', 'mouvements']) if (!def[k]) throw new Error(`champ "${k}" manquant`);
       const svg = readFileSync(join(dossier, def.svg), 'utf8');
       for (const p of PIECES) if (!svg.includes(`id="${p.slice(1)}"`)) throw new Error(`${def.svg} : élément ${p} manquant`);
+      if (/href="(?!#)|<image|<foreignObject/i.test(svg)) throw new Error(`${def.svg} : le dessin doit être autonome (aucune référence externe)`);
       if (/<script|\son\w+=|javascript:/i.test(svg)) throw new Error(`${def.svg} : script interdit dans un personnage`);
       ids.push({ id, pro: !!def.pro });
     } catch (err) { erreurs.push(`  ✖ ${f} : ${err.message}`); }
   }
   if (erreurs.length) throw new Error(`Personnages invalides :\n${erreurs.join('\n')}`);
-  const ordre = ['professor_1', 'robot'], rang = (x) => (ordre.includes(x.id) ? ordre.indexOf(x.id) : x.pro ? 100 : 50);
+  const ordre = ['robot_lectura', 'robot_rouge'], rang = (x) => (ordre.includes(x.id) ? ordre.indexOf(x.id) : x.pro ? 100 : 50);
   const liste = ids.sort((a, b) => rang(a) - rang(b)).map((x) => x.id); // gratuits d'abord
   const ancien = JSON.parse(readFileSync(join(dossier, 'index.json'), 'utf8'));
   const garde = (ancien.personnages || ancien).filter((id) => liste.includes(id)); // conserve l'ordre déjà choisi
@@ -47,10 +48,15 @@ function construire() {
   writeFileSync(join(dist, '.nojekyll'), '');
   let voix = 'non incluse (lance « npm run voice » avant le build pour proposer la voix HD)';
   if (existsSync(join(racine, 'models', 'index.json'))) { cpSync(join(racine, 'models'), join(dist, 'models'), { recursive: true }); voix = 'incluse (téléchargée par l\'utilisateur seulement à sa demande)'; }
+  else { // catalogue vide : l'application affiche « voix HD non proposée » sans requête en échec
+    mkdirSync(join(dist, 'models'), { recursive: true });
+    writeFileSync(join(dist, 'models', 'index.json'), `${JSON.stringify({ moteur: null, voix: [] })}\n`);
+  }
 
   // Fichiers gardés hors ligne dès la première visite : tout sauf models/ (à la demande) et les fichiers de service.
   const fichiers = lister(dist).map((p) => relative(dist, p).split(sep).join('/'))
-    .filter((p) => !p.startsWith('models/') && !['sw.js', '.nojekyll', 'LICENSE', 'THIRD_PARTY_LICENSES.md'].includes(p)).sort();
+    .filter((p) => (!p.startsWith('models/') || p === 'models/index.json') && !['sw.js', '.nojekyll', 'LICENSE', 'THIRD_PARTY_LICENSES.md'].includes(p)).sort();
+  // models/index.json (catalogue des voix, quelques Ko) est gardé hors ligne ; les fichiers de voix restent à la demande.
   const empreinte = createHash('sha256');
   for (const f of fichiers) empreinte.update(f).update(readFileSync(join(dist, f)));
   const h = empreinte.digest('hex').slice(0, 10), version = JSON.parse(readFileSync(join(racine, 'package.json'), 'utf8')).version;

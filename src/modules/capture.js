@@ -1,8 +1,18 @@
 // @ts-check
 // capture.js : redessine la scène (fond, personnage, terminal) sur un canvas → capture PNG et images de la vidéo.
-import { drawCharacter } from './recorder.js';
-import { drawSvg, ensureRoundRect } from './svgcanvas.js';
+import { renderSvg } from './svgframe.js';
 import { themeOf, fontOf } from './themes.js';
+
+/** Ajoute roundRect aux navigateurs qui ne l'ont pas (Chrome < 99, Safari < 16). */
+function ensureRoundRect() {
+  const proto = globalThis.CanvasRenderingContext2D?.prototype;
+  if (!proto || proto.roundRect) return;
+  proto.roundRect = function (x, y, w, h, r = 0) {
+    r = Math.min(Array.isArray(r) ? r[0] : r, w / 2, h / 2);
+    this.moveTo(x + r, y); this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r);
+    this.arcTo(x, y + h, x, y, r); this.arcTo(x, y, x + w, y, r); this.closePath();
+  };
+}
 
 /** Découpe une ligne (prompt + texte) en rangées de `cols` caractères, de préférence sur les espaces. */
 export function wrapLine(str, cols) {
@@ -33,20 +43,23 @@ function rowsOf(term, i, cols) {
 
 function drawTerminal(ctx, box, s, sc, tMs) {
   const { terminal: term, projet } = sc, th = themeOf(projet.terminal.theme);
-  const pad = 14 * s, r = 14 * s, barH = 34 * s, x = box.x + pad, y = box.y + pad, w = box.w - 2 * pad, h = box.h - 2 * pad;
+  const pad = 14 * s, r = 20 * s, barH = 38 * s, x = box.x + pad * 0.4, y = box.y + pad, w = box.w - pad * 1.4, h = box.h - 2 * pad;
+  const speciales = { __prompt: th.prompt, __cmd: th.cmd, __com: th.com };
   ctx.save();
   ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fillStyle = th.bg; ctx.fill(); ctx.clip();
   ctx.fillStyle = th.bar; ctx.fillRect(x, y, w, barH);
-  ['#ff5f57', '#febc2e', '#28c840'].forEach((c, i) => { ctx.beginPath(); ctx.arc(x + (18 + i * 20) * s, y + barH / 2, 6 * s, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill(); });
-  const family = fontOf(projet.terminal.police), fpx = Math.round(projet.terminal.taille * s * 1.15);
-  ctx.textBaseline = 'middle'; ctx.textAlign = 'center'; ctx.fillStyle = '#8b98a5';
-  ctx.font = `500 ${Math.round(12.5 * s)}px ${family}`;
-  ctx.fillText(sc.titreTerminal || 'lectura', x + w / 2, y + barH / 2, w - 160 * s);
+  ctx.fillStyle = th.bord; ctx.fillRect(x, y + barH, w, Math.max(1, s));
+  ['#ff5f57', '#febc2e', '#28c840'].forEach((c, i) => { ctx.beginPath(); ctx.arc(x + (20 + i * 20) * s, y + barH / 2, 6 * s, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill(); });
+  // Même règle qu'à l'écran : la taille choisie, plafonnée pour garder une trentaine de colonnes dans un terminal étroit.
+  const family = fontOf(projet.terminal.police), fpx = Math.round(Math.min(projet.terminal.taille * s * 1.15, w * 0.052));
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillStyle = th.com;
+  ctx.font = `500 ${Math.round(Math.min(13 * s, w * 0.036))}px ${family}`;
+  ctx.fillText(sc.titreTerminal || 'lectura', x + 82 * s, y + barH / 2, w - 100 * s);
   // Corps : on dessine les dernières rangées qui tiennent, tronquées à Terminal.shown
   ctx.textAlign = 'left'; ctx.font = `${fpx}px ${family}`;
   const cw = ctx.measureText('M').width || fpx * 0.6, lh = fpx * 1.55, ipad = 16 * s;
   const cols = Math.max(8, Math.floor((w - 2 * ipad) / cw)), maxRows = Math.max(1, Math.floor((h - barH - 2 * ipad) / lh));
-  const shown = Math.max(0, term.shown), li = term.lineAt(shown), rows = [];
+  const shown = Math.max(0, term.shown), li = sc.texteMasque ? -1 : term.lineAt(shown), rows = [];
   for (let i = li; i >= 0 && rows.length < maxRows; i--) {
     const line = term.lines[i], plen = line.tokens.length ? term.prompt.length : 0, vis = Math.min(shown, line.end) - line.start + plen;
     const rr = rowsOf(term, i, cols).filter(([a], k) => k === 0 || a < vis);
@@ -60,35 +73,37 @@ function drawTerminal(ctx, box, s, sc, tMs) {
     for (const tok of line.tokens) {
       const ta = tok.start - line.start + row.plen, a = Math.max(ta, row.a), b = Math.min(ta + tok.t.length, end);
       if (b <= a) continue;
-      ctx.font = `${tok.cat ? '700 ' : ''}${fpx}px ${family}`;
-      ctx.fillStyle = tok.cat ? term.colors[tok.cat] || th.fg : th.fg;
+      const sp = speciales[tok.cat];
+      ctx.font = `${tok.cat && !sp ? '700 ' : ''}${fpx}px ${family}`;
+      ctx.fillStyle = sp || (tok.cat ? term.colors[tok.cat] || th.fg : th.fg);
       ctx.fillText(tok.t.slice(a - ta, b - ta), x + ipad + (a - row.a) * cw, cy);
     }
     curX = x + ipad + Math.max(0, end - row.a) * cw; curY = cy;
     cy += lh;
   }
-  if (Math.floor(tMs / 500) % 2 === 0 || sc.figer) { ctx.fillStyle = th.fg; ctx.fillRect(curX + 1, curY - fpx * 0.55, cw * 0.6, fpx * 1.1); }
+  if (!sc.texteMasque && (Math.floor(tMs / 500) % 2 === 0 || sc.figer)) { ctx.fillStyle = th.fg; ctx.fillRect(curX + 1, curY - fpx * 0.55, cw * 0.6, fpx * 1.1); }
   ctx.restore();
-  ctx.strokeStyle = '#26313d'; ctx.lineWidth = Math.max(1, s); ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.stroke();
+  ctx.strokeStyle = th.bord; ctx.lineWidth = Math.max(1, s); ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.stroke();
 }
 
 /**
- * Dessine toute la scène. sc = { projet, character, def, svg, terminal, pro, titreTerminal, figer }
- * Paysage : personnage à gauche (35 %), terminal à droite (65 %). Portrait : personnage en haut, terminal en bas.
+ * Dessine toute la scène. sc = { projet, svg, persoImage, terminal, pro, titreTerminal, texteMasque, figer }
+ * Même composition qu'à l'écran, en paysage comme en vertical : robot à gauche (38 %), aligné en bas ; terminal à droite (62 %).
  */
 export function drawScene(ctx, W, H, sc, tMs = performance.now()) {
   ensureRoundRect();
-  const paysage = W >= H, s = paysage ? H / 720 : W / 720;
+  const s = Math.min(W, H) / 720;
   ctx.fillStyle = sc.projet.reglages.fond; ctx.fillRect(0, 0, W, H);
-  const cb = paysage ? { x: 0, y: 0, w: W * 0.35, h: H } : { x: 0, y: 0, w: W, h: H * 0.35 };
-  const tb = paysage ? { x: W * 0.35, y: 0, w: W * 0.65, h: H } : { x: 0, y: H * 0.35, w: W, h: H * 0.65 };
-  const k = Math.min(cb.w / 300, cb.h / 400) * 0.96, cx = cb.x + (cb.w - 300 * k) / 2, cy = cb.y + cb.h - 400 * k;
-  if (sc.def?.renduCanvas === 'pose') drawCharacter(ctx, cx, cy, k, sc.character.getPose(), sc.def.couleurCorps, sc.def.couleurAccent);
-  else drawSvg(ctx, sc.svg, cx, cy, k);
+  const cb = { x: 0, y: 0, w: W * 0.38, h: H }, tb = { x: W * 0.38, y: 0, w: W * 0.62, h: H };
+  const img = sc.persoImage, vb = sc.svg?.viewBox?.baseVal;
+  if (img && vb?.width) {
+    const k = Math.min((cb.w * 0.92) / vb.width, (cb.h * 0.94) / vb.height);
+    ctx.drawImage(img, cb.x + (cb.w - vb.width * k) / 2 + 6 * s, cb.h - vb.height * k - 10 * s, vb.width * k, vb.height * k);
+  }
   drawTerminal(ctx, tb, s, sc, tMs);
   if (!sc.pro) { // filigrane (retiré par Pro)
-    ctx.font = `600 ${Math.round(15 * s)}px Inter, system-ui, sans-serif`; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = 'rgba(230,237,243,0.5)'; ctx.fillText('Lectura', W - 22 * s, H - 20 * s);
+    ctx.font = `600 ${Math.round(15 * s)}px 'JetBrains Mono', monospace`; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = 'rgba(176,176,184,0.55)'; ctx.fillText('Lectura', W - 30 * s, H - 26 * s);
   }
 }
 
@@ -99,7 +114,7 @@ export async function capturePng(sc, { w = 1280, h = 720 } = {}) {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error("Capture impossible : ce navigateur refuse de créer l'image (mémoire insuffisante ?).");
   await document.fonts?.ready;
-  drawScene(ctx, w, h, { ...sc, figer: true });
+  drawScene(ctx, w, h, { ...sc, persoImage: await renderSvg(sc.svg), figer: true });
   const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
   if (!blob) throw new Error('Capture impossible : le navigateur n\'a pas pu produire le fichier PNG.');
   return blob;

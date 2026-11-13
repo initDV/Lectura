@@ -1,8 +1,5 @@
-{"id":"garde","nom":"Garde","role":"pro","pro":true,"svg":"garde.svg",
- "couleurCorps":"#3a3f4b","couleurAccent":"#2dd4bf",
- "pieces":["torse","tete","bras_g","bras_d","jambe_g","jambe_d"],
- "pivots":{"epaule_g":[115,122],"epaule_d":[185,122],"cou":[150,95],"hanche_g":[135,200],"hanche_d":[165,200]},
- "visiere":{"centre":[150,54],"largeur":52,"hauteur":14},
- "mouvements":{"vitesseIdle":0.8,"amplitudeBras":0.5,"style":"fluide","amplitudeTete":0.6},
- "posture":{"brasRepos":[-66,66]},
- "voixSuggeree":{"hauteur":0.85,"vitesse":0.95},"accessoires":["casque","gilet"]}
+{"id": "garde", "nom": "Garde", "role": "pro", "pro": true, "svg": "garde.svg",
+ "couleurContour": "#2dd4bf", "couleurRemplissage": "#1c1830", "couleurYeux": "#3ddc84", "couleurBouche": "#38bdf8",
+ "pivots": {"epaule_g": [34, 224], "epaule_d": [208, 224]},
+ "mouvements": {"vitesseIdle": 1, "amplitudeBras": 0.5, "style": "fluide"},
+ "voixSuggeree": {"hauteur": 0.85, "vitesse": 0.95}, "accessoires": ["casque", "gilet"]}

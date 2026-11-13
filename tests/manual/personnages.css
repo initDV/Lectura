@@ -1,5 +1,5 @@
 .planche { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
 .planche figure { margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px; text-align: center; }
 .planche .duo { display: flex; gap: 4px; justify-content: center; }
-.planche svg, .planche canvas { width: 105px; height: 140px; background: var(--bg); border-radius: 8px; }
+.planche svg, .planche canvas { width: 100px; height: 250px; background: var(--bg); border-radius: 8px; }
 .planche .err { color: var(--danger); }

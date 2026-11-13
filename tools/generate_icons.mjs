@@ -4,31 +4,33 @@
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 
-const BG = [0x0b, 0x0f, 0x14], BODY = [0x3a, 0x3f, 0x4b], ACCENT = [0x4f, 0xd8, 0xe8], PLATE = [0x13, 0x1a, 0x22];
+const BG = [0x0d, 0x0d, 0x12], PLATE = [0x13, 0x13, 0x1a], TRAIT = [0x9b, 0x45, 0xe0], FOND = [0x1c, 0x18, 0x30];
+const YEUX = [0x3d, 0xdc, 0x84], BOUCHE = [0x38, 0xbd, 0xf8], BARRE = [0x8b, 0x3f, 0xc9];
 
-// --- Formes (coordonnées du repère personnage 300x400) ---
+// --- Formes (coordonnées du repère du robot, viewBox 240x600) ---
 const rrect = (x, y, w, h, r) => (px, py) => {
   const dx = Math.max(x + r - px, 0, px - (x + w - r)), dy = Math.max(y + r - py, 0, py - (y + h - r));
   return px >= x && px <= x + w && py >= y && py <= y + h && dx * dx + dy * dy <= r * r;
 };
 const circle = (cx, cy, r) => (px, py) => (px - cx) ** 2 + (py - cy) ** 2 <= r * r;
-const rotated = (shape, deg, cx, cy) => {
-  const a = (-deg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
-  return (px, py) => shape(cx + (px - cx) * c - (py - cy) * s, cy + (px - cx) * s + (py - cy) * c);
-};
-// Buste de professor_1 (bras au repos : -35° / +35° autour des épaules)
+// Buste de robot_lectura. Un contour = forme extérieure (trait) + forme intérieure (remplissage) ; trait épaissi à 5 pour rester lisible en petit.
+const contour = (ext, int) => [[ext, TRAIT], [int, FOND]];
 const SHAPES = [
-  [rotated(rrect(60, 105, 55, 34, 17), -35, 115, 122), BODY],
-  [rotated(rrect(185, 105, 55, 34, 17), 35, 185, 122), BODY],
-  [rrect(115, 95, 70, 130, 22), BODY],
-  [circle(150, 55, 42), BODY],
-  [rrect(124, 47, 52, 14, 7), ACCENT],
+  ...contour(rrect(59.5, 219.5, 122, 137, 32.5), rrect(64.5, 224.5, 112, 127, 27.5)),
+  [rrect(85, 259, 72, 12, 6), BARRE],
+  [rrect(117.5, 24, 5, 50, 2.5), TRAIT], [circle(120, 20, 9), TRAIT],
+  ...contour(circle(120, 136, 68.5), circle(120, 136, 63.5)),
+  ...contour(rrect(71.5, 112.5, 41, 33, 14.5), rrect(76.5, 117.5, 31, 23, 9.5)),
+  ...contour(rrect(127.5, 112.5, 41, 33, 14.5), rrect(132.5, 117.5, 31, 23, 9.5)),
+  [rrect(112, 126.5, 16, 5, 2.5), TRAIT],
+  [circle(92, 129, 11), YEUX], [circle(148, 129, 11), YEUX],
+  [rrect(96, 161.5, 48, 8, 4), BOUCHE],
 ];
 
 function render(size, { maskable = false } = {}) {
   const px = Buffer.alloc(size * size * 4), SS = 4;
-  const view = maskable ? 330 : 250; // zone du repère personnage visible (plus large = marge de sécurité)
-  const ox = 150 - view / 2, oy = 118 - view / 2, k = view / size;
+  const view = maskable ? 360 : 270; // zone du repère personnage visible (plus large = marge de sécurité)
+  const ox = 120 - view / 2, oy = 128 - view / 2, k = view / size;
   const corner = maskable ? 0 : size * 0.2;
   const plate = rrect(0, 0, size, size, corner), disc = circle(size / 2, size / 2, size * (maskable ? 0.36 : 0.44));
   for (let y = 0; y < size; y++) {
@@ -76,11 +78,16 @@ for (const [file, size, opt] of out) {
   console.log(`✔ ${file} (${size}x${size}, ${fs.statSync(file).size} octets)`);
 }
 fs.writeFileSync('icons/favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="13" fill="#0b0f14"/>
-  <circle cx="32" cy="32" r="28" fill="#131a22"/>
-  <rect x="21" y="38" width="22" height="26" rx="7" fill="#3a3f4b"/>
-  <circle cx="32" cy="26" r="14" fill="#3a3f4b"/>
-  <rect x="23" y="23" width="18" height="5" rx="2.5" fill="#4fd8e8"/>
+  <rect width="64" height="64" rx="13" fill="#0d0d12"/>
+  <line x1="32" y1="8" x2="32" y2="15" stroke="#9b45e0" stroke-width="2"/>
+  <circle cx="32" cy="6.5" r="2.6" fill="#9b45e0"/>
+  <circle cx="32" cy="34" r="19" fill="#1c1830" stroke="#9b45e0" stroke-width="2"/>
+  <rect x="18.5" y="27.5" width="11" height="9" rx="4" fill="none" stroke="#9b45e0" stroke-width="2"/>
+  <rect x="34.5" y="27.5" width="11" height="9" rx="4" fill="none" stroke="#9b45e0" stroke-width="2"/>
+  <line x1="29.5" y1="32" x2="34.5" y2="32" stroke="#9b45e0" stroke-width="2"/>
+  <circle cx="24" cy="32" r="3.2" fill="#3ddc84"/>
+  <circle cx="40" cy="32" r="3.2" fill="#3ddc84"/>
+  <rect x="25" y="42" width="14" height="2.6" rx="1.3" fill="#38bdf8"/>
 </svg>
 `);
 console.log('✔ icons/favicon.svg');

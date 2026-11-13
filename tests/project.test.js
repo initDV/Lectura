@@ -8,14 +8,14 @@ describe('projet .lectura', () => {
     const p = newProject({ titre: 'Test' });
     expect(p.version).toBe(1);
     expect(p.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(p.personnageId).toBe('professor_1');
+    expect(p.personnageId).toBe('robot_lectura');
     expect(p.terminal).toEqual({ theme: 'sombre', police: 'JetBrains Mono', taille: 18, vitesseCps: 28, prompt: '$ ' });
-    expect(p.reglages).toEqual({ mouvements: 'normal', fond: '#0b0f14' });
+    expect(p.reglages).toEqual({ mouvements: 'normal', fond: '#0d0d12' });
     expect(p.audio.source).toBe('voix');
   });
   it('export puis import : aller-retour identique', () => {
     const texte = 'Attention au phishing. sudo nmap !';
-    const p = newProject({ titre: 'Aller-retour é', texte, segments: autoTiming(texte, 4000), personnageId: 'robot',
+    const p = newProject({ titre: 'Aller-retour é', texte, segments: autoTiming(texte, 4000), personnageId: 'robot_rouge',
       audio: { source: 'fichier', nomFichier: 'voix.mp3', dureeMs: 4000, voix: { moteur: 'piper', id: 'fr_FR-siwis-medium', vitesse: 1.2, hauteur: 0.9 } } });
     const q = parseProject(serializeProject(p));
     expect(q).toEqual(p);
@@ -27,7 +27,7 @@ describe('projet .lectura', () => {
     expect(p.terminal.taille).toBe(40);
     expect(p.terminal.vitesseCps).toBe(5);
     expect(p.audio.voix.vitesse).toBe(2);
-    expect(p.reglages.fond).toBe('#0b0f14');
+    expect(p.reglages.fond).toBe('#0d0d12');
   });
   it('refuse les fichiers invalides avec un message clair', () => {
     expect(() => parseProject('pas du json')).toThrow(/JSON/);

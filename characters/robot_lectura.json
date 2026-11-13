@@ -1,0 +1,5 @@
+{"id":"robot_lectura","nom":"Robot Lectura","role":"base","pro":false,"svg":"robot_lectura.svg",
+ "couleurContour":"#9b45e0","couleurRemplissage":"#1c1830","couleurYeux":"#3ddc84","couleurBouche":"#38bdf8",
+ "pivots":{"epaule_g":[34,224],"epaule_d":[208,224]},
+ "mouvements":{"vitesseIdle":1,"amplitudeBras":1,"style":"fluide"},
+ "voixSuggeree":{"hauteur":1,"vitesse":1}}

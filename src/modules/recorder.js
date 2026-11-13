@@ -1,24 +1,7 @@
 // @ts-check
 // recorder.js : export vidéo. L'export NE FILME PAS l'écran : la scène est redessinée sur un canvas
-// (capture.js) et ce canvas est enregistré avec l'audio (MediaRecorder). Code de référence C6.
-import { ensureRoundRect } from './svgcanvas.js';
-
-export function drawCharacter(ctx, x, y, k, p, color = '#3a3f4b', accent = '#4fd8e8') {
-  ensureRoundRect();
-  const rr = (a, b, w, h, r) => { ctx.beginPath(); ctx.roundRect(a, b, w, h, r); ctx.fill(); };
-  ctx.save(); ctx.translate(x, y); ctx.scale(k, k); ctx.fillStyle = color;
-  rr(120, 200, 30, 150, 15); rr(150, 200, 30, 150, 15);
-  ctx.save(); ctx.translate(115, 122); ctx.rotate((p.armL * Math.PI) / 180); ctx.translate(-115, -122); rr(60, 105, 55, 34, 17); ctx.restore();
-  ctx.save(); ctx.translate(185, 122); ctx.rotate((p.armR * Math.PI) / 180); ctx.translate(-185, -122); rr(185, 105, 55, 34, 17); ctx.restore();
-  ctx.save(); ctx.translate(0, p.torsoDy); rr(115, 95, 70, 130, 22); ctx.restore();
-  ctx.save(); ctx.translate(0, p.headDy); ctx.translate(150, 95); ctx.rotate((p.headRot * Math.PI) / 180); ctx.translate(-150, -95);
-  ctx.beginPath(); ctx.arc(150, 55, 42, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = accent; const v = p.visor;
-  if (p.expr === 'content') { ctx.strokeStyle = accent; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(124, 58); ctx.quadraticCurveTo(150, 40, 176, 58); ctx.stroke(); }
-  else { ctx.save(); ctx.translate(150, 54); ctx.rotate(((v.rot || 0) * Math.PI) / 180); ctx.translate(-150, -54); rr(v.x, v.y, v.w, v.h, v.rx); ctx.restore(); }
-  ctx.restore(); ctx.restore();
-}
-
+// (capture.js) et ce canvas est enregistré avec l'audio (MediaRecorder). Le personnage n'est plus redessiné à la
+// main : son SVG vivant est sérialisé à chaque image (svgframe.js, correction B5).
 export const FORMATS = {
   '16:9': { w: 1280, h: 720, nom: 'Paysage 16:9 (YouTube)' },
   '9:16': { w: 1080, h: 1920, nom: 'Vertical 9:16 (TikTok)' },

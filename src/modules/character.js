@@ -1,135 +1,89 @@
 // @ts-check
-// Animation du personnage : idle (respiration), parole (gestes), expressions, clignement, visèmes.
-// Base = code de référence B3. Ajouts pilotés par le JSON du personnage (aucun code à modifier pour
-// ajouter un personnage) : pivots, visière, posture, style de mouvement, expressions et gestes Pro.
-const $ = (r, s) => r.querySelector(s);
-const VISEMES = [6, 10, 15, 22]; // hauteur de visière par niveau (0 = fermé)
+// character.js : animation du robot (code de référence B3, étendu sans le contourner).
+// Référence conservée : hauteurs de bouche VIS, respiration, balancement des bras, clignement, expressions de base.
+// Ajouts : style de mouvement par personnage (fiche JSON), gestes, expressions Pro, forme de bouche (Pro).
+const VIS = [5, 9, 14, 19]; // hauteur de la bouche par niveau de lip-sync (0 = fermé)
 
-/** Expressions : toutes passent par la visière (B5). Les trois dernières sont réservées à Pro. */
+/** r = rayon des yeux, brow = décalage des sourcils, h = hauteur minimale de la bouche, rot = inclinaison des sourcils. */
 export const EXPRESSIONS = {
-  neutre: { w: 52, h: 14, rot: 0 },
-  content: { sourire: true },
-  concentre: { w: 46, h: 8, rot: -4 },
-  surpris: { w: 40, h: 22, rot: 0 },
-  sceptique: { w: 46, h: 10, rot: 7 },
-  fatigue: { w: 52, h: 5, rot: 0, dy: 3 },
-  triste: { w: 38, h: 8, rot: 0, dy: 4 },
+  neutre: {},
+  content: { h: 8 },
+  concentre: { r: 8, brow: 5 },
+  surpris: { r: 14, brow: -5, h: 12 },
+  sceptique: { r: 10, browL: -6, browR: 3 },   // Pro : un sourcil levé
+  fatigue: { r: 10, brow: 4, paupiere: 0.45 }, // Pro : yeux mi-clos
+  triste: { brow: 2, rot: 16 },                // Pro : sourcils tombants
 };
 
-/** Styles de mouvement (champ "mouvements.style" du JSON). Chaque valeur peut être surchargée dans le JSON. */
+/** Styles de mouvement : v = vitesse, a = amplitude des bras, pas = saccade (degrés), flotte / ondule = déplacement (px). */
 export const STYLES = {
-  fluide: {},
-  saccade: { paliers: 7 }, // animation par paliers (robot)
-  sec: { courbe: 0.4, vitesseGestes: 1.5 }, // gestes secs et rapides
-  frappe: { vitesseGestes: 2.6, amplitudeBras: 0.45, amplitudeTete: 0.5 }, // frappe au clavier
-  flottant: { vitesseIdle: 0.55, vitesseGestes: 0.6, flottement: 7, ondulation: 1.5 },
-  ondulant: { vitesseIdle: 0.7, vitesseGestes: 0.65, ondulation: 3.5 },
-  calme: { vitesseGestes: 0.7, amplitudeBras: 1.3 },
-  expressif: { vitesseGestes: 1.15, amplitudeBras: 1.5, amplitudeTete: 1.4 },
+  fluide: { v: 1, a: 1 }, saccade: { v: 1, a: 1, pas: 5 }, sec: { v: 1.5, a: 0.8 }, frappe: { v: 2.4, a: 0.5 },
+  flottant: { v: 0.5, a: 0.8, flotte: 5 }, ondulant: { v: 0.6, a: 1, ondule: 3 }, calme: { v: 0.7, a: 1.2 }, expressif: { v: 1.2, a: 1.5 },
 };
-const NEUTRE = { vitesseIdle: 1, vitesseGestes: 1, amplitudeBras: 1, amplitudeTete: 1, paliers: 0, courbe: 1, flottement: 0, ondulation: 0 };
 
-export function motionParams(mouvements = {}) {
-  const st = STYLES[mouvements.style] || {}, m = { ...NEUTRE, ...st };
-  for (const k of Object.keys(NEUTRE)) {
-    if (!Number.isFinite(mouvements[k])) continue;
-    // vitesseIdle et amplitudeBras multiplient le style ; les autres valeurs le remplacent
-    m[k] = k === 'vitesseIdle' || k === 'amplitudeBras' ? (st[k] ?? 1) * mouvements[k] : mouvements[k];
-  }
-  return m;
+export function motionParams(m = {}) {
+  const s = STYLES[m.style] || STYLES.fluide;
+  return { vitesse: (m.vitesseIdle ?? 1) * s.v, amplitude: (m.amplitudeBras ?? 1) * s.a, pas: s.pas || 0, flotte: s.flotte || 0, ondule: s.ondule || 0 };
 }
 
+const BOUCHES = { normal: 48, large: 58, rond: 32 }; // largeur de la bouche (Pro : lip-sync par bandes)
+
 export class Character {
+  /** @param {SVGSVGElement} svg @param {any} [def] fiche JSON du personnage */
   constructor(svg, def = {}) {
-    this.svg = svg; this.def = def;
-    this.el = {
-      root: $(svg, '#char'), head: $(svg, '#head'), visor: $(svg, '#visor'), smile: $(svg, '#visor-happy'), torso: $(svg, '#torso'),
-      armL: $(svg, '#arm-l'), armR: $(svg, '#arm-r'), legL: $(svg, '#leg-l'), legR: $(svg, '#leg-r'),
-    };
-    const pv = def.pivots || {}, vis = def.visiere || {};
-    this.piv = { eg: pv.epaule_g || [115, 122], ed: pv.epaule_d || [185, 122], cou: pv.cou || [150, 95], hg: pv.hanche_g || [135, 200], hd: pv.hanche_d || [165, 200] };
-    this.vis = { cx: vis.centre?.[0] ?? 150, cy: vis.centre?.[1] ?? 54, sw: (vis.largeur ?? 52) / 52, sh: (vis.hauteur ?? 14) / 14 };
-    this.m = motionParams(def.mouvements);
-    this.lean = def.posture?.inclinaison || 0;
-    this.rest = def.posture?.brasRepos || [-35, 35];
-    this.expr = 'neutre'; this.viseme = 0; this.talk = 0; this.talkS = 0; this.raf = 0; this.shape = 'normal';
+    const q = (s) => svg.querySelector(s);
+    this.svgEl = svg;
+    this.el = { body: q('#body'), armL: q('#arm-l'), armR: q('#arm-r'), mouth: q('#mouth'),
+      eyeL: q('#eye-l'), eyeR: q('#eye-r'), browL: q('#brow-l'), browR: q('#brow-r'), legs: q('#legs') };
+    // Reflets des yeux (petits cercles sans id placés après les yeux) : masqués pendant le clignement.
+    this.reflets = [...svg.querySelectorAll('#eye-l ~ circle:not([id]), #eye-r ~ circle:not([id])')].filter((c) => +c.getAttribute('r') <= 4);
+    this.expr = 'neutre'; this.viseme = 0; this.talk = 0; this.blinkUntil = 0; this.nextBlink = 2000;
     this.reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this.gain = 1; this.rich = false; this.gestStart = -1e9; this.gestDur = 900;
-    this.blinkUntil = 0; this.nextBlink = 2500;
-    this.pose = { armL: this.rest[0], armR: this.rest[1], headDy: 0, headRot: 0, torsoDy: 0, visor: { x: 124, y: 47, w: 52, h: 14, rx: 7 }, expr: 'neutre' };
-    this.applyVisor();
+    this.mp = motionParams(def.mouvements);
+    const pv = def.pivots || {};
+    this.pivL = pv.epaule_g || [34, 224]; this.pivR = pv.epaule_d || [208, 224];
+    this.gain = 1; this.rich = false; this.shape = 'normal'; this.gesteFin = 0; this.gesteBras = 1; this.raf = 0;
   }
-  setExpression(name) { this.expr = EXPRESSIONS[name] ? name : 'neutre'; this.applyVisor(); }  // neutre | content | concentre | surpris (+ Pro)
-  setViseme(level) { this.viseme = Math.max(0, Math.min(3, level | 0)); this.applyVisor(); }
-  setTalking(v) { this.talk = Math.max(0, Math.min(1, v)); }          // intensité des gestes 0..1
-  setMouthShape(shape) { this.shape = shape; }                         // Pro : 'normal' | 'large' | 'rond'
+  setExpression(n) { this.expr = EXPRESSIONS[n] ? n : 'neutre'; }   // neutre | content | concentre | surpris (+ Pro)
+  setViseme(l) { this.viseme = Math.max(0, Math.min(3, l | 0)); }
+  setTalking(v) { this.talk = Math.max(0, Math.min(1, v)); }
+  setMouthShape(shape) { this.shape = BOUCHES[shape] ? shape : 'normal'; } // Pro : 'normal' | 'large' | 'rond'
   setReduced(v) { this.reduce = !!v; }
-  setGain(g) { this.gain = g; }                                        // réglage « mouvements » du projet
-  setRich(v) { this.rich = !!v; }                                      // Pro : gestes riches
-  gesture() { if (this.rich) this.gestStart = performance.now(); }     // Pro : geste d'appui (montre le terminal)
-  applyVisor() {
-    const { visor, smile } = this.el, { cx, cy, sw, sh } = this.vis;
-    const e = EXPRESSIONS[this.expr] || EXPRESSIONS.neutre;
-    const happy = !!e.sourire && !!smile;
-    if (smile) smile.style.display = happy ? '' : 'none';
-    visor.style.display = happy ? 'none' : '';
-    this.pose.expr = happy ? 'content' : this.expr;
-    if (happy) return;
-    let h = (e.h ?? 14) * sh, w = (e.w ?? 52) * sw;
-    const rot = e.rot || 0;
-    if (this.viseme > 0 && this.expr !== 'surpris') h = Math.max(h, VISEMES[this.viseme] * sh);
-    if (this.viseme > 0 && this.shape === 'large') { w *= 1.12; h *= 0.72; }
-    if (this.viseme > 0 && this.shape === 'rond') w *= 0.86;
-    if (performance.now() < this.blinkUntil) h = 3;
-    const rx = Math.min(h / 2, 11), x = cx - w / 2, y = cy + (e.dy || 0) * sh - h / 2;
-    visor.setAttribute('x', x); visor.setAttribute('y', y);
-    visor.setAttribute('width', w); visor.setAttribute('height', h); visor.setAttribute('rx', rx);
-    visor.setAttribute('transform', `rotate(${rot} ${cx} ${cy})`);
-    this.pose.visor = { x, y, w, h, rx, rot };
-  }
-  start() {
-    this.stop();
-    const loop = (t) => { this.tick(t); this.raf = requestAnimationFrame(loop); };
-    this.raf = requestAnimationFrame(loop);
-  }
+  setGain(g) { this.gain = g; }                                     // réglage « mouvements » du projet
+  setRich(v) { this.rich = !!v; }                                   // Pro : gestes plus amples
+  /** Petit geste du bras (mot-clé important). */
+  gesture(t = performance.now()) { this.gesteFin = t + 700; this.gesteBras = this.gesteBras === 1 ? -1 : 1; }
+  start() { const loop = (t) => { this.tick(t); this.raf = requestAnimationFrame(loop); }; this.raf = requestAnimationFrame(loop); }
   stop() { cancelAnimationFrame(this.raf); }
+
   tick(t) {
-    const m = this.m, k = (this.reduce ? 0.25 : 1) * this.gain;
-    this.talkS += (this.talk - this.talkS) * 0.18; // lissage : évite les à-coups quand la parole démarre / s'arrête
-    const s = t / 1000, si = s * m.vitesseIdle, talk = this.talkS;
-    let sg = s * m.vitesseGestes;
-    if (m.paliers > 0) sg = Math.floor(sg * m.paliers) / m.paliers;
-    const wave = (x) => { const v = Math.sin(x); return m.courbe === 1 ? v : Math.sign(v) * Math.abs(v) ** m.courbe; };
-    if (t > this.nextBlink) { this.blinkUntil = t + 110; this.nextBlink = t + 2500 + Math.random() * 3000; }
-    const breathe = Math.sin(si * 1.6) * 1.2 * k;
-    let nod = wave(sg * 5.2) * 2.5 * talk * k * m.amplitudeTete;
-    let swingL = wave(sg * 3.1) * 14 * talk * k * m.amplitudeBras;
-    const swingR = wave(sg * 2.7 + 1.3) * 10 * talk * k * m.amplitudeBras;
-    const p = this.pose;
-    p.torsoDy = -breathe * 0.5; p.headDy = -breathe;
-    if (this.rich) { nod += Math.sin(si * 0.7) * 1.6 * k; swingL += wave(sg * 6.2) * 4 * talk * k; }
-    p.headRot = nod;
-    p.armL = this.rest[0] - 4 * Math.sin(si * 1.6) * k + swingL;   // bras gauche : repos vers le bas (angle négatif)
-    p.armR = this.rest[1] + 4 * Math.sin(si * 1.6 + 0.5) * k - swingR; // bras droit : repos vers le bas (angle positif)
-    const g = (t - this.gestStart) / this.gestDur; // Pro : geste d'appui, bras droit levé vers le terminal
-    if (g >= 0 && g <= 1) { const a = Math.sin(Math.PI * g) * Math.min(1, k); p.armR += (-22 - p.armR) * a; p.headRot += 3 * a; }
-    p.bodyDy = Math.sin(si * 0.9) * m.flottement * k;
-    p.bodyRot = Math.sin(si * 1.1) * m.ondulation * k;
-    p.leg = m.ondulation ? Math.sin(si * 1.1 + 1.2) * m.ondulation * 0.7 * k : 0;
-    p.lean = this.lean;
-    const set = (el, v) => el && el.setAttribute('transform', v);
-    const { eg, ed, cou, hg, hd } = this.piv;
-    const up = this.lean ? `rotate(${this.lean} 150 215) ` : ''; // posture voûtée : buste incliné autour du bassin
-    set(this.el.torso, `${up}translate(0 ${p.torsoDy.toFixed(2)})`);
-    set(this.el.head, `${up}translate(0 ${p.headDy.toFixed(2)}) rotate(${p.headRot.toFixed(2)} ${cou[0]} ${cou[1]})`);
-    set(this.el.armL, `${up}rotate(${p.armL.toFixed(2)} ${eg[0]} ${eg[1]})`);
-    set(this.el.armR, `${up}rotate(${p.armR.toFixed(2)} ${ed[0]} ${ed[1]})`);
-    if (m.flottement || m.ondulation) {
-      set(this.el.root, `translate(0 ${p.bodyDy.toFixed(2)}) rotate(${p.bodyRot.toFixed(2)} 150 350)`);
-      set(this.el.legL, `rotate(${p.leg.toFixed(2)} ${hg[0]} ${hg[1]})`);
-      set(this.el.legR, `rotate(${(-p.leg).toFixed(2)} ${hd[0]} ${hd[1]})`);
+    const p = this.mp, s = (t / 1000) * p.vitesse, k = (this.reduce ? 0.25 : 1) * this.gain, e = this.el, x = EXPRESSIONS[this.expr];
+    if (t > this.nextBlink) { this.blinkUntil = t + 120; this.nextBlink = t + 2500 + Math.random() * 3000; }
+    const br = Math.sin(s * 1.6) * 1.5 * k;
+    const dx = p.ondule ? Math.sin(s * 1.1) * p.ondule * k : 0, dy = p.flotte ? -(Math.sin(s * 0.9) + 1) * p.flotte * k : 0;
+    const base = dx || dy ? `translate(${dx.toFixed(2)} ${dy.toFixed(2)}) ` : '';
+    e.body.setAttribute('transform', `translate(${dx.toFixed(2)} ${(dy - br * 0.6).toFixed(2)})`);
+    if (e.legs && (p.flotte || p.ondule)) e.legs.setAttribute('transform', base.trim());
+    // Bras : balancement pendant la parole (référence) + geste ponctuel ; « pas » donne un mouvement saccadé.
+    const cran = (a) => (p.pas ? Math.round(a / p.pas) * p.pas : a);
+    const g = t < this.gesteFin ? Math.sin(Math.PI * (1 - (this.gesteFin - t) / 700)) * (this.rich ? 42 : 24) * k : 0;
+    const aL = cran(Math.sin(s * 3.1) * 10 * this.talk * k * p.amplitude + (this.gesteBras < 0 ? g : 0));
+    const aR = cran(-Math.sin(s * 2.7 + 1) * 10 * this.talk * k * p.amplitude - (this.gesteBras > 0 ? g : 0));
+    e.armL.setAttribute('transform', `${base}rotate(${aL.toFixed(2)} ${this.pivL[0]} ${this.pivL[1]})`);
+    e.armR.setAttribute('transform', `${base}rotate(${aR.toFixed(2)} ${this.pivR[0]} ${this.pivR[1]})`);
+    // Bouche : la hauteur suit le niveau de lip-sync, l'expression fixe un minimum.
+    const h = Math.max(VIS[this.viseme], x.h || 0), w = this.rich ? BOUCHES[this.shape] : 48, m = e.mouth;
+    m.setAttribute('height', h); m.setAttribute('y', 165.5 - h / 2); m.setAttribute('rx', Math.min(h / 2, 6));
+    m.setAttribute('width', w); m.setAttribute('x', 120 - w / 2);
+    // Yeux : rayon selon l'expression, clignement par écrasement vertical autour de y = 129.
+    const blink = t < this.blinkUntil, sy = blink ? 0.15 : x.paupiere || 1;
+    for (const eye of [e.eyeL, e.eyeR]) {
+      eye.setAttribute('r', x.r || 11);
+      eye.setAttribute('transform', sy === 1 ? '' : `translate(0 129) scale(1 ${sy}) translate(0 -129)`);
     }
-    this.applyVisor(); // met aussi à jour le clignement
+    for (const r of this.reflets) r.setAttribute('opacity', sy === 1 ? '1' : '0');
+    const rot = x.rot || 0;
+    e.browL.setAttribute('transform', `translate(0 ${x.browL ?? x.brow ?? 0})${rot ? ` rotate(${-rot} 92 104)` : ''}`);
+    e.browR.setAttribute('transform', `translate(0 ${x.browR ?? x.brow ?? 0})${rot ? ` rotate(${rot} 148 104)` : ''}`);
   }
-  getPose() { return this.pose; } // utilisé par l'export vidéo (canvas)
 }
