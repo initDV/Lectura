@@ -1,0 +1,7 @@
+{"id":"alien","nom":"Alien","role":"pro","pro":true,"svg":"alien.svg",
+ "couleurCorps":"#3b4450","couleurAccent":"#b6ff4f",
+ "pieces":["torse","tete","bras_g","bras_d","jambe_g","jambe_d"],
+ "pivots":{"epaule_g":[115,122],"epaule_d":[185,122],"cou":[150,95],"hanche_g":[135,200],"hanche_d":[165,200]},
+ "visiere":{"centre":[150,54],"largeur":52,"hauteur":14},
+ "mouvements":{"vitesseIdle":1,"amplitudeBras":1,"style":"ondulant"},
+ "voixSuggeree":{"hauteur":1.4,"vitesse":0.95},"accessoires":["tete_ovale","antennes"]}

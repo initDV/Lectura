@@ -1,0 +1,19 @@
+<svg id="lectura-char" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400" role="img" aria-label="Professeur senior">
+  <defs>
+    <rect id="p-arm" width="55" height="34" rx="17"/>
+    <rect id="p-leg" width="30" height="150" rx="15"/>
+  </defs>
+  <g id="char" fill="#3a3f4b">
+    <g id="leg-l"><use href="#p-leg" x="120" y="200"/></g>
+    <g id="leg-r"><use href="#p-leg" x="150" y="200"/></g>
+    <g id="arm-l"><use href="#p-arm" x="60" y="105"/></g>
+    <g id="arm-r"><use href="#p-arm" x="185" y="105"/></g>
+    <g id="torso"><rect x="115" y="95" width="70" height="130" rx="22"/><polygon points="150,110 134,101 134,119" fill="#a76bff"/><polygon points="150,110 166,101 166,119" fill="#a76bff"/></g>
+    <g id="head">
+      <circle cx="150" cy="55" r="42"/>
+      <rect id="visor" x="124" y="47" width="52" height="14" rx="7" fill="#a76bff"/>
+      <path id="visor-happy" d="M124 58 Q150 40 176 58" fill="none" stroke="#a76bff" stroke-width="10" stroke-linecap="round" style="display:none"/>
+      <path d="M117 76 Q150 120 183 76 Q150 98 117 76 Z" fill="#c9d1d9"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,19 @@
+<svg id="lectura-char" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400" role="img" aria-label="Hacker">
+  <defs>
+    <rect id="p-arm" width="55" height="34" rx="17"/>
+    <rect id="p-leg" width="30" height="150" rx="15"/>
+  </defs>
+  <g id="char" fill="#3a3f4b">
+    <g id="leg-l"><use href="#p-leg" x="120" y="200"/></g>
+    <g id="leg-r"><use href="#p-leg" x="150" y="200"/></g>
+    <g id="arm-l"><use href="#p-arm" x="60" y="105"/></g>
+    <g id="arm-r"><use href="#p-arm" x="185" y="105"/></g>
+    <g id="torso"><rect x="115" y="95" width="70" height="130" rx="22"/></g>
+    <g id="head">
+      <path d="M102 62 A48 48 0 0 1 198 62 L198 84 L102 84 Z" fill="#2a2e37"/>
+      <circle cx="150" cy="55" r="42"/>
+      <rect id="visor" x="124" y="47" width="52" height="14" rx="7" fill="#39ff14"/>
+      <path id="visor-happy" d="M124 58 Q150 40 176 58" fill="none" stroke="#39ff14" stroke-width="10" stroke-linecap="round" style="display:none"/>
+    </g>
+  </g>
+</svg>
