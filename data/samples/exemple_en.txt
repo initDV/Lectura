@@ -1,0 +1,9 @@
+Welcome to Lectura. Today we talk about security.
+Warning: phishing is still the number one cause of account takeover.
+A fake message sends you to a copy of a website over HTTPS, and you type your password without knowing.
+To check a machine, we open a terminal on Kali.
+sudo nmap -sV 192.168.1.10
+This command lists the open ports: SSH, HTTP, DNS.
+If a service is too old, that is a flaw. One known vulnerability can be enough.
+With Python or Bash, these checks can be automated in a few lines.
+Well done, you now know the basics. Keep your software up to date!

@@ -1,0 +1,8 @@
+{"version":1,"categories":{
+ "commande":{"couleur":"#4fd8e8","mots":["sudo","ls","cd","chmod","grep","ssh","apt","curl","nmap"]},
+ "outil":{"couleur":"#a76bff","mots":["Kali","Wireshark","Metasploit","Burp Suite","Docker","Git"]},
+ "attaque":{"couleur":"#ff4d4d","mots":["phishing","injection SQL","ransomware","malware","DDoS","XSS"]},
+ "protocole":{"couleur":"#39ff14","mots":["HTTP","HTTPS","TCP","UDP","DNS","TLS","SSH"]},
+ "langage":{"couleur":"#ffc233","mots":["Python","JavaScript","Bash","Rust","SQL"]},
+ "alerte":{"couleur":"#ff9f43","mots":["attention","danger","important","vulnérabilité","faille"]}},
+ "regles":{"sensibleCasse":false,"motsEntiers":true,"expressionsMultiMots":true}}
