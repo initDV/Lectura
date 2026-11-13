@@ -1,31 +1,47 @@
 // @ts-check
-// Écran Accueil : nouveau projet, ouvrir un .lectura, exemple, projets récents, installation, brouillon retrouvé.
-import { bus, store } from '../state.js';
+// Écran Projets (ouvert depuis le menu) : nouveau projet, ouvrir un .lectura, exemple, projets récents.
+// Fournit aussi le projet de départ de l'écran principal (brouillon retrouvé, sinon projet vierge).
+import { store } from '../state.js';
 import { h, clear, pickFile } from './dom.js';
 import { icon } from './icons.js';
 import { t, getLang } from '../modules/i18n.js';
 import { newProject, parseProject } from '../modules/project.js';
-import { listProjects, getProject, deleteProject, getAudio, getDraft, clearDraft } from '../modules/storage.js';
+import { listProjects, getProject, deleteProject, getAudio, getDraft } from '../modules/storage.js';
 import { report, notify } from '../modules/errors.js';
-import { canInstall, promptInstall, isStandalone, isIos } from '../modules/pwa.js';
 import { go } from '../router.js';
 
 /** Projet neuf qui reprend les réglages par défaut de l'utilisateur. */
 export function projetVierge(init = {}) {
   const s = store.settings;
   return newProject({
-    terminal: { theme: s.themeTerminal, police: s.policeTerminal, taille: s.tailleTexte, vitesseCps: s.vitesseDefilement, prompt: '$ ' },
+    terminal: { theme: s.themeTerminal, police: s.policeTerminal, taille: s.tailleTexte, vitesseCps: s.vitesseDefilement, prompt: '' },
+    personnageId: s.personnageId,
     audio: { source: 'voix', voix: { moteur: s.moteurVoix, id: s.voixId, vitesse: s.vitesseVoix, hauteur: s.hauteurVoix } },
     ...init,
   });
 }
 
-export function ouvrir(projet, blob = null, route = 'editeur') {
+/** Ouvre un projet sur l'écran principal. */
+export function ouvrir(projet, blob = null) {
   store.projet = projet;
   store.audioBlob = blob;
   store.modifie = false;
   store.apercu = false;
-  go(route);
+  go('scene');
+}
+
+/** Projet affiché au démarrage : le brouillon enregistré automatiquement s'il existe, sinon un projet vierge. */
+export async function projetInitial() {
+  try {
+    const d = await getDraft();
+    if (d && d.texte) {
+      store.audioBlob = (await getAudio(d.id)) || null;
+      return parseProject(JSON.stringify(d));
+    }
+  } catch (err) {
+    report('brouillon', err);
+  }
+  return projetVierge();
 }
 
 async function ouvrirFichier() {
@@ -45,34 +61,15 @@ export async function ouvrirExemple() {
   try {
     const en = getLang() === 'en', res = await fetch(`data/samples/exemple_${en ? 'en' : 'fr'}.txt`);
     if (!res.ok) throw new Error(t('accueil.exempleIntrouvable'));
-    ouvrir(projetVierge({ titre: t('accueil.exempleTitre'), texte: (await res.text()).trim() }), null, 'scene');
+    ouvrir(projetVierge({ titre: t('accueil.exempleTitre'), texte: (await res.text()).trim() }));
   } catch (err) {
     report('exemple', err);
   }
 }
 
-function banniereInstallation() {
-  if (isStandalone()) return null;
-  const zone = h('div', { class: 'banner', hidden: !canInstall() && !isIos() });
-  const dessiner = () => {
-    clear(zone);
-    if (canInstall()) {
-      zone.hidden = false;
-      zone.append(h('p', { text: t('accueil.installer.texte') }),
-        h('button', { type: 'button', class: 'btn btn-primary', onClick: async () => { if (await promptInstall()) zone.hidden = true; } }, icon('download'), t('accueil.installer.bouton')));
-    } else if (isIos()) {
-      zone.append(h('p', { text: t('accueil.installer.ios') }));
-    }
-  };
-  dessiner();
-  return { zone, off: bus.on('pwa:installable', dessiner) };
-}
-
 export async function render(root) {
   const liste = h('ul', { class: 'list', 'aria-label': t('accueil.recents') });
   const vide = h('p', { class: 'muted', text: t('accueil.aucunProjet') });
-  const brouillon = h('div', { class: 'banner banner-warn', hidden: true });
-  const inst = banniereInstallation();
 
   async function recents() {
     const projets = await listProjects();
@@ -92,31 +89,18 @@ export async function render(root) {
   }
 
   root.append(
-    h('section', { class: 'hero' },
-      h('img', { src: 'icons/favicon.svg', alt: '', width: 96, height: 96 }),
-      h('h1', { text: 'Lectura' }),
-      h('p', { text: t('accueil.slogan') })),
-    inst?.zone,
-    brouillon,
+    h('h1', { text: t('nav.projets') }),
     h('div', { class: 'actions' },
       h('button', { type: 'button', class: 'btn btn-primary', onClick: () => ouvrir(projetVierge()) }, icon('plus'), t('accueil.nouveau')),
       h('button', { type: 'button', class: 'btn', onClick: ouvrirFichier }, icon('folder'), t('accueil.ouvrir')),
       h('button', { type: 'button', class: 'btn', onClick: ouvrirExemple }, icon('play'), t('accueil.exemple'))),
-    h('section', { class: 'card' }, h('h2', { text: t('accueil.recents') }), vide, liste));
+    h('section', { class: 'card' }, h('h2', { text: t('accueil.recents') }), vide, liste),
+    h('p', null, h('a', { class: 'btn', href: '#/scene' }, icon('back'), t('nav.retour'))));
 
   try {
     await recents();
-    const d = await getDraft();
-    if (d && d.texte) {
-      brouillon.hidden = false;
-      brouillon.append(h('p', { text: t('accueil.brouillon', { titre: d.titre || t('editeur.sansTitre') }) }),
-        h('button', { type: 'button', class: 'btn btn-primary', text: t('accueil.brouillon.reprendre'), onClick: async () => {
-          try { ouvrir(parseProject(JSON.stringify(d)), (await getAudio(d.id)) || null); store.modifie = true; } catch (err) { report('brouillon', err); }
-        } }),
-        h('button', { type: 'button', class: 'btn btn-ghost', text: t('accueil.brouillon.supprimer'), onClick: async () => { await clearDraft(); brouillon.hidden = true; } }));
-    }
   } catch (err) {
-    report('accueil', err);
+    report('projets', err);
   }
-  return () => inst?.off();
+  return null;
 }

@@ -57,6 +57,9 @@ export async function render(root) {
   mouvements.value = store.projet?.reglages.mouvements || 'normal';
   mouvements.addEventListener('change', () => { if (store.projet) { store.projet.reglages.mouvements = mouvements.value; store.modifie = true; } });
 
+  const titreTerm = h('input', { type: 'text', value: s.titreTerminal, maxLength: 60, autocomplete: 'off', spellcheck: false });
+  titreTerm.addEventListener('input', () => sauverDoux({ titreTerminal: titreTerm.value }));
+
   // Animations / présentation
   const coche = (cle, texte) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!s[cle], onChange: (e) => sauver({ [cle]: e.target.checked }) }), texte);
 
@@ -87,6 +90,7 @@ export async function render(root) {
     h('section', { class: 'card' }, h('h2', { text: t('voix.hd.titre') }), hd.el),
     h('section', { class: 'card' }, h('h2', null, t('reglages.terminal'), ' ', verrou ? pro() : null),
       verrou ? h('p', { class: 'muted small', text: t('reglages.terminal.pro') }) : null,
+      field(t('reglages.titreTerminal'), titreTerm),
       h('div', { class: 'grid-2' }, field(t('reglages.theme'), theme), field(t('reglages.police'), police), champTaille, champVitesse,
         field(t('reglages.fond'), fond, store.projet ? null : t('reglages.projetRequis')), field(t('reglages.mouvements'), mouvements, store.projet ? null : t('reglages.projetRequis')))),
     h('section', { class: 'card' }, h('h2', { text: t('reglages.animations') }),
@@ -95,7 +99,7 @@ export async function render(root) {
     h('section', { class: 'card' }, h('h2', { text: t('reglages.stockage') }), jauge, stock, h('div', { class: 'row' }, proteger, liberer)),
     h('section', { class: 'card' }, h('h2', { text: t('reglages.version') }), h('p', { text: `Lectura ${VERSION} (${BUILD})` }),
       h('a', { class: 'btn', href: '#/apropos', text: t('nav.apropos') })),
-    store.projet ? h('p', null, h('a', { class: 'btn btn-primary', href: '#/editeur', text: t('reglages.retourEditeur') })) : null);
+    h('p', null, h('a', { class: 'btn btn-primary', href: '#/scene', text: t('nav.retour') })));
   majStockage();
   return () => panneau.stop();
 }

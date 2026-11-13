@@ -6,14 +6,14 @@ import { icon } from './icons.js';
 import { t } from '../modules/i18n.js';
 import { applyUpdate } from '../modules/pwa.js';
 
-const LIENS = [['accueil', 'home'], ['reglages', 'settings'], ['pro', 'star'], ['apropos', 'info']];
+const LIENS = [['scene', 'back'], ['projets', 'folder'], ['personnages', 'smile'], ['reglages', 'settings'], ['pro', 'star'], ['apropos', 'info']];
 
 export function renderNav(route = '') {
   const nav = document.getElementById('nav');
   if (!nav) return;
   clear(nav).append(...LIENS.map(([nom, ic]) =>
-    h('a', { href: `#/${nom}`, 'aria-current': route === nom ? 'page' : null, 'aria-label': t(`nav.${nom}`), title: t(`nav.${nom}`) },
-      icon(ic), h('span', { text: t(`nav.${nom}`) }))));
+    h('a', { href: `#/${nom}`, 'aria-current': route === nom ? 'page' : null, 'aria-label': t(nom === 'scene' ? 'nav.retour' : `nav.${nom}`), title: t(nom === 'scene' ? 'nav.retour' : `nav.${nom}`) },
+      icon(ic), h('span', { text: t(nom === 'scene' ? 'nav.retour' : `nav.${nom}`) }))));
 }
 
 function renderPill() {

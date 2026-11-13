@@ -2,8 +2,8 @@
 // app.js : démarrage + machine d'états centralisée.
 // IDLE → PREPARATION (décodage/synthèse) → PRET → LECTURE ⇄ PAUSE → FIN ; ERREUR depuis tout état.
 import { bus, store } from './state.js';
-import { installGlobalHandlers, logError, notify } from './modules/errors.js';
-import { loadSettings, saveSettings } from './modules/storage.js';
+import { installGlobalHandlers, logError, notify, report } from './modules/errors.js';
+import { loadSettings, saveSettings, saveDraft, clearDraft } from './modules/storage.js';
 import { setLang, t, taille } from './modules/i18n.js';
 import { verifyLicense } from './modules/license.js';
 import { initPwa, storageInfo } from './modules/pwa.js';
@@ -79,6 +79,18 @@ async function surveillerQuota() {
   if (info.ratio > 0.8) notify(t('stockage.alerte', { usage: taille(info.usage), quota: taille(info.quota) }), 'warn', 10000);
 }
 
+let dernierBrouillon = '';
+async function sauverBrouillon() {
+  const p = store.projet;
+  if (!p) return;
+  const j = JSON.stringify(p);
+  if (j === dernierBrouillon) return;
+  try {
+    if (p.texte.trim()) await saveDraft(JSON.parse(j)); else await clearDraft();
+    dernierBrouillon = j;
+  } catch (err) { report('brouillon', err); }
+}
+
 export async function demarrer() {
   installGlobalHandlers();
   initToasts();
@@ -86,8 +98,11 @@ export async function demarrer() {
   await setLang(store.settings.langue);
   await verifierLicenceEnregistree();
   initShell();
+  // Brouillon automatique toutes les 5 s : il reflète le projet ouvert et sera rouvert au prochain démarrage.
+  setInterval(sauverBrouillon, 5000);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) sauverBrouillon(); });
   window.addEventListener('beforeunload', (e) => {
-    if (!store.modifie) return;
+    if (!store.projet || !store.projet.texte.trim() || JSON.stringify(store.projet) === dernierBrouillon) return; // tout est déjà sauvegardé
     e.preventDefault();
     e.returnValue = ''; // le navigateur affiche son propre message « modifications non enregistrées »
   });

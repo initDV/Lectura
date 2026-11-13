@@ -1,0 +1,76 @@
+// @ts-check
+// scene-export.js : capture PNG et enregistrement vidéo de la scène (ouverts depuis le menu ou les raccourcis S et R).
+// La vidéo ne filme pas l'écran : la scène est redessinée sur un canvas, le robot vient du SVG vivant sérialisé (B5).
+import { store } from '../state.js';
+import { h } from './dom.js';
+import { t, taille } from '../modules/i18n.js';
+import { drawScene, capturePng, downloadBlob } from '../modules/capture.js';
+import { startRecording, supportedMime, extensionOf, FORMATS } from '../modules/recorder.js';
+import { SvgFrame } from '../modules/svgframe.js';
+import { fileBase } from '../modules/project.js';
+import { notify, report } from '../modules/errors.js';
+
+/**
+ * @param {{ projet: any, badge: HTMLElement, pret: ()=>boolean, pourCanvas: ()=>any, source: ()=>any,
+ *   pause: ()=>void, chercher: (ms:number)=>void, jouer: ()=>Promise<void>, format: ()=>string }} o
+ */
+export function creerExport(o) {
+  /** @type {any} */ let rec = null;
+
+  async function capture() {
+    if (!o.pret()) return notify(t('scene.err.rienACapturer'), 'info');
+    try {
+      const portrait = window.innerHeight > window.innerWidth;
+      const blob = await capturePng(o.pourCanvas(), portrait ? { w: 1080, h: 1920 } : { w: 1280, h: 720 });
+      downloadBlob(blob, `${fileBase(o.projet)}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`);
+      notify(t('scene.captureOk'), 'ok');
+    } catch (err) { report('capture', err); }
+  }
+
+  async function demarrer() {
+    if (!store.pro) return notify(t('pro.requis.video'), 'info');
+    if (!o.pret()) return notify(t('scene.err.rienACapturer'), 'info');
+    if (!supportedMime()) return notify(t('scene.err.videoNonGeree'), 'error');
+    try {
+      const f = FORMATS[o.format()] || FORMATS['16:9'], canvas = h('canvas', { width: f.w, height: f.h }), ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error(t('scene.err.videoNonGeree'));
+      await document.fonts?.ready;
+      o.pause(); o.chercher(0);
+      const sc = o.pourCanvas(), frame = new SvgFrame(sc.svg);
+      sc.terminal.revealTo(0);
+      drawScene(ctx, f.w, f.h, { ...sc, persoImage: await frame.pret() });
+      const flux = o.source().stream;
+      const r = await startRecording({ canvas, audioStream: flux, fps: 30 });
+      rec = { ...r, ctx, w: f.w, h: f.h, frame };
+      o.badge.hidden = false;
+      notify(t(flux ? 'scene.videoDebut' : 'scene.videoSansSon'), flux ? 'info' : 'warn', 7000);
+      await o.jouer();
+    } catch (err) { rec = null; o.badge.hidden = true; report('video', err); }
+  }
+
+  async function arreter() {
+    const r = rec;
+    if (!r) return;
+    rec = null; o.badge.hidden = true;
+    o.pause();
+    try {
+      const blob = await r.stop(), ext = extensionOf(r.mime);
+      downloadBlob(blob, `${fileBase(o.projet)}.${ext}`);
+      notify(t('scene.videoPrete', { format: ext.toUpperCase(), taille: taille(blob.size) }), 'ok', 9000);
+    } catch (err) { report('video', err); }
+  }
+
+  return {
+    get actif() { return !!rec; },
+    capture, arreter,
+    basculer: () => (rec ? arreter() : demarrer()),
+    /** À chaque image de la scène : met à jour l'image du robot et redessine le canvas enregistré. */
+    image(now) {
+      if (!rec) return;
+      rec.frame.update();
+      drawScene(rec.ctx, rec.w, rec.h, { ...o.pourCanvas(), persoImage: rec.frame.image }, now);
+    },
+    /** Quitte l'écran : on jette l'enregistrement en cours. */
+    abandonner() { if (rec) { rec.stop().catch(() => {}); rec = null; } },
+  };
+}

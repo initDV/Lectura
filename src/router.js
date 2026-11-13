@@ -1,5 +1,5 @@
 // @ts-check
-// router.js : navigation par hash (#/accueil #/editeur #/scene #/reglages #/pro #/apropos).
+// router.js : navigation par hash. #/scene = écran principal (par défaut) ; les autres écrans s'ouvrent depuis le menu.
 // Chaque écran est un module chargé à la demande qui exporte render(conteneur) → fonction de nettoyage.
 import { renderNav } from './ui/shell.js';
 import { report } from './modules/errors.js';
@@ -7,9 +7,9 @@ import { t } from './modules/i18n.js';
 import { h, clear } from './ui/dom.js';
 
 const ROUTES = {
-  accueil: () => import('./ui/accueil.js'),
-  editeur: () => import('./ui/editeur.js'),
   scene: () => import('./ui/scene.js'),
+  projets: () => import('./ui/projets.js'),
+  personnages: () => import('./ui/personnages.js'),
   reglages: () => import('./ui/reglages.js'),
   pro: () => import('./ui/pro.js'),
   apropos: () => import('./ui/apropos.js'),
@@ -26,15 +26,15 @@ export function go(route) {
 export async function naviguer() {
   const app = document.getElementById('app');
   if (!app) return;
-  let nom = (location.hash.match(/^#\/([a-z]+)/) || [])[1] || 'accueil';
-  if (!ROUTES[nom]) nom = 'accueil';
+  let nom = (location.hash.match(/^#\/([a-z]+)/) || [])[1] || 'scene';
+  if (!ROUTES[nom]) nom = 'scene'; // anciennes adresses (#/accueil, #/editeur) → écran principal
   const moi = ++jeton;
   try { nettoyer?.(); } catch (err) { report('navigation', err); }
   nettoyer = null;
   courante = nom;
   document.body.classList.toggle('route-scene', nom === 'scene');
   renderNav(nom);
-  document.title = `${t(`nav.${nom}`)} · Lectura`;
+  document.title = nom === 'scene' ? 'Lectura' : `${t(`nav.${nom}`)} · Lectura`;
   try {
     const mod = await ROUTES[nom]();
     if (moi !== jeton) return; // l'utilisateur a déjà changé d'écran

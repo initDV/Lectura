@@ -7,7 +7,7 @@ import { majReglages } from '../app.js';
 export function ouvrirTutoriel() {
   let etape = 0;
   const titre = h('h2', { id: 'tuto-titre' }), texte = h('p'), points = h('div', { class: 'dots', 'aria-hidden': 'true' });
-  const image = h('img', { src: 'characters/professor_1.svg', alt: '', width: 110, height: 146 });
+  const image = h('img', { src: 'characters/robot_lectura.svg', alt: '', width: 72, height: 180 });
   const suivant = h('button', { type: 'button', class: 'btn btn-primary' });
   const passer = h('button', { type: 'button', class: 'btn btn-ghost', text: t('tuto.passer') });
   const fond = h('div', { class: 'modal-backdrop' },
@@ -18,7 +18,7 @@ export function ouvrirTutoriel() {
     fond.remove();
     document.removeEventListener('keydown', clavier);
     await majReglages({ tutorielVu: true });
-    if (exemple) (await import('./accueil.js')).ouvrirExemple();
+    if (exemple) (await import('./projets.js')).ouvrirExemple();
   };
   const clavier = (e) => { if (e.key === 'Escape') fermer(false); };
   const dessiner = () => {

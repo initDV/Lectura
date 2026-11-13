@@ -1,5 +1,5 @@
 // @ts-check
-// editeur-segments.js : liste des phrases du texte avec, pour chacune, l'expression du personnage.
+// segments.js : liste des phrases du texte avec, pour chacune, l'expression du personnage.
 import { store } from '../state.js';
 import { h, clear } from './dom.js';
 import { t } from '../modules/i18n.js';

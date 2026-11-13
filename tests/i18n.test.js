@@ -8,7 +8,7 @@ const fichiers = (d) => readdirSync(d).flatMap((f) => {
   const p = join(d, f);
   return statSync(p).isDirectory() ? fichiers(p) : p.endsWith('.js') && !p.includes('/i18n/') ? [p] : [];
 });
-const PREFIXES = /^(net|maj|commun|err|stockage|accueil|tuto|editeur|voix|expr|pro|scene|touche|nav|reglages|apropos|aide)\.[A-Za-z0-9.]+$/;
+const PREFIXES = /^(net|maj|commun|err|stockage|accueil|tuto|editeur|voix|expr|pro|scene|touche|nav|reglages|apropos|aide|menu|persos)\.[A-Za-z0-9.]+$/;
 
 describe('dictionnaires', () => {
   it('toutes les clés écrites en dur dans le code existent en français', () => {

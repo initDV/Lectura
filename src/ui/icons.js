@@ -3,6 +3,11 @@
 const NS = 'http://www.w3.org/2000/svg';
 const TRACES = {
   home: 'M3 11l9-7 9 7 M5 10v10h14V10',
+  menu: 'M12 5v.5 M12 12v.5 M12 19v.5',
+  chevron: 'M6 9l6 6 6-6',
+  minus: 'M6 12h12',
+  voice: 'M12 4v16 M8 8v8 M4 10.5v3 M16 7v10 M20 10.5v3',
+  'eye-off': 'M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z M4 4l16 16',
   settings: 'M4 6h10 M18 6h2 M4 12h4 M12 12h8 M4 18h12 M16 4v4 M10 10v4 M18 16v4',
   star: 'M12 3l2.7 5.6 6.3.9-4.5 4.3 1 6.2L12 17l-5.5 3 1-6.2L3 9.5l6.3-.9z',
   info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M12 11v6 M12 7.5v.5',

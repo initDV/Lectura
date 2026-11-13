@@ -14,6 +14,7 @@ export const DEFAUTS = {
   themeTerminal: 'sombre', policeTerminal: 'JetBrains Mono', tailleTexte: 18, vitesseDefilement: 28,
   reduireAnimations: false, modePresentation: false, idInstallation: '', licence: '',
   tutorielVu: false, motsPerso: {}, formatVideo: '16:9',
+  personnageId: 'robot_lectura', titreTerminal: 'rhak_override@sentinel: ~/cours',
 };
 
 const promesse = (req) => new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); });
