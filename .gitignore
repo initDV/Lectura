@@ -1,0 +1,8 @@
+node_modules/
+dist/
+models/
+private.pem
+*.pem
+.DS_Store
+coverage/
+test-results/

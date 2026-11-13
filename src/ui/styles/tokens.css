@@ -1,0 +1,14 @@
+/* Jetons de design (cahier des charges D1) */
+:root{--bg:#0b0f14;--surface:#131a22;--surface-2:#1a232d;--text:#e6edf3;--muted:#8b98a5;--accent:#4fd8e8;--accent-2:#a76bff;--danger:#ff4d4d;--ok:#39ff14;--warn:#ff9f43;--radius:14px;--shadow:0 6px 24px rgba(0,0,0,.35);--t-fast:150ms;--t-med:250ms;--font-ui:'Inter',system-ui,sans-serif;--font-mono:'JetBrains Mono',ui-monospace,monospace}
+:root {
+  --border: #26313d;
+  --focus: #9be9f3;
+  --term-bg: #0d1117;
+  --term-bar: #161c24;
+  --term-fg: #e6edf3;
+  --term-prompt: var(--accent);
+  --term-size: 18px;
+  --term-font: var(--font-mono);
+  --stage-bg: var(--bg);
+  --tap: 44px;
+}
