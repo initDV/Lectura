@@ -56,7 +56,11 @@ quelque chose manque.
 
 | Fichier | Rôle |
 |---|---|
-| `keywords.js` | Repère les mots-clés et choisit l'expression automatique d'une phrase. |
+| `keywords.js` | Repère les mots-clés du terminal ; expression de secours d'une phrase (alerte, commande). |
+| `sentiment.js` | Lexique des sentiments : mots, expressions, négation, intensifs, émojis → émotion et position. |
+| `humeur.js` | Expression à jouer à chaque instant : imposée > sentiment > mots-clés ; version gratuite ou Pro. |
+| `expressions.js` | Table des expressions (yeux, sourcils, bouche, tête, bras, corps), force, mélange, transition. |
+| `rig.js` | Regroupe à la volée la tête et les avant-bras du SVG, place les bras devant le corps. |
 | `terminal.js` | Faux terminal ; ne garde que 40 lignes dans la page. |
 | `timeline.js` | Découpe en phrases, minutage automatique, conversion temps ↔ caractères. |
 | `subtitles.js` | Lecture et écriture `.srt` / `.vtt`. |

@@ -15,7 +15,7 @@ Pour les tests, la vérification du code et le build :
 
 ```bash
 npm install                   # une seule fois (≈ 60 Mo, outils de développement uniquement)
-npm test                      # 55 tests
+npm test                      # 81 tests
 npm run lint
 npm run build                 # crée dist/
 npm run preview               # sert dist/ sur http://localhost:5173
@@ -74,6 +74,40 @@ $ nmap -sV 192.168.1.10
 Bravo, tu as réussi ton premier scan !
 ```
 
+### Les émotions du robot
+
+Le robot réagit **au moment où il prononce** un mot chargé d'émotion. Chaque émotion fait bouger ensemble les yeux,
+les sourcils, la bouche, la tête et les bras.
+
+| Tu écris | Le robot |
+|---|---|
+| « Bonjour », « Bienvenue », « À bientôt » | sourit et salue de la main |
+| « Bravo », « réussi », « parfait », « ça marche » | content, hoche la tête |
+| « Attention », « Quoi ?! », « tout à coup » | surpris, sursaute, mains levées |
+| « Regarde », « étape », « important », ligne `$ ` | concentré, regarde et montre le terminal |
+| « Génial », « incroyable », « c'est parti » (Pro) | enthousiaste, bras en l'air |
+| « Haha », « trop drôle », 😂 (Pro) | rit, mains sur le ventre |
+| « Je suis fier », « mission accomplie » (Pro) | fier, poings sur les hanches |
+| « Merci beaucoup », « ne t'inquiète pas » (Pro) | tendre, mains sur le cœur |
+| « Bizarre », « je me demande », « Tu es sûr ? » (Pro) | sceptique, main contre la joue |
+| « Oups », « désolé », « erreur » (Pro) | gêné, main derrière la tête |
+| « Dommage », « échec », « ça ne marche pas » (Pro) | triste, tête baissée |
+| « Épuisé », « ennuyeux », « pff » (Pro) | fatigué, yeux mi-clos |
+| « J'en ai marre », « interdit », « inadmissible » (Pro) | en colère, poings serrés |
+| « Danger », « au secours », « catastrophe » (Pro) | effrayé, tremble, mains sur les joues |
+| « Oui », « d'accord » / « Non », « jamais » | hoche la tête / fait non de la tête |
+
+- La négation est comprise : « pas content » rend triste, « pas grave » rassure.
+- « très », « trop », les MAJUSCULES et « ! » renforcent ; « un peu » atténue.
+- Deux émotions dans la même phrase se mélangent (« J'en ai marre de ce bug » : colère puis gêne).
+- En version gratuite, les émotions Pro sont jouées avec l'expression de base la plus proche (content, concentré,
+  surpris).
+- Menu « ⋮ » → **Personnages** : coupe les émotions automatiques, ou impose une expression phrase par phrase. La
+  liste indique ce que « Auto » a détecté.
+- Pour ajouter tes mots : ouvre `data/sentiments_fr.json` et ajoute-les dans la liste de l'émotion voulue
+  (`"réuss*"` accepte toutes les terminaisons). Aucun code à modifier.
+- Toutes les expressions d'un coup d'œil : `http://localhost:5173/tests/manual/personnages.html?toutes=1`.
+
 ### Les autres commandes
 
 - **Vitesse** (0.5x à 2.0x) : agit sur la voix et sur le défilement du terminal.
@@ -102,7 +136,8 @@ Raccourcis clavier (hors zone de texte) : `Espace` lancer/pause · `←` `→` �
 | Terminal coloré, mode capture, raccourcis | Thèmes, police et vitesse du terminal |
 | Capture PNG | Export vidéo MP4 ou WebM, en 16:9 et 9:16 |
 | Projets locaux, export/import `.lectura` | Import/export `.srt` et `.vtt` |
-| Lip-sync à 4 niveaux | Lip-sync plus fin, expressions avancées |
+| Lip-sync à 4 niveaux | Lip-sync plus fin |
+| Émotions : content, concentré, surpris, salut de la main | 10 émotions de plus et leurs mélanges |
 | Filigrane « Lectura » sur les captures | Sans filigrane, mots-clés personnalisés |
 
 **Avant de vendre une licence**, crée ta propre clé (celle du dépôt est une clé de démonstration) :
@@ -131,6 +166,8 @@ node tools/generate_license.mjs sign <identifiant-du-client>
   propres étrangers.
 - L'export vidéo demande Chrome, Edge ou Samsung Internet. Sur iPhone, l'installation et la vidéo sont au mieux.
 - Les fichiers audio importés ne sont pas inclus dans le fichier `.lectura` exporté.
+- Les émotions viennent d'une liste de mots, pas d'une compréhension du texte : l'ironie ou un mot à double sens
+  peuvent tromper le robot. Dans ce cas, impose l'expression de la phrase dans Personnages.
 
 ## Documentation
 

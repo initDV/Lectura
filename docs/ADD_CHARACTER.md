@@ -23,12 +23,14 @@ Le fichier doit garder ces groupes et ces identifiants, que l'animation utilise 
 
 | Identifiant | Rôle | Animation |
 |---|---|---|
-| `#body` | torse, antenne, tête et visage | respiration |
-| `#arm-l`, `#arm-r` | bras gauche et droit | balancement pendant la parole, gestes |
+| `#body` | torse, antenne, tête et visage | respiration, tremblement, rebond |
+| `#arm-l`, `#arm-r` | bras gauche et droit | balancement pendant la parole, gestes, pose de chaque émotion |
 | `#legs` | jambes (facultatif) | suit le corps pour les styles flottant et ondulant |
 | `#mouth` | bouche (`rect`) | hauteur selon le son |
 | `#eye-l`, `#eye-r` | yeux (`circle`) | taille selon l'expression, clignement |
-| `#brow-l`, `#brow-r` | sourcils | montent ou descendent selon l'expression |
+| `#brow-l`, `#brow-r` | sourcils | montent, descendent et s'inclinent selon l'expression |
+| `#head` (facultatif) | groupe de la tête, dans `#body` | inclinaison, hochement |
+| `#forearm-l`, `#forearm-r` (facultatif) | avant-bras, dans chaque bras | pli du coude |
 
 S'il manque `#body`, `#arm-l`, `#arm-r`, `#mouth`, `#eye-l`, `#eye-r`, `#brow-l` ou `#brow-r`, l'application
 affiche un message qui nomme la pièce manquante.
@@ -44,7 +46,13 @@ Règles pratiques :
 - **Fichier autonome** : aucune image, police ou feuille de style externe, aucun script. Le dessin est converti en
   image pour la capture et la vidéo ; une référence externe casserait l'export. Les balises non autorisées sont
   retirées au chargement.
-- Pivots des épaules par défaut : (34,224) et (208,224).
+- Pivots par défaut : épaules (34,224) et (208,224), coudes (34,266) et (208,266), cou (120,202). Pour les changer,
+  ajoute `"coude_g"`, `"coude_d"` ou `"cou"` dans `"pivots"` du JSON.
+- **Tête et avant-bras** : tu n'as rien à faire. Sans `#head`, toutes les pièces de `#body` qui commencent au-dessus
+  de y = 205 forment la tête (chapeau, capuche, barbe compris) ; un col ou un foulard qui commence plus bas reste
+  sur le torse. Sans `#forearm-…`, les pièces du bras qui commencent sous y = 262 forment l'avant-bras, accessoire
+  tenu en main compris. Pour décider toi-même, crée ces groupes dans le SVG.
+- Les bras sont affichés devant le corps (une main peut se poser sur la hanche ou la joue).
 
 ## 3. Remplir le JSON
 
@@ -69,4 +77,6 @@ npm start                 # puis ouvrir http://localhost:5173/tests/manual/perso
 ```
 
 La planche montre chaque personnage deux fois : le SVG animé, et l'image produite pour l'export. Les deux doivent
-être identiques. Paramètres utiles dans l'adresse : `?expr=surpris`, `?parle=1`, `?fige=1`.
+être identiques. Paramètres utiles dans l'adresse : `?expr=surpris`, `?parle=1`, `?fige=1`, `?geste=coucou`,
+`?toutes=1&perso=mon_robot` (toutes les expressions de ton robot). Vérifie surtout que la tête tourne en un seul
+bloc et que l'accessoire tenu en main suit l'avant-bras.

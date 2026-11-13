@@ -117,7 +117,30 @@ Chaque échec affiche un message en français avec les boutons pour passer à la
 
 - Les SVG sont nettoyés par liste blanche avant d'être insérés dans la page.
 - L'export image/vidéo dessine le SVG vivant sérialisé (`svgframe.js`), voir la section 0.
-- Expressions Pro : sceptique, fatigué, triste. Thèmes du terminal : sombre, matrix, ambre, océan.
+- Thèmes du terminal : sombre, matrix, ambre, océan.
+
+### Émotions du robot (ajout)
+
+- **Détection par lexique, pas par IA.** `sentiment.js` cherche dans chaque phrase les mots et expressions de
+  `data/sentiments_fr.json` (ou `_en`). Raison : gratuit, hors ligne, instantané, quelques Ko, et l'auteur peut
+  corriger la liste lui-même. Limite assumée : pas de compréhension du sens (ironie, double sens).
+- Le lexique est fait maison (aucune liste tierce reprise), donc aucune licence à citer.
+- **L'émotion suit la position du texte**, donc le temps de la voix : avant le mot déclencheur le robot ne montre
+  que 35 % de l'expression, puis il réagit quand le mot est prononcé.
+- **Expressions combinées.** Une expression est un jeu de nombres (yeux, sourcils, bouche, tête, bras, corps). On
+  peut donc glisser de l'une à l'autre et en mélanger deux. Exception pour les bras : une demi-pose ne ressemble à
+  rien, ils prennent la pose entière de l'expression principale dès que la force dépasse 0,56.
+- **Gratuit / Pro.** Le cahier des charges réserve à Pro les « expressions et gestes avancés ». Gratuit : détection
+  complète, mais jouée avec content, concentré, surpris et le salut de la main. Pro : 10 expressions de plus et les
+  mélanges. Pour changer la répartition, retire `pro: true` d'une ligne de `src/modules/expressions.js`.
+- **Le SVG de référence n'est pas modifié.** La tête et les avant-bras n'y sont pas des groupes séparés : `rig.js`
+  les regroupe à la volée au chargement (`#head`, `#forearm-l`, `#forearm-r`) et place les bras devant le corps.
+  Au repos le dessin est identique.
+- **Bras levés par devant.** Sur téléphone le robot touche le bord gauche de l'écran : un bras qui se lève par le
+  côté sortait de l'image. Les poses passent donc devant le corps.
+- **Capture et vidéo.** Le SVG est rendu avec une marge de 70 unités autour du cadre 240 x 600 pour qu'un bras levé
+  ou un sursaut ne soit pas coupé.
+- Réglage par projet `reglages.emotions` (coché par défaut), dans l'écran Personnages.
 
 ## 7. Scène
 
