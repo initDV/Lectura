@@ -1,6 +1,6 @@
 // @ts-check
 // capture.js : redessine la scène (fond, personnage, terminal) sur un canvas → capture PNG et images de la vidéo.
-import { renderSvg } from './svgframe.js';
+import { renderSvg, drawSvgImage } from './svgframe.js';
 import { themeOf, fontOf } from './themes.js';
 
 /** Ajoute roundRect aux navigateurs qui ne l'ont pas (Chrome < 99, Safari < 16). */
@@ -98,7 +98,7 @@ export function drawScene(ctx, W, H, sc, tMs = performance.now()) {
   const img = sc.persoImage, vb = sc.svg?.viewBox?.baseVal;
   if (img && vb?.width) {
     const k = Math.min((cb.w * 0.92) / vb.width, (cb.h * 0.94) / vb.height);
-    ctx.drawImage(img, cb.x + (cb.w - vb.width * k) / 2 + 6 * s, cb.h - vb.height * k - 10 * s, vb.width * k, vb.height * k);
+    drawSvgImage(ctx, img, vb, cb.x + (cb.w - vb.width * k) / 2 + 6 * s, cb.h - vb.height * k - 10 * s, vb.width * k, vb.height * k);
   }
   drawTerminal(ctx, tb, s, sc, tMs);
   if (!sc.pro) { // filigrane (retiré par Pro)
