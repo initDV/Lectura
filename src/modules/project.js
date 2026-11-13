@@ -1,11 +1,12 @@
 // @ts-check
 // project.js : modèle de projet (.lectura, JSON version 1), validation, export / import. Module pur.
+import { NOMS_BASE, NOMS_PRO } from './expressions.js';
 
 export const VERSION_PROJET = 1;
 export const PERSO_DEFAUT = 'robot_lectura';
 const ANCIENS_PERSOS = { professor_1: 'robot_lectura', robot: 'robot_rouge' }; // projets créés avant le robot « outline »
-export const EXPRESSIONS_BASE = ['auto', 'neutre', 'content', 'concentre', 'surpris'];
-export const EXPRESSIONS_PRO = ['sceptique', 'fatigue', 'triste'];
+export const EXPRESSIONS_BASE = ['auto', ...NOMS_BASE]; // auto, neutre, content, concentre, surpris
+export const EXPRESSIONS_PRO = NOMS_PRO;                 // enthousiaste, rire, fier, tendre, sceptique, gene, triste, fatigue, colere, peur
 
 export function uuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -71,6 +72,7 @@ export function normalizeProject(o) {
     },
     reglages: {
       mouvements: ['calme', 'normal', 'vif'].includes(r.mouvements) ? r.mouvements : 'normal',
+      emotions: r.emotions !== false, // émotions automatiques d'après les mots du texte
       fond: /^#[0-9a-f]{6}$/i.test(r.fond || '') && r.fond !== '#0b0f14' ? r.fond : '#0d0d12', // #0b0f14 = ancien fond par défaut
     },
   };

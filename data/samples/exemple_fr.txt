@@ -1,7 +1,9 @@
-Bienvenue dans Lectura. Aujourd'hui, on apprend à repérer les machines d'un réseau.
+Bonjour et bienvenue dans Lectura ! Aujourd'hui, on apprend à repérer les machines d'un réseau.
 # Étape 1 : trouver son adresse
 $ ip addr show
-Attention : n'analyse jamais un réseau sans autorisation.
+Attention : n'analyse jamais un réseau sans autorisation, c'est strictement interdit.
 # Étape 2 : lister les ports ouverts
 $ nmap -sV 192.168.1.10
-Cette commande liste les ports ouverts : SSH, HTTP, DNS. Bravo, tu as réussi ton premier scan !
+Cette commande liste les ports ouverts : SSH, HTTP, DNS.
+Oups, une erreur ? Pas de panique, c'est facile à corriger.
+Bravo, tu as réussi ton premier scan ! C'est génial, non ?

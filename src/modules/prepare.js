@@ -3,6 +3,7 @@
 // Toute impossibilité lève une Error avec un message clair en français, affiché par la scène.
 import { store } from '../state.js';
 import { buildMatcher, mergeDicts } from './keywords.js';
+import { compilerLexique } from './sentiment.js';
 import { getCharacter, loadCharacterSvg } from './character-loader.js';
 import { autoTiming, segmentsValides, reportExpressions, estimateDurationMs, Timeline, CPS_VOIX } from './timeline.js';
 import { FileSource, SpeechSource, SilentSource } from './player.js';
@@ -32,6 +33,14 @@ export async function loadDict() {
   const perso = store.settings?.motsPerso;
   if (perso && Object.keys(perso).length) extras.push({ categories: perso });
   return mergeDicts(base, ...extras);
+}
+
+const lexiques = new Map();
+/** Lexique des sentiments (mots → émotion du robot) de la langue de l'interface, compilé une seule fois. */
+export async function loadLexique() {
+  const langue = getLang() === 'en' ? 'en' : 'fr';
+  if (!lexiques.has(langue)) lexiques.set(langue, compilerLexique(await json(`data/sentiments_${langue}.json`, 'le lexique des sentiments')));
+  return lexiques.get(langue);
 }
 
 /** Personnage du projet ; un personnage Pro sans licence est remplacé par le Professeur (avec message). */
@@ -83,7 +92,7 @@ async function sourceFichier(projet, audio) {
 export async function prepare(projet, { audio, apercu = false, perso: dejaCharge = null, onProgress }) {
   if (!projet.texte.trim()) throw new Error(t('scene.err.texteVide'));
   onProgress?.(0, 1, t('scene.prep.ressources'));
-  const [dict, perso] = await Promise.all([loadDict(), dejaCharge || loadProjectCharacter(projet)]);
+  const [dict, perso, lexique] = await Promise.all([loadDict(), dejaCharge || loadProjectCharacter(projet), loadLexique()]);
   const matcher = buildMatcher(dict);
   let res;
   if (apercu) {
@@ -100,5 +109,5 @@ export async function prepare(projet, { audio, apercu = false, perso: dejaCharge
   const segments = reportExpressions(res.segments, res.segments === projet.segments ? [] : projet.segments);
   if (!segments.length) throw new Error(t('scene.err.texteVide'));
   // vitesseBase = vitesse déjà « cuite » dans la source (voix) ; la scène applique ensuite vitesse ÷ vitesseBase.
-  return { dict, matcher, def: perso.def, svg: perso.svg, source: res.source, segments, timeline: new Timeline(projet.texte, segments), vitesseBase: res.vitesseBase || 1 };
+  return { dict, matcher, lexique, def: perso.def, svg: perso.svg, source: res.source, segments, timeline: new Timeline(projet.texte, segments), vitesseBase: res.vitesseBase || 1 };
 }

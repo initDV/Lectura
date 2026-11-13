@@ -9,10 +9,10 @@ import { transition, majReglages } from '../app.js';
 import { go } from '../router.js';
 import { AudioEngine } from '../modules/audio.js';
 import { prepare, loadProjectCharacter } from '../modules/prepare.js';
-import { Character, EXPRESSIONS } from '../modules/character.js';
+import { Character } from '../modules/character.js';
+import { creerHumeur } from '../modules/humeur.js';
 import { Terminal } from '../modules/terminal.js';
 import { typeLigne } from '../modules/timeline.js';
-import { autoExpression } from '../modules/keywords.js';
 import { mouthShape } from '../modules/lipsync.js';
 import { applyTheme } from '../modules/themes.js';
 import { EXPRESSIONS_BASE, EXPRESSIONS_PRO } from '../modules/project.js';
@@ -32,8 +32,8 @@ export async function render(root) {
   if (!store.projet) store.projet = await projetInitial();
   const projet = store.projet, audio = new AudioEngine();
   /** @type {any} */ let prep = null; /** @type {any} */ let perso = null; /** @type {any} */ let character = null; /** @type {any} */ let terminal = null;
-  let raf = 0, vivant = true, exprManuelle = '', derniereExpr = '', dernierSeg = null, muet = false, clic = 0, arrete = true, signature = '', masque = false;
-  const autos = new Map();
+  /** @type {any} */ let humeur = null;
+  let raf = 0, vivant = true, exprManuelle = '', derniereExpr = '', dernierSeg = null, dernierRang = 0, muet = false, clic = 0, arrete = true, signature = '', masque = false;
 
   const charPane = h('div', { class: 'char-pane' });
   const termBody = h('div', { class: 'term-body', 'aria-label': t('scene.terminal'), 'aria-live': 'off' });
@@ -117,7 +117,8 @@ export async function render(root) {
       if (!perso) await chargerPerso();
       const nouveau = await prepare(projet, { audio, apercu, perso, onProgress: (fait, total, texte) => { barre.value = total ? fait / total : 0; if (texte) etape.textContent = texte; } });
       if (!vivant) { nouveau.source.dispose(); return false; }
-      prep = nouveau; signature = sig; autos.clear(); derniereExpr = ''; dernierSeg = null;
+      prep = nouveau; signature = sig; derniereExpr = ''; dernierSeg = null;
+      humeur = creerHumeur({ lexique: prep.lexique, matcher: prep.matcher, pro: store.pro, actif: projet.reglages.emotions });
       terminal = new Terminal(termBody, prep.dict, prep.matcher);
       terminal.load(projet.texte);
       prep.source.onEnd = fin;
@@ -183,13 +184,6 @@ export async function render(root) {
     if (projet.audio.source === 'voix') majReglages({ moteurVoix: projet.audio.voix.moteur, voixId: projet.audio.voix.id }).catch((err) => report('reglages', err));
   }
 
-  function expressionDe(seg) {
-    if (!seg) return 'neutre';
-    const e = seg.expression;
-    if (e && e !== 'auto' && (store.pro || !EXPRESSIONS_PRO.includes(e)) && EXPRESSIONS[e]) return e;
-    if (!autos.has(seg.id)) autos.set(seg.id, typeLigne(seg.texte) === 'commande' ? 'concentre' : autoExpression(seg.texte, prep.matcher));
-    return autos.get(seg.id);
-  }
   function expressionSuivante() { // touche E : force une expression (puis revient à « auto »)
     const liste = ['', ...EXPRESSIONS_BASE.slice(1), ...(store.pro ? EXPRESSIONS_PRO : [])];
     exprManuelle = liste[(liste.indexOf(exprManuelle) + 1) % liste.length];
@@ -205,9 +199,13 @@ export async function render(root) {
       const chars = store.etat === 'FIN' ? projet.texte.length : s.charPos ? s.charPos() : prep.timeline.charAt(ms);
       terminal.revealTo(chars);
       const seg = prep.timeline.segmentAtChar(chars), parle = lecture && !!seg && typeLigne(seg.texte) === 'parle';
-      const expr = arrete ? 'neutre' : exprManuelle || expressionDe(seg);
-      if (expr !== derniereExpr) { derniereExpr = expr; character.setExpression(expr); bus.emit('character:expression', expr); }
-      if (seg !== dernierSeg) { dernierSeg = seg; if (parle && prep.matcher(seg.texte).some((j) => j.cat)) character.gesture(now); }
+      // Expression : imposée (touche E), sinon humeur de la phrase à la position du texte (donc au temps de la voix).
+      const hu = arrete || !seg ? { expr: 'neutre', force: 1, mix: '', poids: 0, rang: 0, geste: '' }
+        : exprManuelle ? { expr: exprManuelle, force: 1, mix: '', poids: 0, rang: 0, geste: '' } : humeur.etat(seg, chars - seg.start);
+      const cle = `${hu.expr}|${hu.force.toFixed(2)}|${hu.mix}`;
+      if (cle !== derniereExpr) { derniereExpr = cle; character.setExpression(hu.expr, hu.force, hu.mix, hu.poids); bus.emit('character:expression', hu.expr); }
+      if (seg !== dernierSeg) { dernierSeg = seg; dernierRang = 0; if (parle && prep.matcher(seg.texte).some((j) => j.cat)) character.gesture(now); }
+      if (lecture && hu.rang !== dernierRang) { if (hu.rang > dernierRang && hu.geste) character.gesture(now, hu.geste); dernierRang = hu.rang; } // mot déclencheur
       const niveau = parle ? s.viseme(now) : 0; // commandes et commentaires : bouche fermée, bras au repos
       character.setViseme(niveau);
       character.setTalking(parle ? (niveau > 0 ? 1 : 0.15) : 0);

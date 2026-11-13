@@ -10,7 +10,7 @@ describe('projet .lectura', () => {
     expect(p.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(p.personnageId).toBe('robot_lectura');
     expect(p.terminal).toEqual({ theme: 'sombre', police: 'JetBrains Mono', taille: 18, vitesseCps: 28, prompt: '$ ' });
-    expect(p.reglages).toEqual({ mouvements: 'normal', fond: '#0d0d12' });
+    expect(p.reglages).toEqual({ mouvements: 'normal', emotions: true, fond: '#0d0d12' });
     expect(p.audio.source).toBe('voix');
   });
   it('export puis import : aller-retour identique', () => {

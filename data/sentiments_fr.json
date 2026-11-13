@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "langue": "fr",
+  "aide": "Chaque émotion porte le nom d'une expression du robot (src/modules/expressions.js). « mots » pèsent 1, « forts » 1,6. « mot* » accepte toutes les terminaisons. « gestes » associe un mot à un geste (coucou, hoche, secoue, sursaut, bras). Les accents et la casse sont ignorés.",
+  "emotions": {
+    "content": {
+      "mots": ["bonjour", "salut", "coucou", "bienvenue", "merci", "super", "parfait*", "réussi*", "réussite*", "content*", "heureu*", "joie", "joyeu*",
+        "gagn*", "succès", "ça marche", "ça fonctionne", "top", "cool", "chouette", "sympa", "agréable*", "plaisir", "bonne nouvelle", "tant mieux",
+        "pas mal", "pas de problème", "aucun problème", "sans problème", "pas de souci", "aucun souci", "pas grave", "facile*", "nickel", "impeccable*",
+        "bonne idée", "bien joué", "bien vu", "ravi*", "satisfait*", "à bientôt", "bonne chance", "bon courage", "ouf", "et voilà", "au revoir"],
+      "forts": ["bravo", "félicitations", "excellent*"]
+    },
+    "enthousiaste": {
+      "mots": ["fantastique*", "extraordinaire*", "formidable*", "magnifique*", "wow", "waouh", "ouah", "trop bien", "trop cool", "trop fort", "j'adore",
+        "ador*", "c'est parti", "allons-y", "on y va", "énorme*", "puissant*", "victoire*", "champion*", "let's go", "hâte", "impressionnant*", "top du top"],
+      "forts": ["génial*", "incroyable*", "youpi", "hourra", "yes"]
+    },
+    "rire": {
+      "mots": ["drôle*", "rigol*", "marrant*", "blague*", "rire", "rires", "humour", "amusant*", "je plaisante", "lol", "mdr", "hihi", "comique*"],
+      "forts": ["haha", "hahaha", "ahah", "ahaha", "ptdr", "hilarant*"]
+    },
+    "fier": {
+      "mots": ["fier", "fière", "fiers", "fières", "fierté", "expert*", "maîtris*", "mission accomplie", "comme un pro", "comme un chef", "imbattable*",
+        "le meilleur", "la meilleure", "astuce de pro", "tu l'as fait", "on l'a fait", "je l'ai fait", "diplôm*", "certifi*"],
+      "forts": []
+    },
+    "tendre": {
+      "mots": ["amour", "aime", "aimes", "aimer", "aimons", "cœur", "coeur", "ami", "amis", "amie", "amies", "cher", "chers", "chère", "chères",
+        "merci beaucoup", "merci infiniment", "bisou*", "tendre*", "douceur", "mignon*", "famille", "prends soin", "courage", "je suis là",
+        "ne t'inquiète pas", "t'inquiète pas", "t'inquiète", "pas de panique", "n'aie pas peur", "rassure*", "tranquille*", "s'il te plaît", "gentil*"],
+      "forts": ["je t'aime", "je vous aime"]
+    },
+    "surpris": {
+      "mots": ["quoi", "oh", "ah bon", "tiens", "surpris*", "surprise*", "étonn*", "soudain*", "tout à coup", "inattendu*", "sans blague", "stupéf*",
+        "choc", "choqu*", "révélation*", "secret*", "saviez-vous", "savais-tu", "tu savais", "devine*", "figure-toi", "ça alors", "oh là là", "mon dieu",
+        "omg", "impossible*", "sérieux", "sérieusement", "incroyable mais vrai", "alerte*"],
+      "forts": ["attention"]
+    },
+    "peur": {
+      "mots": ["peur*", "danger*", "dangereu*", "risque*", "risqué*", "menace*", "arnaque*", "piège*", "catastroph*", "panique*", "terrible*", "effray*",
+        "terrifi*", "horreur", "horrible*", "angoiss*", "inquiét*", "inquiet*", "méfie*", "méfiance", "prudence", "prudent*", "urgence*", "urgent*",
+        "grave*", "cauchemar*", "trembl*", "frisson*"],
+      "forts": ["au secours", "à l'aide"]
+    },
+    "colere": {
+      "mots": ["colère", "énerv*", "furieu*", "rage", "agac*", "marre", "ras le bol", "insupportable*", "inadmissible*", "inacceptable*", "scandal*",
+        "nul", "nulle", "nuls", "nulles", "stupide*", "idiot*", "débile*", "interdit*", "arrête", "arrêtez", "stop", "ça suffit", "tais-toi", "détest*",
+        "haine", "zut", "punaise", "maudit*", "fichu*", "satané*", "illégal*", "puni*", "prison", "tricheu*", "voleur*", "menteu*", "mensonge*"],
+      "forts": ["j'en ai marre", "strictement interdit"]
+    },
+    "triste": {
+      "mots": ["triste*", "dommage", "hélas", "malheureu*", "malheur", "échec*", "échou*", "raté*", "rater", "perdu*", "pleur*", "larme*", "déçu*",
+        "décev*", "déception*", "regret*", "solitude", "difficile*", "pénible*", "deuil", "adieu", "pauvre*", "ne marche pas", "ne fonctionne pas",
+        "marche pas", "fonctionne pas", "ne marche plus", "ne fonctionne plus", "ça plante", "planté*", "cassé*", "en panne", "tant pis", "abandonn*"],
+      "forts": []
+    },
+    "gene": {
+      "mots": ["oups", "oops", "désolé*", "pardon", "excuse*", "aïe", "erreur*", "bug*", "bogue*", "tromp*", "gêné*", "gênant*", "embarrass*", "honte*",
+        "maladroit*", "bêtise*", "gaffe*", "boulette*", "mince", "mea culpa", "j'ai oublié", "oubli"],
+      "forts": []
+    },
+    "sceptique": {
+      "mots": ["bizarre*", "étrange*", "louche*", "suspect*", "douteu*", "doute*", "peut-être", "hmm", "hum", "euh", "pas sûr", "pas sûre", "pas certain",
+        "pas certaine", "mouais", "bof", "curieu*", "pourquoi", "comment ça", "es-tu sûr", "tu es sûr", "soi-disant", "prétend*", "paraît-il", "il paraît",
+        "hésit*", "mystère*", "mystérieu*", "énigme*", "réfléchi*", "voyons", "je me demande", "on se demande", "à ton avis", "selon toi"],
+      "forts": []
+    },
+    "fatigue": {
+      "mots": ["fatigu*", "épuis*", "crevé*", "dormir", "sommeil", "bâill*", "ennuy*", "ennui", "lassant*", "trop long", "interminable*", "flemme", "pff",
+        "pfff", "galère*", "j'en peux plus", "à bout", "zzz", "nuit blanche", "lent", "lente", "lentement"],
+      "forts": []
+    },
+    "concentre": {
+      "mots": ["regarde*", "regardons", "observe*", "notez", "note bien", "retiens", "retenez", "important*", "essentiel*", "concentr*", "précis*",
+        "exactement", "étape*", "d'abord", "ensuite", "analys*", "vérifi*", "examin*", "calcul*", "voici", "tape", "tapez", "écris", "écrivez", "saisis",
+        "exécut*", "souviens-toi", "rappelle-toi", "n'oublie pas", "n'oubliez pas", "astuce*", "conseil*", "règle*", "en détail", "pas à pas"],
+      "forts": []
+    }
+  },
+  "gestes": { "bonjour": "coucou", "salut": "coucou", "coucou": "coucou", "bienvenue": "coucou", "à bientôt": "coucou", "au revoir": "coucou",
+    "oui": "hoche", "ouais": "hoche", "d'accord": "hoche", "bien sûr": "hoche", "tout à fait": "hoche", "exactement": "hoche", "absolument": "hoche",
+    "non": "secoue", "jamais": "secoue", "surtout pas": "secoue", "hors de question": "secoue" },
+  "negations": ["pas", "jamais", "aucun", "aucune", "sans", "ni", "guère"],
+  "intensifs": { "très": 1.4, "trop": 1.4, "vraiment": 1.3, "tellement": 1.4, "super": 1.3, "hyper": 1.4, "extrêmement": 1.5, "totalement": 1.3,
+    "complètement": 1.3, "absolument": 1.3, "si": 1.15, "vachement": 1.3, "peu": 0.6, "assez": 0.85, "plutôt": 0.85, "presque": 0.7, "légèrement": 0.6 },
+  "emojis": { "😀": "content", "😃": "content", "😄": "content", "😁": "content", "🙂": "content", "😊": "content", "👍": "content", "✅": "content",
+    "🎉": "enthousiaste", "🥳": "enthousiaste", "🤩": "enthousiaste", "🔥": "enthousiaste", "🚀": "enthousiaste", "💪": "fier", "😎": "fier", "🏆": "fier",
+    "😂": "rire", "🤣": "rire", "😆": "rire", "❤": "tendre", "😍": "tendre", "🥰": "tendre", "🙏": "tendre",
+    "😮": "surpris", "😲": "surpris", "😯": "surpris", "🤯": "surpris", "😱": "peur", "😨": "peur", "😰": "peur", "⚠": "peur",
+    "😡": "colere", "😠": "colere", "🤬": "colere", "⛔": "colere", "😢": "triste", "😭": "triste", "😞": "triste", "💔": "triste",
+    "😅": "gene", "😬": "gene", "🙈": "gene", "🤔": "sceptique", "🧐": "sceptique", "🤨": "sceptique", "😴": "fatigue", "🥱": "fatigue", "😪": "fatigue" }
+}

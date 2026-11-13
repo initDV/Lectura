@@ -116,7 +116,7 @@ export default {
   'pro.decouvrir': 'Découvrir Lectura Pro',
   'pro.gratuitReste': 'Restent gratuits : 2 personnages (Robot Lectura, Robot rouge), voix ou fichier audio, terminal, mode capture, capture PNG, projets locaux, fonctionnement hors ligne.',
   'pro.f.personnages': '11 personnages de plus (hacker, ninja, astronaute, détective…)',
-  'pro.f.expressions': 'Expressions et gestes avancés (sceptique, fatigué, triste)',
+  'pro.f.expressions': '10 émotions de plus avec leurs gestes (rire, colère, peur, tristesse, fierté, doute…) et mélange de deux émotions',
   'pro.f.lipsync': 'Synchronisation des lèvres plus fine (analyse par bandes de fréquences)',
   'pro.f.mots': 'Catégories de mots-clés personnalisées',
   'pro.f.video': 'Export vidéo WebM (et MP4 si le navigateur le permet)',

@@ -1,7 +1,9 @@
-Welcome to Lectura. Today we learn how to spot the machines on a network.
+Hello and welcome to Lectura! Today we learn how to spot the machines on a network.
 # Step 1: find your address
 $ ip addr show
-Warning: never scan a network without permission.
+Warning: never scan a network without permission, it is strictly forbidden.
 # Step 2: list the open ports
 $ nmap -sV 192.168.1.10
-This command lists the open ports: SSH, HTTP, DNS. Well done, your first scan worked!
+This command lists the open ports: SSH, HTTP, DNS.
+Oops, an error? Don't panic, it is easy to fix.
+Well done, your first scan worked! Awesome, isn't it?

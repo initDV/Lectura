@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "langue": "en",
+  "aide": "Each emotion is named after a robot expression (src/modules/expressions.js). \"mots\" weigh 1, \"forts\" 1.6. \"word*\" accepts any ending. Case and accents are ignored.",
+  "emotions": {
+    "content": {
+      "mots": ["hello", "hi", "welcome", "thanks", "thank you", "great", "perfect*", "success*", "happy", "glad", "joy", "nice", "good job", "well done",
+        "it works", "works fine", "cool", "pleasant", "good news", "not bad", "no problem", "no worries", "easy", "good idea", "good luck", "finally",
+        "pleased", "enjoy*"],
+      "forts": ["bravo", "congratulations", "congrats", "excellent"]
+    },
+    "enthousiaste": {
+      "mots": ["fantastic", "wonderful", "wow", "love it", "let's go", "here we go", "huge", "powerful", "victory", "champion*", "impressive", "can't wait",
+        "exciting", "excited"],
+      "forts": ["awesome", "amazing", "incredible", "hooray", "yay", "yes"]
+    },
+    "rire": {
+      "mots": ["funny", "joke*", "laugh*", "humor", "humour", "just kidding", "lol", "hehe"],
+      "forts": ["haha", "hahaha", "lmao", "rofl", "hilarious"]
+    },
+    "fier": {
+      "mots": ["proud", "pride", "expert*", "master*", "mission accomplished", "like a pro", "like a boss", "unbeatable", "the best", "pro tip",
+        "you did it", "we did it", "i did it", "certified"],
+      "forts": []
+    },
+    "tendre": {
+      "mots": ["love", "heart", "friend*", "dear", "thank you so much", "thanks a lot", "sweet", "cute", "family", "take care", "courage", "i'm here",
+        "don't worry", "don't panic", "don't be afraid", "calm", "please", "kind"],
+      "forts": ["i love you"]
+    },
+    "surpris": {
+      "mots": ["what", "oh", "really", "surpris*", "suddenly", "unexpected*", "no way", "shock*", "secret*", "did you know", "guess what", "oh my",
+        "omg", "impossible", "seriously", "alert*", "watch out"],
+      "forts": ["warning", "careful", "beware"]
+    },
+    "peur": {
+      "mots": ["fear*", "afraid", "scared", "scary", "danger*", "risk*", "threat*", "scam*", "trap*", "catastroph*", "disaster*", "panic*", "terribl*",
+        "terrif*", "horror", "horrible", "anxious", "worr*", "caution", "cautious", "emergency", "urgent", "nightmare*"],
+      "forts": ["help me"]
+    },
+    "colere": {
+      "mots": ["angry", "anger", "furious", "rage", "annoy*", "fed up", "unacceptable", "outrageous", "stupid", "idiot*", "dumb", "forbidden", "stop",
+        "enough", "shut up", "hate*", "damn", "illegal", "punish*", "jail", "prison", "cheat*", "thief", "thieves", "liar*", "lie", "lies"],
+      "forts": ["strictly forbidden"]
+    },
+    "triste": {
+      "mots": ["sad", "sadly", "too bad", "alas", "unfortunately", "fail*", "missed", "lost", "cry*", "tear", "tears", "disappoint*", "regret*", "lonely",
+        "difficult", "hard", "painful", "goodbye", "poor", "doesn't work", "does not work", "not working", "broken", "crash*", "gave up", "give up"],
+      "forts": []
+    },
+    "gene": {
+      "mots": ["oops", "sorry", "apolog*", "excuse me", "ouch", "error*", "bug*", "mistake*", "embarrass*", "awkward", "ashamed", "shame", "clumsy",
+        "my bad", "i forgot", "whoops"],
+      "forts": []
+    },
+    "sceptique": {
+      "mots": ["weird", "strange", "odd", "suspicious", "suspect*", "doubt*", "maybe", "perhaps", "hmm", "uh", "not sure", "meh", "curious", "why",
+        "are you sure", "so-called", "apparently", "hesitat*", "myster*", "puzzl*", "let's see", "i wonder", "in your opinion", "think about"],
+      "forts": []
+    },
+    "fatigue": {
+      "mots": ["tired", "exhaust*", "sleep*", "yawn*", "boring", "bored", "too long", "endless", "lazy", "ugh", "sigh", "can't take it", "zzz", "slow",
+        "slowly"],
+      "forts": []
+    },
+    "concentre": {
+      "mots": ["look", "watch", "observe*", "note", "remember", "important", "essential", "focus*", "precise*", "exactly", "step*", "first", "then",
+        "analy*", "check*", "verif*", "examin*", "calculat*", "here is", "type", "write", "enter", "run", "execut*", "don't forget", "tip", "tips",
+        "rule*", "in detail", "step by step"],
+      "forts": []
+    }
+  },
+  "gestes": { "hello": "coucou", "hi": "coucou", "welcome": "coucou", "goodbye": "coucou", "bye": "coucou", "see you": "coucou",
+    "yes": "hoche", "yeah": "hoche", "okay": "hoche", "of course": "hoche", "exactly": "hoche", "absolutely": "hoche",
+    "no": "secoue", "never": "secoue", "no way": "secoue" },
+  "negations": ["not", "no", "never", "without", "don", "doesn", "didn", "isn", "aren", "wasn", "cannot", "neither", "nor"],
+  "intensifs": { "very": 1.4, "so": 1.3, "really": 1.3, "too": 1.3, "super": 1.3, "extremely": 1.5, "totally": 1.3, "completely": 1.3, "absolutely": 1.3,
+    "little": 0.6, "bit": 0.6, "quite": 0.85, "rather": 0.85, "almost": 0.7, "slightly": 0.6 },
+  "emojis": { "😀": "content", "😃": "content", "😄": "content", "😁": "content", "🙂": "content", "😊": "content", "👍": "content", "✅": "content",
+    "🎉": "enthousiaste", "🥳": "enthousiaste", "🤩": "enthousiaste", "🔥": "enthousiaste", "🚀": "enthousiaste", "💪": "fier", "😎": "fier", "🏆": "fier",
+    "😂": "rire", "🤣": "rire", "😆": "rire", "❤": "tendre", "😍": "tendre", "🥰": "tendre", "🙏": "tendre",
+    "😮": "surpris", "😲": "surpris", "😯": "surpris", "🤯": "surpris", "😱": "peur", "😨": "peur", "😰": "peur", "⚠": "peur",
+    "😡": "colere", "😠": "colere", "🤬": "colere", "⛔": "colere", "😢": "triste", "😭": "triste", "😞": "triste", "💔": "triste",
+    "😅": "gene", "😬": "gene", "🙈": "gene", "🤔": "sceptique", "🧐": "sceptique", "🤨": "sceptique", "😴": "fatigue", "🥱": "fatigue", "😪": "fatigue" }
+}
