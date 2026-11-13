@@ -3,13 +3,15 @@
 // Pièges gérés : Chrome coupe les phrases longues (~15 s) → morceaux ≤ 200 caractères enchaînés ;
 // pause/reprise peu fiables sur Android → pause = arrêt, reprise = relance au début du mot en cours ;
 // événements « boundary » absents sur Android → position estimée (14 caractères/s × vitesse, auto-corrigée).
+// Lignes « $ » et « # » : jamais prononcées ; la file les fait défiler en silence (comme une saisie) puis reprend la voix.
 import { bus } from '../../state.js';
-import { splitSentences, CPS_VOIX } from '../timeline.js';
+import { splitSentences, CPS_VOIX, CPS_FRAPPE } from '../timeline.js';
 
 /** Découpe le texte en morceaux ≤ max caractères (phrases, puis virgules, puis espaces), avec positions. */
 export function chunkText(texte, max = 200) {
   const out = [];
   for (const ph of splitSentences(texte)) {
+    if (ph.type !== 'parle') { out.push({ texte: ph.texte, start: ph.start, end: ph.end, muet: true }); continue; }
     let a = ph.start;
     while (ph.end - a > max) {
       const fen = texte.slice(a, a + max);
@@ -36,6 +38,7 @@ export class SpeechQueue {
     this.onEnd = onEnd; this.onError = onError;
     this.i = 0; this.pos = 0; this.playing = false; this.ended = false; this.gen = 0;
     this.cps = CPS_VOIX * this.opts.rate;
+    this.cpsFrappe = opts.cpsFrappe || CPS_FRAPPE; this.muet = false;
     this.anchor = { c: 0, t: 0 }; this.cap = Infinity; this.lastEvent = 0; this.started = false; this.timer = 0;
   }
 
@@ -75,6 +78,8 @@ export class SpeechQueue {
     const gen = ++this.gen, i = this.chunks.findIndex((c) => c.end > pos);
     if (i < 0) return this.finish();
     const c = this.chunks[i];
+    if (c.muet) return this.taper(c, i, pos, gen);
+    this.muet = false;
     let o = Math.max(0, pos - c.start);
     while (o > 0 && !/\s/.test(c.texte[o - 1])) o--; // reprise au début du mot
     const base = c.start + o, t0 = now();
@@ -99,9 +104,7 @@ export class SpeechQueue {
         const dt = (now() - t0) / 1000;
         if (!premier && dt > 0.4) this.cps = Math.max(5, Math.min(45, this.cps * 0.5 + ((c.end - base) / dt) * 0.5)); // Android : auto-correction
         bus.emit('tts:sentence-end', { index: i });
-        this.pos = c.end;
-        if (i + 1 < this.chunks.length) this.speakFrom(this.chunks[i + 1].start);
-        else this.finish();
+        this.suivant(i);
       },
       onError: (code) => {
         if (gen !== this.gen || code === 'interrupted' || code === 'canceled') return;
@@ -109,6 +112,20 @@ export class SpeechQueue {
         this.onError?.(code);
       },
     });
+  }
+
+  /** Commande ou commentaire : défile en silence à la vitesse de frappe, puis passe à la suite. */
+  taper(c, i, pos, gen) {
+    const base = Math.max(c.start, pos), t0 = now();
+    this.i = i; this.pos = base; this.anchor = { c: base, t: t0 }; this.cap = c.end; this.lastEvent = t0; this.started = true; this.muet = true;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => { if (gen === this.gen && this.playing) this.suivant(i); }, ((c.end - base) / (this.cpsFrappe * this.opts.rate)) * 1000 + 220);
+  }
+
+  suivant(i) {
+    this.pos = this.chunks[i].end;
+    if (i + 1 < this.chunks.length) this.speakFrom(this.chunks[i + 1].start);
+    else this.finish();
   }
 
   finish() {
@@ -122,12 +139,12 @@ export class SpeechQueue {
     const c = this.chunks[this.i], t = now();
     if (!c) return this.pos;
     if (this.started) {
-      const est = this.anchor.c + (this.cps * (t - this.anchor.t)) / 1000;
+      const est = this.anchor.c + ((this.muet ? this.cpsFrappe * this.opts.rate : this.cps) * (t - this.anchor.t)) / 1000;
       this.pos = Math.max(this.pos, Math.min(c.end, this.cap, est));
     }
     // Chien de garde : la synthèse n'a pas démarré ou ne répond plus → erreur explicite (jamais de blocage muet).
     const limite = this.started ? 6000 + ((c.end - c.start) / this.cps) * 3000 : 6000; // 3 × la durée prévue du morceau + 6 s
-    if (t - this.lastEvent > limite) {
+    if (!this.muet && t - this.lastEvent > limite) {
       this.stop();
       this.onError?.(this.started ? 'bloquee' : 'non-demarree');
     }
@@ -135,5 +152,5 @@ export class SpeechQueue {
   }
 
   /** Vrai si un mot est en train d'être prononcé (pour le lip-sync simulé). */
-  get speaking() { return this.playing && this.started; }
+  get speaking() { return this.playing && this.started && !this.muet; }
 }

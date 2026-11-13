@@ -71,3 +71,46 @@ describe('Timeline', () => {
     expect(estimateDurationMs('a'.repeat(140), 2)).toBe(5000);
   });
 });
+
+import { typeLigne, estimateDurationMs as dureeEstimee, splitSentences as phrases, autoTiming as minutage } from '../src/modules/timeline.js';
+import { chunkText } from '../src/modules/voice/queue.js';
+
+describe('lignes « $ » (commande) et « # » (commentaire)', () => {
+  const texte = 'Bonjour. On commence.\n# Étape 1. Trouver\n$ nmap -sV 10.0.0.1. ok\nBravo !';
+  it('reconnaît la nature de chaque ligne', () => {
+    expect(typeLigne('$ ls -la')).toBe('commande');
+    expect(typeLigne('# note')).toBe('commentaire');
+    expect(typeLigne('$5 de remise')).toBe('parle');
+    expect(typeLigne('#hashtag')).toBe('parle');
+    expect(typeLigne('Bonjour')).toBe('parle');
+  });
+  it('ne coupe jamais une commande ou un commentaire en plusieurs phrases', () => {
+    const p = phrases(texte);
+    expect(p.map((x) => x.type)).toEqual(['parle', 'parle', 'commentaire', 'commande', 'parle']);
+    expect(p[3].texte).toBe('$ nmap -sV 10.0.0.1. ok');
+    for (const x of p) expect(texte.slice(x.start, x.end)).toBe(x.texte);
+  });
+  it('avec un fichier audio, ces lignes ne prennent aucun temps et le total reste exact', () => {
+    const s = minutage(texte, 9000);
+    expect(s[2].finMs - s[2].debutMs).toBe(0);
+    expect(s[3].finMs - s[3].debutMs).toBe(0);
+    expect(s.at(-1).finMs).toBe(9000);
+    expect(s.reduce((a, x) => a + (x.finMs - x.debutMs), 0)).toBe(9000);
+  });
+  it('avec la voix, ces lignes reçoivent un temps de « frappe »', () => {
+    const s = minutage(texte, 9000, 0.5);
+    expect(s[3].finMs - s[3].debutMs).toBeGreaterThan(0);
+    expect(s.reduce((a, x) => a + (x.finMs - x.debutMs), 0)).toBe(9000);
+    expect(dureeEstimee('$ ls', 1, 28)).toBeLessThan(dureeEstimee('abcd', 1, 28)); // tapé plus vite que lu
+  });
+  it('un texte fait seulement de commandes garde un minutage utilisable', () => {
+    const s = minutage('$ ls\n$ pwd', 2000);
+    expect(s.at(-1).finMs).toBe(2000);
+    expect(s[0].finMs).toBeGreaterThan(0);
+  });
+  it('la file de la voix marque ces lignes comme muettes', () => {
+    const c = chunkText(texte);
+    expect(c.filter((x) => x.muet).map((x) => x.texte)).toEqual(['# Étape 1. Trouver', '$ nmap -sV 10.0.0.1. ok']);
+    expect(c.filter((x) => !x.muet).length).toBe(3);
+  });
+});

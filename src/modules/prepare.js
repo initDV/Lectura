@@ -4,11 +4,12 @@
 import { store } from '../state.js';
 import { buildMatcher, mergeDicts } from './keywords.js';
 import { getCharacter, loadCharacterSvg } from './character-loader.js';
-import { autoTiming, segmentsValides, reportExpressions, estimateDurationMs, Timeline } from './timeline.js';
+import { autoTiming, segmentsValides, reportExpressions, estimateDurationMs, Timeline, CPS_VOIX } from './timeline.js';
 import { FileSource, SpeechSource, SilentSource } from './player.js';
 import { SpeechQueue } from './voice/queue.js';
 import { getEngine, voiceKey } from './voice/engine.js';
 import { getAudio } from './storage.js';
+import { PERSO_DEFAUT } from './project.js';
 import { encodeWav } from './audio.js';
 import { notify } from './errors.js';
 import { t, getLang } from './i18n.js';
@@ -38,12 +39,12 @@ export async function loadProjectCharacter(projet) {
   let def = await getCharacter(projet.personnageId);
   if (!def || def.erreur) {
     notify(t('scene.persoIntrouvable', { id: projet.personnageId }), 'warn');
-    def = await getCharacter('professor_1');
+    def = await getCharacter(PERSO_DEFAUT);
   } else if (def.pro && !store.pro) {
     notify(t('scene.persoPro', { nom: def.nom }), 'warn');
-    def = await getCharacter('professor_1');
+    def = await getCharacter(PERSO_DEFAUT);
   }
-  if (!def) throw new Error('Aucun personnage disponible : le fichier characters/professor_1.json est introuvable.');
+  if (!def) throw new Error('Aucun personnage disponible : le fichier characters/robot_lectura.json est introuvable.');
   return { def, svg: await loadCharacterSvg(def) };
 }
 
@@ -54,16 +55,17 @@ async function sourceVoixSysteme(projet) {
   if (!voix.length) throw new Error(t('voix.err.aucune'));
   const voice = voix.find((x) => voiceKey(x) === v.id) || voix.find((x) => x.default) || voix[0];
   const volume = store.settings?.volume ?? 1;
-  const queue = new SpeechQueue(moteur, projet.texte, { voice, rate: v.vitesse, pitch: v.hauteur, volume });
-  const duree = estimateDurationMs(projet.texte, v.vitesse);
-  return { source: new SpeechSource(queue, duree), segments: autoTiming(projet.texte, duree) };
+  const cps = projet.terminal.vitesseCps;
+  const queue = new SpeechQueue(moteur, projet.texte, { voice, rate: v.vitesse, pitch: v.hauteur, volume, cpsFrappe: cps });
+  const duree = estimateDurationMs(projet.texte, v.vitesse, cps);
+  return { source: new SpeechSource(queue, duree), segments: autoTiming(projet.texte, duree, CPS_VOIX / cps), vitesseBase: v.vitesse };
 }
 
 async function sourcePiper(projet, audio, onProgress) {
   const moteur = await getEngine('piper'), v = projet.audio.voix;
-  const r = await moteur.synthesize(projet.texte, { voixId: v.id, vitesse: v.vitesse, onProgress });
+  const r = await moteur.synthesize(projet.texte, { voixId: v.id, vitesse: v.vitesse, cpsFrappe: projet.terminal.vitesseCps, onProgress });
   await audio.load(encodeWav(r.samples, r.sampleRate));
-  return { source: new FileSource(audio), segments: r.segments.map((s, i) => ({ id: i + 1, expression: 'auto', ...s })) };
+  return { source: new FileSource(audio), segments: r.segments.map((s, i) => ({ id: i + 1, expression: 'auto', ...s })), vitesseBase: v.vitesse };
 }
 
 async function sourceFichier(projet, audio) {
@@ -76,17 +78,17 @@ async function sourceFichier(projet, audio) {
 
 /**
  * @param {any} projet
- * @param {{audio: import('./audio.js').AudioEngine, apercu?: boolean, onProgress?: (fait:number, total:number, etape:string)=>void}} o
+ * @param {{audio: import('./audio.js').AudioEngine, apercu?: boolean, perso?: {def:any, svg:any}|null, onProgress?: (fait:number, total:number, etape:string)=>void}} o
  */
-export async function prepare(projet, { audio, apercu = false, onProgress }) {
+export async function prepare(projet, { audio, apercu = false, perso: dejaCharge = null, onProgress }) {
   if (!projet.texte.trim()) throw new Error(t('scene.err.texteVide'));
   onProgress?.(0, 1, t('scene.prep.ressources'));
-  const [dict, perso] = await Promise.all([loadDict(), loadProjectCharacter(projet)]);
+  const [dict, perso] = await Promise.all([loadDict(), dejaCharge || loadProjectCharacter(projet)]);
   const matcher = buildMatcher(dict);
   let res;
   if (apercu) {
     const duree = (projet.texte.length / projet.terminal.vitesseCps) * 1000;
-    res = { source: new SilentSource(duree, projet.texte), segments: autoTiming(projet.texte, duree) };
+    res = { source: new SilentSource(duree, projet.texte), segments: autoTiming(projet.texte, duree, 1) };
   } else if (projet.audio.source === 'fichier') {
     onProgress?.(0, 1, t('scene.prep.audio'));
     res = await sourceFichier(projet, audio);
@@ -97,5 +99,6 @@ export async function prepare(projet, { audio, apercu = false, onProgress }) {
   }
   const segments = reportExpressions(res.segments, res.segments === projet.segments ? [] : projet.segments);
   if (!segments.length) throw new Error(t('scene.err.texteVide'));
-  return { dict, matcher, def: perso.def, svg: perso.svg, source: res.source, segments, timeline: new Timeline(projet.texte, segments) };
+  // vitesseBase = vitesse déjà « cuite » dans la source (voix) ; la scène applique ensuite vitesse ÷ vitesseBase.
+  return { dict, matcher, def: perso.def, svg: perso.svg, source: res.source, segments, timeline: new Timeline(projet.texte, segments), vitesseBase: res.vitesseBase || 1 };
 }

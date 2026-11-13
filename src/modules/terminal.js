@@ -4,6 +4,7 @@
 // Par rapport à la référence : même API (load, revealTo, total, shown) mais le DOM est « virtualisé » :
 // seules les 40 dernières lignes sont montées, pour rester fluide au-delà de 20 000 caractères.
 import { bus } from '../state.js';
+import { typeLigne } from './timeline.js';
 
 const LONG = 600; // au-delà, un paragraphe est affiché une phrase par ligne (sinon chaque image recalcule tout le paragraphe)
 
@@ -45,15 +46,19 @@ export class Terminal {
     this.cursor.setAttribute('aria-hidden', 'true');
   }
 
-  load(text, prompt = '$ ') {
+  /** Charge le texte. « $ » = commande (prompt + couleur d'accent), « # » = commentaire (atténué), sinon texte + mots-clés. */
+  load(text) {
     this.root.textContent = ''; this.lines = []; this.rows = []; this.shown = -1; this.first = 0; this.cur = -1;
-    this.prompt = prompt;
+    this.prompt = ''; // plus de prompt automatique : seules les lignes « $ » en portent un (écrit dans le texte)
     let pos = 0;
     for (const brute of text.split(/\n/)) {
-      for (const line of decouper(brute)) {
+      const type = typeLigne(brute);
+      for (const line of type === 'parle' ? decouper(brute) : [brute]) {
         const start = pos, tokens = [];
-        for (const tok of this.matcher(line)) { tokens.push({ t: tok.t, cat: tok.cat, start: pos }); pos += tok.t.length; }
-        this.lines.push({ start, end: pos, tokens });
+        if (type === 'commande') { tokens.push({ t: '$ ', cat: '__prompt', start: pos }, { t: line.slice(2), cat: '__cmd', start: pos + 2 }); pos += line.length; }
+        else if (type === 'commentaire') { tokens.push({ t: line, cat: '__com', start: pos }); pos += line.length; }
+        else for (const tok of this.matcher(line)) { tokens.push({ t: tok.t, cat: tok.cat, start: pos }); pos += tok.t.length; }
+        this.lines.push({ start, end: pos, tokens, type });
         pos += 1; // séparateur (retour à la ligne ou espace entre deux phrases) compté comme 1 caractère
       }
     }
@@ -71,12 +76,10 @@ export class Terminal {
   makeRow(i) {
     const line = this.lines[i], el = document.createElement('div'), spans = [];
     el.className = 'term-line';
-    if (line.tokens.length) {
-      const p = document.createElement('span'); p.className = 'term-prompt'; p.textContent = this.prompt; el.append(p);
-    }
     for (const tok of line.tokens) {
       const s = document.createElement('span');
-      if (tok.cat) { s.className = 'kw'; s.style.color = `var(--kw-${tok.cat})`; }
+      if (tok.cat?.startsWith('__')) s.className = `tk-${tok.cat.slice(2)}`; // prompt, cmd, com
+      else if (tok.cat) { s.className = 'kw'; s.style.color = `var(--kw-${tok.cat})`; }
       s.textContent = ''; spans.push(s); el.append(s);
     }
     return { el, spans, full: false };

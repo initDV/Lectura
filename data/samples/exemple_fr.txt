@@ -1,9 +1,7 @@
-Bienvenue dans Lectura. Aujourd'hui, on parle de sécurité.
-Attention : le phishing reste la première cause de piratage.
-Un faux message t'envoie vers une copie d'un site en HTTPS, et tu donnes ton mot de passe sans le savoir.
-Pour vérifier une machine, on ouvre un terminal sous Kali.
-sudo nmap -sV 192.168.1.10
-Cette commande liste les ports ouverts : SSH, HTTP, DNS.
-Si un service est trop ancien, c'est une faille. Une vulnérabilité connue peut suffire.
-Avec Python ou Bash, on automatise ces contrôles en quelques lignes.
-Bravo, tu connais maintenant les bases. Mets tes logiciels à jour !
+Bienvenue dans Lectura. Aujourd'hui, on apprend à repérer les machines d'un réseau.
+# Étape 1 : trouver son adresse
+$ ip addr show
+Attention : n'analyse jamais un réseau sans autorisation.
+# Étape 2 : lister les ports ouverts
+$ nmap -sV 192.168.1.10
+Cette commande liste les ports ouverts : SSH, HTTP, DNS. Bravo, tu as réussi ton premier scan !

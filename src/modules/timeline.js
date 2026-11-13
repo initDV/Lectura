@@ -5,20 +5,36 @@
 const SEPARATEUR = /(?<=[.!?…])\s+|\n+/g;
 export const CPS_VOIX = 14; // caractères par seconde estimés pour la voix du système (× vitesse)
 
-/** Découpe en phrases en gardant la position de chaque phrase dans le texte d'origine. */
+/**
+ * Nature d'une ligne du texte : « $ » = commande, « # » = commentaire (affichées, jamais prononcées), sinon texte parlé.
+ * @param {string} ligne @returns {'commande'|'commentaire'|'parle'}
+ */
+export function typeLigne(ligne) {
+  return ligne.startsWith('$ ') ? 'commande' : ligne.startsWith('# ') ? 'commentaire' : 'parle';
+}
+
+/**
+ * Découpe en phrases en gardant la position de chaque phrase dans le texte d'origine.
+ * Une ligne de commande ou de commentaire reste entière ; `type` dit si la phrase est prononcée.
+ */
 export function splitSentences(texte) {
   const out = [];
-  const push = (a, b) => {
+  const push = (a, b, type) => {
     while (a < b && /\s/.test(texte[a])) a++;
     while (b > a && /\s/.test(texte[b - 1])) b--;
-    if (b > a) out.push({ texte: texte.slice(a, b), start: a, end: b });
+    if (b > a) out.push({ texte: texte.slice(a, b), start: a, end: b, type });
   };
-  let last = 0;
-  for (const m of texte.matchAll(SEPARATEUR)) {
-    push(last, m.index);
-    last = m.index + m[0].length;
+  let debut = 0;
+  for (const ligne of texte.split('\n')) {
+    const fin = debut + ligne.length, type = typeLigne(ligne);
+    if (type !== 'parle') push(debut, fin, type);
+    else {
+      let last = debut;
+      for (const m of ligne.matchAll(SEPARATEUR)) { push(last, debut + m.index, type); last = debut + m.index + m[0].length; }
+      push(last, fin, type);
+    }
+    debut = fin + 1;
   }
-  push(last, texte.length);
   return out;
 }
 
@@ -30,22 +46,32 @@ export function weight(phrase) {
   return p;
 }
 
-/** Sans timing fourni : répartit dureeMs entre les phrases au prorata de leur poids. */
-export function autoTiming(texte, dureeMs) {
-  const phrases = splitSentences(texte), poids = phrases.map((p) => weight(p.texte));
+/**
+ * Sans timing fourni : répartit dureeMs entre les phrases au prorata de leur poids.
+ * `poidsMuet` = poids d'un caractère de commande ou de commentaire : 0 avec un fichier audio (ces lignes ne sont pas
+ * dans l'enregistrement, elles apparaissent d'un coup entre deux phrases), > 0 quand elles sont « tapées » en silence.
+ */
+export function autoTiming(texte, dureeMs, poidsMuet = 0) {
+  const phrases = splitSentences(texte), parle = phrases.some((p) => p.type === 'parle');
+  const poids = phrases.map((p) => (p.type === 'parle' || !parle ? weight(p.texte) : p.texte.length * poidsMuet));
   const somme = poids.reduce((a, b) => a + b, 0) || 1;
   let cumul = 0;
   return phrases.map((p, i) => {
     const debutMs = Math.round((dureeMs * cumul) / somme);
     cumul += poids[i];
     const finMs = i === phrases.length - 1 ? Math.round(dureeMs) : Math.round((dureeMs * cumul) / somme);
-    return { id: i + 1, texte: p.texte, debutMs, finMs, expression: 'auto' };
+    return { id: i + 1, texte: p.texte, debutMs, finMs, expression: 'auto', type: p.type };
   });
 }
 
-/** Durée estimée (ms) d'un texte lu par la voix du système. */
-export function estimateDurationMs(texte, vitesse = 1) {
-  return Math.round((texte.length / (CPS_VOIX * (vitesse || 1))) * 1000);
+export const CPS_FRAPPE = 28; // vitesse d'affichage des commandes et commentaires (× vitesse), comme une saisie au clavier
+
+/** Durée estimée (ms) d'un texte lu par la voix du système : phrases parlées + lignes « tapées » en silence. */
+export function estimateDurationMs(texte, vitesse = 1, cpsFrappe = CPS_FRAPPE) {
+  let parle = 0, muet = 0;
+  for (const p of splitSentences(texte)) if (p.type === 'parle') parle += p.texte.length; else muet += p.texte.length;
+  if (!parle && !muet) parle = texte.length;
+  return Math.round(((parle / CPS_VOIX + muet / cpsFrappe) / (vitesse || 1)) * 1000);
 }
 
 /** Retrouve chaque segment dans le texte ; null si un segment ne correspond plus au texte. */

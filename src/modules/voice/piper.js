@@ -1,7 +1,7 @@
 // @ts-check
 // piper.js : moteur « Lectura HD hors ligne » (Piper + onnxruntime-web WASM), chargé à la demande uniquement.
 // Contrairement à la voix du système, il produit des échantillons audio : lip-sync réel et export vidéo possibles.
-import { splitSentences } from '../timeline.js';
+import { splitSentences, CPS_FRAPPE } from '../timeline.js';
 import { t } from '../i18n.js';
 import { getCatalogue, etatVoix, lire, urlFichier, telecharger, supprimer, toutSupprimer } from './piper-store.js';
 
@@ -62,10 +62,10 @@ export class PiperEngine {
   /**
    * Synthétise tout le texte, phrase par phrase : les dates de chaque phrase sont donc exactes.
    * @param {string} texte
-   * @param {{voixId:string, vitesse?:number, onProgress?:(fait:number,total:number,etape:string)=>void}} o
+   * @param {{voixId:string, vitesse?:number, cpsFrappe?:number, onProgress?:(fait:number,total:number,etape:string)=>void}} o
    * @returns {Promise<{samples:Float32Array, sampleRate:number, segments:{texte:string,debutMs:number,finMs:number}[]}>}
    */
-  async synthesize(texte, { voixId, vitesse = 1, onProgress } = /** @type {any} */ ({})) {
+  async synthesize(texte, { voixId, vitesse = 1, cpsFrappe = CPS_FRAPPE, onProgress } = /** @type {any} */ ({})) {
     if (texte.length > LIMITE_CARACTERES) throw new Error(t('voix.hd.err.tropLong', { max: LIMITE_CARACTERES, n: texte.length }));
     onProgress?.(0, 1, t('voix.hd.chargement'));
     await this.#charger(voixId);
@@ -76,13 +76,14 @@ export class PiperEngine {
     for (let i = 0; i < phrases.length; i++) {
       const p = phrases[i];
       onProgress?.(i, phrases.length, t('voix.hd.synthesePhrase', { i: i + 1, n: phrases.length }));
-      const r = await this.#appel({ type: 'synth', texte: p.texte, vitesse });
+      // Commande ou commentaire : pas de voix, un silence de la durée de la « frappe » de la ligne.
+      const r = p.type === 'parle' ? await this.#appel({ type: 'synth', texte: p.texte, vitesse }) : { samples: new Float32Array(Math.round((sr * p.texte.length) / (cpsFrappe * vitesse))) };
       const son = r.samples.length ? r.samples : new Float32Array(Math.round(sr * 0.3)); // phrase sans rien à dire (symboles) : court silence
       const suite = phrases[i + 1], paragraphe = suite && /\n/.test(texte.slice(p.end, suite.start));
       const silence = new Float32Array(Math.round(sr * (suite ? (paragraphe ? PAUSE_PARAGRAPHE : PAUSE_PHRASE) : 0.15) / Math.max(0.5, vitesse)));
       const debut = n;
       blocs.push(son, silence); n += son.length + silence.length;
-      segments.push({ texte: p.texte, debutMs: Math.round((debut / sr) * 1000), finMs: Math.round((n / sr) * 1000) });
+      segments.push({ texte: p.texte, type: p.type, debutMs: Math.round((debut / sr) * 1000), finMs: Math.round((n / sr) * 1000) });
     }
     const samples = new Float32Array(n);
     let pos = 0, crete = 0;
