@@ -149,4 +149,14 @@ export default {
   'persos.emotions.aide': 'Le robot réagit quand il prononce un mot chargé d’émotion : « bravo », « attention », « oups », « bonjour »… Les yeux, les sourcils, la bouche, la tête et les bras bougent ensemble. Version gratuite : content, concentré, surpris. Pro ajoute 10 émotions (rire, colère, peur, tristesse, fierté…) et leurs mélanges.',
   'persos.emotions.aidePro': 'Le robot réagit quand il prononce un mot chargé d’émotion : « bravo », « attention », « oups », « bonjour », « j’en ai marre »… Les yeux, les sourcils, la bouche, la tête et les bras bougent ensemble, et deux émotions proches se mélangent.',
   'persos.sansTexte': 'Écris d’abord un texte pour régler l’expression de chaque phrase.',
+
+  'dl.titre': 'Télécharger',
+  'dl.aide': 'Choisis le format. Les formats indisponibles sur ce navigateur sont grisés.',
+  'dl.formatVideo': 'Vidéo avec son, prête à partager',
+  'dl.mp4.indispo': 'Ton navigateur ne sait pas enregistrer en MP4. Utilise WebM (compatible partout) ou un autre navigateur.',
+  'dl.webm.indispo': 'Ton navigateur a enregistré en MP4.',
+  'dl.mp3.genere': 'Audio seul, encodé en MP3 (quelques secondes).',
+  'dl.mp3.encours': 'Encodage MP3 en cours…',
+  'dl.mp3.ok': 'MP3 prêt · {taille}',
+  'dl.mp3.echec': "Impossible d'extraire l'audio (fichier sans son ?).",
 };

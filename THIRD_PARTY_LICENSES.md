@@ -63,3 +63,11 @@ Ces fichiers ne sont pas dans le dépôt Git. `tools/fetch_voice.mjs` les place 
 
 Seules les dépendances directes déclarées dans `package.json` sont listées ; leurs propres dépendances restent sur la
 machine de développement et ne sont jamais publiées.
+
+## lamejs (encodeur MP3)
+
+- Fichier : `src/vendor/lamejs/lame.min.js` (copie locale, chargée à la demande pour l'export audio).
+- Licence : **LGPL-3.0** — texte intégral dans `src/vendor/lamejs/LICENSE`.
+- Source : https://github.com/zhuker/lamejs (portage JavaScript de LAME : https://lame.sourceforge.io/).
+- Conformité LGPL : lamejs est chargé comme fichier séparé (pas de modification du cœur), la licence est
+  conservée à côté du bundle, et cette mention atteste l'usage de LAME dans Lectura.

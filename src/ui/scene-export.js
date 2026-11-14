@@ -3,12 +3,13 @@
 // La vidéo ne filme pas l'écran : la scène est redessinée sur un canvas, le robot vient du SVG vivant sérialisé (B5).
 import { store } from '../state.js';
 import { h } from './dom.js';
-import { t, taille } from '../modules/i18n.js';
+import { t } from '../modules/i18n.js';
 import { drawScene, capturePng, downloadBlob } from '../modules/capture.js';
-import { startRecording, supportedMime, extensionOf, FORMATS } from '../modules/recorder.js';
+import { startRecording, supportedMime, FORMATS } from '../modules/recorder.js';
 import { SvgFrame } from '../modules/svgframe.js';
 import { fileBase } from '../modules/project.js';
 import { notify, report } from '../modules/errors.js';
+import { ouvrirMenuTelechargement } from './download-menu.js';
 
 /**
  * @param {{ projet: any, badge: HTMLElement, pret: ()=>boolean, pourCanvas: ()=>any, source: ()=>any,
@@ -54,9 +55,9 @@ export function creerExport(o) {
     rec = null; o.badge.hidden = true;
     o.pause();
     try {
-      const blob = await r.stop(), ext = extensionOf(r.mime);
-      downloadBlob(blob, `${fileBase(o.projet)}.${ext}`);
-      notify(t('scene.videoPrete', { format: ext.toUpperCase(), taille: taille(blob.size) }), 'ok', 9000);
+      const blob = await r.stop();
+      if (!blob.size) throw new Error('Enregistrement vide.');
+      ouvrirMenuTelechargement({ videoBlob: blob, mime: r.mime, fileBase: fileBase(o.projet) });
     } catch (err) { report('video', err); }
   }
 

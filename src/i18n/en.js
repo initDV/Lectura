@@ -149,4 +149,14 @@ export default {
   'persos.emotions.aide': 'The robot reacts when it says an emotional word: “well done”, “warning”, “oops”, “hello”… Eyes, eyebrows, mouth, head and arms move together. Free version: happy, focused, surprised. Pro adds 10 emotions (laughter, anger, fear, sadness, pride…) and their blends.',
   'persos.emotions.aidePro': 'The robot reacts when it says an emotional word: “well done”, “warning”, “oops”, “hello”, “fed up”… Eyes, eyebrows, mouth, head and arms move together, and two close emotions blend.',
   'persos.sansTexte': 'Write a text first to set the expression of each sentence.',
+
+  'dl.titre': 'Download',
+  'dl.aide': 'Pick a format. Formats not supported by this browser are greyed out.',
+  'dl.formatVideo': 'Video with sound, ready to share',
+  'dl.mp4.indispo': 'This browser cannot record MP4. Use WebM (works everywhere) or another browser.',
+  'dl.webm.indispo': 'This browser recorded in MP4.',
+  'dl.mp3.genere': 'Audio only, encoded to MP3 (a few seconds).',
+  'dl.mp3.encours': 'Encoding MP3…',
+  'dl.mp3.ok': 'MP3 ready · {taille}',
+  'dl.mp3.echec': 'Could not extract audio (silent file?).',
 };
