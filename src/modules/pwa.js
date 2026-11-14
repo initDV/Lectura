@@ -5,6 +5,8 @@ import { logError } from './errors.js';
 
 /** @type {any} */ let invite = null; // événement beforeinstallprompt mis de côté
 let rechargeDemandee = false;
+/** @type {any} */ let reg = null; // enregistrement du service worker
+/** @type {any} */ let attente = null; // nouvelle version téléchargée, prête à être activée
 /** @type {any} */ let verrou = null;
 
 export async function initPwa() {
@@ -15,11 +17,11 @@ export async function initPwa() {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && verrou?.voulu) wakeLock(true); });
   if (!('serviceWorker' in navigator)) return; // http non sécurisé ou vieux navigateur : l'app marche, sans hors-ligne
   try {
-    const reg = await navigator.serviceWorker.register('./sw.js');
+    reg = await navigator.serviceWorker.register('./sw.js');
     const surveiller = (w) => w?.addEventListener('statechange', () => {
-      if (w.state === 'installed' && navigator.serviceWorker.controller) bus.emit('sw:update-available', w);
+      if (w.state === 'installed' && navigator.serviceWorker.controller) { attente = w; bus.emit('sw:update-available', w); }
     });
-    if (reg.waiting && navigator.serviceWorker.controller) bus.emit('sw:update-available', reg.waiting);
+    if (reg.waiting && navigator.serviceWorker.controller) { attente = reg.waiting; bus.emit('sw:update-available', reg.waiting); }
     reg.addEventListener('updatefound', () => surveiller(reg.installing));
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (rechargeDemandee) location.reload(); });
     // Un appareil connecté vérifie souvent s'il existe une nouvelle version.
@@ -93,4 +95,27 @@ export async function wakeLock(actif) {
     /* refusé (batterie faible, onglet caché) : sans gravité */
   }
   return false;
+}
+
+/** Une nouvelle version est téléchargée et attend d'être activée. */
+export const updateReady = () => !!attente;
+
+/** Active la nouvelle version prête, puis recharge la page. */
+export function applyReadyUpdate() { if (attente) applyUpdate(attente); }
+
+/** Cherche une nouvelle version maintenant. Renvoie 'prete' | 'a-jour' | 'hors-ligne' | 'erreur'. */
+export async function checkForUpdate() {
+  if (!reg) return 'erreur';
+  if (!navigator.onLine) return 'hors-ligne';
+  try {
+    await reg.update();
+    if (reg.installing) { // téléchargement en cours : on attend la fin (15 s au maximum)
+      const w = reg.installing;
+      await new Promise((ok) => { w.addEventListener('statechange', () => { if (w.state === 'installed' || w.state === 'redundant') ok(null); }); setTimeout(ok, 15000); });
+    }
+    if (reg.waiting && navigator.serviceWorker.controller) { attente = attente || reg.waiting; return 'prete'; }
+    return attente ? 'prete' : 'a-jour';
+  } catch {
+    return 'erreur';
+  }
 }
