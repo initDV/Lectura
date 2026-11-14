@@ -196,8 +196,9 @@ export async function render(root) {
   function detecterPonctuation(seg, chars, now) {
     if (seg !== dernierSegPonc) { dernierSegPonc = seg; dernierePosPonc = -1; }
     const pos = chars - seg.start;
-    if (pos > dernierePosPonc + 1 && dernierePosPonc >= 0) {
-      const inter = seg.texte.slice(dernierePosPonc + 1, pos + 1);
+    if (pos > dernierePosPonc) {
+      const debut = dernierePosPonc >= 0 ? dernierePosPonc + 1 : 0;
+      const inter = seg.texte.slice(debut, pos + 1);
       for (const c of inter) {
         if (c === '?') character.reagir('interro', now);
         else if (c === '!') character.reagir('excla', now);

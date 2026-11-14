@@ -208,4 +208,5 @@ export default {
   'reglages.decor.neon': 'Neon',
   'reglages.decor.aide': 'Colors are applied when you return to the scene.',
   'reglages.decor.reset': 'Reset',
+  'voix.hd.cache': 'Playing from cache · {i}/{n}',
 };
