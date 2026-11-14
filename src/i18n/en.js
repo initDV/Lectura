@@ -163,4 +163,8 @@ export default {
   'dl.mp4.reparation': 'Fixing video for gallery…',
   'dl.mp4.ok': 'MP4 ready for gallery · {taille}',
   'dl.mp4.echec': 'Fixing failed, original file downloaded.',
+  'dl.bouton.telecharger': 'Download',
+  'dl.bouton.partager': 'Share',
+  'dl.astuceGalerie': 'For the phone gallery: tap Share → pick "Files" → save under Movies/ (or share to Google Photos).',
+  'dl.partage.indispo': 'Sharing unavailable, file saved to Download/.',
 };

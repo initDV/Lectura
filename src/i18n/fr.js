@@ -163,4 +163,8 @@ export default {
   'dl.mp4.reparation': 'Réparation de la vidéo pour la galerie…',
   'dl.mp4.ok': 'MP4 prêt pour la galerie · {taille}',
   'dl.mp4.echec': 'Réparation impossible, le fichier original a été téléchargé.',
+  'dl.bouton.telecharger': 'Télécharger',
+  'dl.bouton.partager': 'Partager',
+  'dl.astuceGalerie': 'Pour la galerie du téléphone : touche Partager → choisis « Fichiers » → enregistre dans Movies/ (ou partage vers Google Photos).',
+  'dl.partage.indispo': 'Partage non disponible, fichier téléchargé dans Download/.',
 };
