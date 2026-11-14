@@ -127,6 +127,38 @@
       "mots": ["i understand", "i feel for you", "that must be hard", "stay strong", "i'm sorry", "i sympathize", "i'm with you", "you're not alone", "here for you", "thinking of you"],
       "forts": ["i suffer with you"]
     },
+    "pensif": {
+      "mots": ["thoughtful*", "i'm thinking", "thinking*", "hmm", "let me think", "come to think of it", "i wonder", "interesting question"],
+      "forts": []
+    },
+    "confus": {
+      "mots": ["confused*", "lost", "i don't get it", "i don't understand", "not clear", "i don't know anymore", "what is this", "huh", "how does it work", "i can't figure it out"],
+      "forts": ["no idea", "what does it mean"]
+    },
+    "resigne": {
+      "mots": ["never mind", "resigned*", "give up", "what's the point", "it's useless", "impossible", "too late", "anyway", "that's how it is", "nothing we can do"],
+      "forts": ["i give up", "no use"]
+    },
+    "excite": {
+      "mots": ["excited*", "excitement", "can't wait", "looking forward", "when is it", "coming soon", "great news", "awesome", "yes"],
+      "forts": ["this is amazing", "so happy"]
+    },
+    "apaise": {
+      "mots": ["calm*", "peaceful*", "serene*", "relaxed*", "zen", "slowly", "gently", "stress-free", "at peace", "soothing"],
+      "forts": ["harmony", "tranquility"]
+    },
+    "honteux": {
+      "mots": ["shame", "ashamed*", "embarrassed*", "i'm sorry", "excuse me", "sorry for", "that's awkward", "i feel bad", "so embarrassing"],
+      "forts": ["i'm terrible", "the shame"]
+    },
+    "provocateur": {
+      "mots": ["provoke*", "want to bet", "try it", "go on", "you can't", "i dare you", "come on then", "just saying"],
+      "forts": ["i challenge you", "come at me"]
+    },
+    "contemplatif": {
+      "mots": ["contemplat*", "admire*", "look closely", "observe", "it's beautiful", "such beauty", "the beauty of", "infinity", "eternity", "nature", "the sky", "the stars"],
+      "forts": ["sublime"]
+    },
     "concentre": {
       "mots": ["look", "watch", "observe*", "note", "remember", "important", "essential", "focus*", "precise*", "exactly", "step*", "first", "then",
         "analy*", "check*", "verif*", "examin*", "calculat*", "here is", "type", "write", "enter", "run", "execut*", "don't forget", "tip", "tips",

@@ -4,8 +4,8 @@
 // plusieurs mots (« bien joué »), des débuts de mots (« réuss* »), de la négation (« pas content »), des intensifs
 // (« très »), des émojis et de la ponctuation. Chaque mot trouvé garde sa position : le robot réagit quand il est dit.
 
-const POSITIFS = new Set(['content', 'enthousiaste', 'rire', 'fier', 'tendre', 'emerveille', 'soulage', 'determine', 'malicieu', 'reconnaissant', 'amuse', 'rassurant', 'compatissant']);
-const NEGATIFS = new Set(['triste', 'colere', 'peur', 'fatigue', 'gene', 'inquiet', 'ennuye', 'degoute', 'jaloux', 'intimide', 'impatient']);
+const POSITIFS = new Set(['content', 'enthousiaste', 'rire', 'fier', 'tendre', 'emerveille', 'soulage', 'determine', 'malicieu', 'reconnaissant', 'amuse', 'rassurant', 'compatissant', 'excite', 'apaise', 'contemplatif']);
+const NEGATIFS = new Set(['triste', 'colere', 'peur', 'fatigue', 'gene', 'inquiet', 'ennuye', 'degoute', 'jaloux', 'intimide', 'impatient', 'confus', 'resigne', 'honteux']);
 const RE_MOT = /[\p{L}\p{N}]+/gu;
 
 /** Minuscules sans accents, MÊME longueur que l'original (les positions restent valables). */

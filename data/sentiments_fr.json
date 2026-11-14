@@ -134,6 +134,38 @@
       "mots": ["je te comprends", "je comprends", "ça doit être dur", "courage", "je suis désolé", "je compatis", "je suis avec toi", "tu n'es pas seul", "tu n'es pas seule", "je suis là pour toi", "je pense à toi"],
       "forts": ["je souffre avec toi"]
     },
+    "pensif": {
+      "mots": ["pensif*", "je réfléchis", "réfléchis*", "hmm", "voyons", "laisse-moi réfléchir", "à bien y penser", "j'y pense", "je me demande", "question intéressante"],
+      "forts": []
+    },
+    "confus": {
+      "mots": ["confus*", "perdu*", "je comprends pas", "je ne comprends pas", "pas compris", "je sais plus", "je ne sais plus", "c'est flou", "c'est quoi ça", "hein", "comment ça marche", "j'y arrive pas"],
+      "forts": ["aucune idée", "ça veut dire quoi"]
+    },
+    "resigne": {
+      "mots": ["tant pis", "résigné*", "abandonn*", "laisse tomber", "à quoi bon", "ça sert à rien", "impossible", "trop tard", "de toute façon", "c'est comme ça", "on peut rien faire"],
+      "forts": ["j'abandonne", "plus la peine"]
+    },
+    "excite": {
+      "mots": ["excité*", "excitation", "trop hâte", "impatient de", "je peux plus attendre", "c'est pour quand", "ça arrive bientôt", "excellent nouvelle", "génial", "yes"],
+      "forts": ["c'est incroyable", "je suis trop content"]
+    },
+    "apaise": {
+      "mots": ["apaisé*", "calme", "tranquille", "serein*", "relax*", "zen", "tout doucement", "doucement", "posément", "sans stress", "en paix"],
+      "forts": ["que la paix soit", "harmonie"]
+    },
+    "honteux": {
+      "mots": ["honte", "honteux*", "gêné*", "je suis confus", "pardon", "je m'excuse", "désolé pour", "ça me gêne", "je suis désolé", "j'ai honte", "quelle honte"],
+      "forts": ["je suis nul", "je suis nulle", "la honte"]
+    },
+    "provocateur": {
+      "mots": ["provoc*", "tu veux parier", "essaie", "essaye", "vas-y", "tu peux pas", "tu peux pas test", "tu oses pas", "t'oses pas", "chiche", "moi je dis ça"],
+      "forts": ["je te défie", "allez viens"]
+    },
+    "contemplatif": {
+      "mots": ["contempl*", "admir*", "regarde bien", "observe", "c'est beau", "quelle beauté", "la beauté de", "l'infini", "l'éternité", "la nature", "le ciel", "les étoiles"],
+      "forts": ["sublime"]
+    },
     "concentre": {
       "mots": ["regarde*", "regardons", "observe*", "notez", "note bien", "retiens", "retenez", "important*", "essentiel*", "concentr*", "précis*",
         "exactement", "étape*", "d'abord", "ensuite", "analys*", "vérifi*", "examin*", "calcul*", "voici", "tape", "tapez", "écris", "écrivez", "saisis",

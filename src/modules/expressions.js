@@ -81,6 +81,23 @@ export const EXPRESSIONS = {
     armL: 5, armR: 5, foreL: -25, foreR: -25, swing: 0.6, bounce: 1.5, tempo: 1.8, geste: 'secoue' },
   compatissant: { pro: true, base: 'tendre', lid: 0.8, browL: 2, browR: 2, rot: 8, h: 5, w: 40, my: 1, headR: 6, headY: 3,
     armL: 10, armR: 10, foreL: -70, foreR: -70, swing: 0.3, tempo: 0.85, geste: 'hoche' },
+  // Paquet 3 : 8 sentiments mentaux.
+  pensif: { pro: true, base: 'concentre', lid: 0.75, browL: 2, browR: 2, rot: 4, gx: -3, gy: -3, w: 40, my: 1, headR: 6, headY: 2,
+    armL: 4, armR: 4, foreL: -55, foreR: -55, swing: 0.25, tempo: 0.7 },
+  confus: { pro: true, base: 'surpris', r: 11, browL: -3, browR: 4, rot: -3, gx: -2, gy: 1, w: 40, my: -1, headR: -6, headY: 3,
+    armL: 5, armR: 5, foreL: -20, foreR: 20, swing: 0.4, tempo: 0.9, geste: 'secoue' },
+  resigne: { pro: true, base: 'triste', lid: 0.65, browL: 2, browR: 2, rot: 10, h: 4, w: 36, my: 2, headR: -3, headY: 6, bodyY: 3,
+    armL: -2, armR: -2, swing: 0.25, tempo: 0.6 },
+  excite: { pro: true, base: 'enthousiaste', r: 12.5, lid: 0.95, browL: -4, browR: -4, h: 11, w: 56, headY: -3, headR: 2,
+    armL: -180, armR: -180, foreL: 15, foreR: 15, swing: 0.7, bounce: 4, tremble: 0.5, tempo: 2, geste: 'sursaut' },
+  apaise: { pro: true, base: 'content', lid: 0.65, browL: -1, browR: -1, h: 6, w: 50, headR: 3, headY: 1,
+    armL: 4, armR: 4, foreL: 10, foreR: 10, swing: 0.3, tempo: 0.75, geste: 'hoche' },
+  honteux: { pro: true, base: 'gene', lid: 0.55, browL: 3, browR: 3, rot: 15, gx: -3, gy: 4, h: 3, w: 32, my: 1, headR: -4, headY: 8, bodyY: 4,
+    armL: -4, armR: -4, swing: 0.2, tremble: 0.3, tempo: 0.6 },
+  provocateur: { pro: true, base: 'fier', lid: 0.85, browL: -3, browR: 3, rot: -4, gx: 2, h: 7, w: 52, my: -1, headR: -3, headY: -1,
+    armL: 25, armR: 25, foreL: -70, foreR: -70, swing: 0.5, tempo: 1.3, geste: 'hoche' },
+  contemplatif: { pro: true, base: 'tendre', lid: 0.55, browL: -1, browR: -1, rot: 3, gy: -2, h: 5, w: 42, my: 1, headR: 4, headY: -2,
+    armL: 3, armR: 3, foreL: -60, foreR: -60, swing: 0.2, tempo: 0.55 },
 };
 
 export const NOMS = Object.keys(EXPRESSIONS);

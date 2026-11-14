@@ -193,4 +193,12 @@ export default {
   'expr.rassurant': 'Reassuring',
   'expr.impatient': 'Impatient',
   'expr.compatissant': 'Compassionate',
+  'expr.pensif': 'Thoughtful',
+  'expr.confus': 'Confused',
+  'expr.resigne': 'Resigned',
+  'expr.excite': 'Excited',
+  'expr.apaise': 'Calm',
+  'expr.honteux': 'Ashamed',
+  'expr.provocateur': 'Provocative',
+  'expr.contemplatif': 'Contemplative',
 };
