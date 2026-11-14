@@ -64,6 +64,23 @@ export const EXPRESSIONS = {
     swing: 0.5, tempo: 1.3, geste: 'hoche' },
   malicieu: { pro: true, base: 'content', browL: -2, browR: 3, rot: -2, r: 11, lid: 0.85, gx: 3, h: 5, w: 46, my: -1, headR: -4, headY: -1,
     armR: 8, foreR: 20, swing: 0.4, tempo: 1.1, geste: 'hoche' },
+  // Paquet 2 : 8 sentiments relationnels.
+  reconnaissant: { pro: true, base: 'content', lid: 0.75, browL: -3, browR: -3, h: 7, w: 52, headR: 5, headY: -2,
+    armL: 8, armR: 8, foreL: -85, foreR: -85, swing: 0.4, tempo: 0.9, geste: 'hoche' },
+  nostalgique: { pro: true, base: 'tendre', lid: 0.65, browL: 1, browR: 1, rot: 5, h: 5, w: 42, my: 1, headR: 7, headY: 3, gx: -3, gy: -2,
+    armL: 3, armR: 3, swing: 0.25, tempo: 0.65 },
+  jaloux: { pro: true, base: 'concentre', r: 10, lid: 0.85, browL: 4, browR: -2, rot: 3, gx: -5, w: 38, my: 1, headR: -3, headY: 2,
+    armL: 18, armR: 18, foreL: -60, foreR: -60, swing: 0.4, tempo: 1.1, geste: 'secoue' },
+  amuse: { pro: true, base: 'content', lid: 0.6, browL: -3, browR: -3, rot: 4, h: 10, w: 54, headY: -2, headR: 4, sway: 2,
+    armL: 6, armR: 6, foreL: -40, foreR: -40, swing: 0.5, bounce: 1.8, tempo: 1.5, geste: 'hoche' },
+  intimide: { pro: true, base: 'gene', lid: 0.7, browL: 2, browR: 2, rot: 12, gx: -4, gy: 3, h: 4, w: 32, headY: 6, headR: -5, bodyY: 4,
+    armL: -6, armR: -6, foreL: -30, foreR: -30, swing: 0.25, tremble: 0.4, tempo: 0.7 },
+  rassurant: { pro: true, base: 'content', lid: 0.9, browL: -2, browR: -2, h: 8, w: 56, headR: 2, headY: -3,
+    armL: 14, armR: 14, foreL: 25, foreR: 25, swing: 0.5, tempo: 1, geste: 'hoche' },
+  impatient: { pro: true, base: 'concentre', r: 9, lid: 0.9, browL: 3, browR: 3, rot: -3, gx: 3, w: 40, headR: -2, headY: 1,
+    armL: 5, armR: 5, foreL: -25, foreR: -25, swing: 0.6, bounce: 1.5, tempo: 1.8, geste: 'secoue' },
+  compatissant: { pro: true, base: 'tendre', lid: 0.8, browL: 2, browR: 2, rot: 8, h: 5, w: 40, my: 1, headR: 6, headY: 3,
+    armL: 10, armR: 10, foreL: -70, foreR: -70, swing: 0.3, tempo: 0.85, geste: 'hoche' },
 };
 
 export const NOMS = Object.keys(EXPRESSIONS);

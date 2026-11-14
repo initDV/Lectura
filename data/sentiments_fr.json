@@ -102,6 +102,38 @@
       "mots": ["hé hé", "hihi", "je sais", "secret", "surprise", "malicieu*", "espiègle", "farceur*", "je te dis pas", "devine", "chut", "entre nous", "petit coquin", "vilain"],
       "forts": []
     },
+    "reconnaissant": {
+      "mots": ["merci beaucoup", "merci mille fois", "reconnaissant*", "gratitude", "reconnaissance", "je te remercie", "je vous remercie", "tu m'as sauvé", "tu m'as aidé", "vraiment merci", "mille mercis"],
+      "forts": []
+    },
+    "nostalgique": {
+      "mots": ["souvenir*", "nostalg*", "c'était le bon temps", "autrefois", "quand j'étais", "à l'époque", "ça me rappelle", "je me souviens", "jadis", "comme avant"],
+      "forts": ["regrette*", "c'était mieux avant"]
+    },
+    "jaloux": {
+      "mots": ["jalou*", "envie", "pourquoi lui", "pourquoi elle", "pas juste", "moi aussi je veux", "il a de la chance", "elle a de la chance", "toujours toi", "c'est pas équitable"],
+      "forts": ["dégage", "casse-toi"]
+    },
+    "amuse": {
+      "mots": ["marrant*", "sympathique*", "plaisant*", "agréable*", "ça me fait sourire", "je souris", "cocasse", "décalé*", "surprenant*", "rigolo", "rigolote*", "choup*"],
+      "forts": ["excellent"]
+    },
+    "intimide": {
+      "mots": ["impressionné*", "intimidé*", "gêné*", "timide*", "peur de dire", "je n'ose pas", "je n'ose", "rougir", "rougis", "je sais pas quoi dire", "mal à l'aise"],
+      "forts": ["tétanisé*", "pétrifié*"]
+    },
+    "rassurant": {
+      "mots": ["tout va bien", "ne t'en fais pas", "pas de souci", "tranquille*", "calme-toi", "rassure-toi", "je suis là", "tu peux compter sur moi", "ça va aller", "je m'en occupe", "on va gérer"],
+      "forts": ["tout va s'arranger", "je te promets"]
+    },
+    "impatient": {
+      "mots": ["vite", "dépêche", "dépêchez", "pressé*", "ça vient", "tu viens", "ça prend du temps", "combien de temps", "c'est long", "pas encore", "toujours pas"],
+      "forts": ["plus vite", "j'en peux plus"]
+    },
+    "compatissant": {
+      "mots": ["je te comprends", "je comprends", "ça doit être dur", "courage", "je suis désolé", "je compatis", "je suis avec toi", "tu n'es pas seul", "tu n'es pas seule", "je suis là pour toi", "je pense à toi"],
+      "forts": ["je souffre avec toi"]
+    },
     "concentre": {
       "mots": ["regarde*", "regardons", "observe*", "notez", "note bien", "retiens", "retenez", "important*", "essentiel*", "concentr*", "précis*",
         "exactement", "étape*", "d'abord", "ensuite", "analys*", "vérifi*", "examin*", "calcul*", "voici", "tape", "tapez", "écris", "écrivez", "saisis",

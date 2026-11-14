@@ -185,4 +185,12 @@ export default {
   'expr.soulage': 'Relieved',
   'expr.determine': 'Determined',
   'expr.malicieu': 'Mischievous',
+  'expr.reconnaissant': 'Grateful',
+  'expr.nostalgique': 'Nostalgic',
+  'expr.jaloux': 'Jealous',
+  'expr.amuse': 'Amused',
+  'expr.intimide': 'Intimidated',
+  'expr.rassurant': 'Reassuring',
+  'expr.impatient': 'Impatient',
+  'expr.compatissant': 'Compassionate',
 };

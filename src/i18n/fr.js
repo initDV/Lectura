@@ -185,4 +185,12 @@ export default {
   'expr.soulage': 'Soulagé',
   'expr.determine': 'Déterminé',
   'expr.malicieu': 'Malicieux',
+  'expr.reconnaissant': 'Reconnaissant',
+  'expr.nostalgique': 'Nostalgique',
+  'expr.jaloux': 'Jaloux',
+  'expr.amuse': 'Amusé',
+  'expr.intimide': 'Intimidé',
+  'expr.rassurant': 'Rassurant',
+  'expr.impatient': 'Impatient',
+  'expr.compatissant': 'Compatissant',
 };

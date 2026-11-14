@@ -95,6 +95,38 @@
       "mots": ["hehe", "i know", "secret", "surprise", "sly*", "mischievous*", "prankster*", "guess", "shh", "between us", "naughty"],
       "forts": []
     },
+    "reconnaissant": {
+      "mots": ["thank you so much", "thanks a lot", "grateful*", "gratitude", "i thank you", "you saved me", "you helped me", "truly thankful"],
+      "forts": []
+    },
+    "nostalgique": {
+      "mots": ["memories", "remember when", "nostalgi*", "back in the day", "when i was", "back then", "it reminds me", "i remember", "long ago", "like before"],
+      "forts": ["i miss the old days", "used to be better"]
+    },
+    "jaloux": {
+      "mots": ["jealous*", "envy", "why him", "why her", "not fair", "i want too", "he's lucky", "she's lucky", "always you", "unfair"],
+      "forts": ["get lost", "go away"]
+    },
+    "amuse": {
+      "mots": ["funny*", "pleasant*", "amusing*", "makes me smile", "i smile", "quirky", "witty", "charming", "cute", "lovely"],
+      "forts": ["excellent"]
+    },
+    "intimide": {
+      "mots": ["impressed*", "intimidated*", "embarrassed*", "shy*", "afraid to say", "i don't dare", "blush*", "don't know what to say", "uncomfortable"],
+      "forts": ["frozen", "petrified*"]
+    },
+    "rassurant": {
+      "mots": ["it's ok", "don't worry", "no worries", "calm down", "reassure", "i'm here", "you can count on me", "it'll be fine", "i'll handle it", "we'll manage"],
+      "forts": ["everything will work out", "i promise"]
+    },
+    "impatient": {
+      "mots": ["hurry", "quickly", "hurry up", "in a rush", "how long", "still not", "not yet", "taking forever", "so long", "come on"],
+      "forts": ["faster", "i can't take it"]
+    },
+    "compatissant": {
+      "mots": ["i understand", "i feel for you", "that must be hard", "stay strong", "i'm sorry", "i sympathize", "i'm with you", "you're not alone", "here for you", "thinking of you"],
+      "forts": ["i suffer with you"]
+    },
     "concentre": {
       "mots": ["look", "watch", "observe*", "note", "remember", "important", "essential", "focus*", "precise*", "exactly", "step*", "first", "then",
         "analy*", "check*", "verif*", "examin*", "calculat*", "here is", "type", "write", "enter", "run", "execut*", "don't forget", "tip", "tips",
