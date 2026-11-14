@@ -1,20 +1,12 @@
 {
   "name": "Lectura",
   "short_name": "Lectura",
-  "description": "Un personnage animé lit ton texte à côté d'un terminal. Gratuit et hors ligne.",
-  "id": "/Lectura/",
   "start_url": "./",
-  "scope": "./",
   "display": "standalone",
-  "orientation": "any",
   "background_color": "#0d0d12",
   "theme_color": "#0d0d12",
-  "lang": "fr",
-  "dir": "ltr",
-  "categories": ["education", "productivity", "utilities"],
   "icons": [
-    { "src": "icons/192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "icons/192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/512.png", "sizes": "512x512", "type": "image/png" }
   ]
 }
