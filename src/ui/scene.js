@@ -191,6 +191,21 @@ export async function render(root) {
     notify(`${t('scene.expression')} : ${t(`expr.${exprManuelle || 'auto'}`)}`, 'info', 1800);
   }
 
+  let dernierSegPonc = null, dernierePosPonc = -1;
+  function detecterPonctuation(seg, chars, now) {
+    if (seg !== dernierSegPonc) { dernierSegPonc = seg; dernierePosPonc = -1; }
+    const pos = chars - seg.start;
+    if (pos > dernierePosPonc + 1 && dernierePosPonc >= 0) {
+      const inter = seg.texte.slice(dernierePosPonc + 1, pos + 1);
+      for (const c of inter) {
+        if (c === '?') character.reagir('interro', now);
+        else if (c === '!') character.reagir('excla', now);
+        else if (c === '\u2026') character.reagir('suspens', now);
+        else if (c === ',') character.reagir('virgule', now);
+      }
+    }
+    dernierePosPonc = pos;
+  }
   function image(now) {
     if (!vivant) return;
     raf = requestAnimationFrame(image);
@@ -200,6 +215,7 @@ export async function render(root) {
       const chars = store.etat === 'FIN' ? projet.texte.length : s.charPos ? s.charPos() : prep.timeline.charAt(ms);
       terminal.revealTo(chars);
       const seg = prep.timeline.segmentAtChar(chars), parle = lecture && !!seg && typeLigne(seg.texte) === 'parle';
+      if (lecture && seg && parle) detecterPonctuation(seg, chars, now);
       // Expression : imposée (touche E), sinon humeur de la phrase à la position du texte (donc au temps de la voix).
       const hu = arrete || !seg ? { expr: 'neutre', force: 1, mix: '', poids: 0, rang: 0, geste: '' }
         : exprManuelle ? { expr: exprManuelle, force: 1, mix: '', poids: 0, rang: 0, geste: '' } : humeur.etat(seg, chars - seg.start);

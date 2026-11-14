@@ -45,6 +45,7 @@ export class Character {
     this.gain = 1; this.rich = false; this.shape = 'normal'; this.gesteFin = 0; this.gesteBras = 1; this.raf = 0;
     this.pose = { ...NEUTRE }; this.cible = { ...NEUTRE }; this.phase = 0; this.dernier = 0;
     this.geste = { type: '', t0: 0 }; this.regard = [0, 0]; this.coup = [0, 0]; this.coupFin = 0; this.nextCoup = 1500;
+    this.reaction = { type: '', t0: 0, duree: 0 };
   }
   /**
    * neutre | content | concentre | surpris (+ expressions Pro). `force` dose l'expression, `mix` + `poids` en mélangent
@@ -60,6 +61,11 @@ export class Character {
   setTalking(v) { this.talk = Math.max(0, Math.min(1, v)); }
   setMouthShape(shape) { this.shape = BOUCHES[shape] ? shape : 'normal'; } // Pro : 'normal' | 'large' | 'rond'
   setReduced(v) { this.reduce = !!v; }
+  /** Réaction ponctuation (Bloc 2) : impulsion visuelle courte. Aucun effet sur la voix, la bouche, les sentiments. */
+  reagir(type, t = performance.now()) {
+    const DUREES = { interro: 550, excla: 260, suspens: 700, virgule: 220 };
+    if (DUREES[type]) this.reaction = { type, t0: t, duree: DUREES[type] };
+  }
   setGain(g) { this.gain = g; }                                     // réglage « mouvements » du projet
   setRich(v) { this.rich = !!v; }                                   // Pro : gestes plus amples
   /** Geste ponctuel : 'bras' (mot-clé important), 'hoche' (oui), 'secoue' (non), 'sursaut', 'coucou' (salut de la main). */
@@ -77,6 +83,18 @@ export class Character {
     if (!this.dernier) this.snap(); else approcher(this.pose, this.cible, 1 - Math.exp(-dt / 110), 1 - Math.exp(-dt / 190));
     this.dernier = t;
     const p = this.mp, o = this.pose, e = this.el, k = (this.reduce ? 0.25 : 1) * this.gain;
+    // Ponctuation : impulsion courte (interro→sourcil, excla→sursaut, suspens→regard, virgule→tilt tête).
+    let rBrow = 0, rDy = 0, rGx = 0, rGy = 0, rHeadR = 0, rHeadY = 0;
+    if (this.reaction.type) {
+      const u = (t - this.reaction.t0) / this.reaction.duree;
+      if (u >= 0 && u < 1) {
+        const env = Math.sin(u * Math.PI);
+        if (this.reaction.type === 'interro') { rBrow = -16 * env * k; rHeadY = -3 * env * k; }
+        else if (this.reaction.type === 'excla') rDy = -4 * env * k;
+        else if (this.reaction.type === 'suspens') { rGx = -2.5 * env * k; rGy = -2 * env * k; }
+        else if (this.reaction.type === 'virgule') rHeadR = 2.5 * env * k;
+      }
+    }
     this.phase += (dt / 1000) * p.vitesse * o.tempo;               // le rythme suit l'humeur sans à-coup
     const s = this.phase;
     this.talkLisse += (this.talk - this.talkLisse) * (1 - Math.exp(-dt / 250)); // lisse la source (audio ou booléen)
@@ -105,14 +123,14 @@ export class Character {
     const br = Math.sin(s * 1.6) * 4.0 * k, tr = o.tremble * k;
     const dodeline = Math.sin(s * 0.55) * 1.8 * k;
     const dx = (p.ondule ? Math.sin(s * 1.1) * p.ondule * k : 0) + Math.sin(t * 0.055) * tr;
-    const dy = (p.flotte ? -(Math.sin(s * 0.9) + 1) * p.flotte * k : 0) - Math.abs(Math.sin(s * 3.2)) * o.bounce * k + saut + Math.cos(t * 0.047) * tr * 0.4;
+    const dy = (p.flotte ? -(Math.sin(s * 0.9) + 1) * p.flotte * k : 0) - Math.abs(Math.sin(s * 3.2)) * o.bounce * k + saut + Math.cos(t * 0.047) * tr * 0.4 + rDy;
     const tout = Math.abs(dx) + Math.abs(dy) > 0.004 ? `translate(${f2(dx)} ${f2(dy)}) ` : '';
     const pench = Math.abs(o.lean) > 0.02 ? ` rotate(${f2(o.lean)} 120 354)` : '';
     e.body.setAttribute('transform', `${tout}translate(${f2(dodeline * 1.0)} ${f2(o.bodyY - br * 1.3)})${pench}`);
     if (e.legs) e.legs.setAttribute('transform', `${tout}rotate(${f2(dodeline * 0.8)} 120 354)`);
     // Tête : pose de l'expression + balancement + léger mouvement pendant la parole + geste ponctuel.
-    const hr = o.headR + Math.sin(s * 1.1) * Math.max(o.sway, 2.5) * k + Math.sin(s * 2.1) * 1.3 * this.talk * k;
-    const hy = o.headY + gy + br * 0.55 + Math.sin(s * 4.2) * 0.9 * this.talk * k, hx = o.headX + gx;
+    const hr = o.headR + rHeadR + Math.sin(s * 1.1) * Math.max(o.sway, 2.5) * k + Math.sin(s * 2.1) * 1.3 * this.talk * k;
+    const hy = o.headY + gy + br * 0.55 + Math.sin(s * 4.2) * 0.9 * this.talk * k + rHeadY, hx = o.headX + gx;
     e.head.setAttribute('transform', `translate(${f2(hx)} ${f2(hy)}) rotate(${f2(hr)} ${this.cou[0]} ${this.cou[1]})`);
     // Bras : épaule et coude de l'expression + balancement pendant la parole (référence) + geste ; « pas » = mouvement saccadé.
     const cran = (a) => (p.pas ? Math.round(a / p.pas) * p.pas : a), base = `${tout}translate(0 ${f2(o.bodyY)})${pench} `;
@@ -133,8 +151,8 @@ export class Character {
     m.setAttribute('width', f2(w)); m.setAttribute('x', f2(120 - w / 2));
     // Yeux : rayon et ouverture selon l'expression, regard, clignement par écrasement vertical autour du centre.
     const sy = t < this.blinkUntil ? 0.15 : o.lid, rx = o.gx + this.regard[0], ry = o.gy + this.regard[1], y = this.yeuxY;
-    const driftX = Math.sin(s * 0.55) * 1.3 * k + Math.sin(s * 1.5) * 0.6 * k;
-    const driftY = Math.cos(s * 0.45) * 0.8 * k;
+    const driftX = Math.sin(s * 0.55) * 1.3 * k + Math.sin(s * 1.5) * 0.6 * k + rGx;
+    const driftY = Math.cos(s * 0.45) * 0.8 * k + rGy;
     const vers = `translate(${f2(rx + driftX)} ${f2(ry + driftY)})`;
     for (const eye of [e.eyeL, e.eyeR]) {
       eye.setAttribute('r', f2(o.r));
@@ -142,7 +160,7 @@ export class Character {
     }
     for (const r of this.reflets) { r.setAttribute('transform', vers); r.setAttribute('opacity', sy > 0.6 ? '1' : '0'); }
     // Sourcils : hauteur de chacun + inclinaison symétrique (positive = triste, négative = fâché).
-    e.browL.setAttribute('transform', `translate(0 ${f2(o.browL)}) rotate(${f2(-o.rot)} 92 104)`);
-    e.browR.setAttribute('transform', `translate(0 ${f2(o.browR)}) rotate(${f2(o.rot)} 148 104)`);
+    e.browL.setAttribute('transform', `translate(0 ${f2(o.browL + rBrow)}) rotate(${f2(-o.rot)} 92 104)`);
+    e.browR.setAttribute('transform', `translate(0 ${f2(o.browR + rBrow)}) rotate(${f2(o.rot)} 148 104)`);
   }
 }
