@@ -70,11 +70,48 @@ async function sourceVoixSysteme(projet) {
   return { source: new SpeechSource(queue, duree), segments: autoTiming(projet.texte, duree, CPS_VOIX / cps), vitesseBase: v.vitesse };
 }
 
+const CACHE_SYNTHESE = 'lectura-synthese', MAX_SYNTHESES = 6;
+
+/** Clé d'une synthèse : texte + voix + vitesse + vitesse de frappe. Change « v1 » si la voix ou la phonétisation évolue. */
+async function cleSynthese(projet) {
+  const v = projet.audio.voix;
+  const brut = JSON.stringify(['v1', projet.texte, v.id, v.vitesse, projet.terminal.vitesseCps]);
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(brut)));
+  return new URL(`./__synthese/${[...h].map((x) => x.toString(16).padStart(2, '0')).join('')}`, location.href).href;
+}
+
+/** Garde seulement les dernières synthèses (le cache ne grossit pas sans limite). */
+async function elaguer(cache) {
+  const cles = (await cache.keys()).filter((k) => k.url.endsWith('.wav'));
+  for (const k of cles.slice(0, Math.max(0, cles.length - MAX_SYNTHESES))) {
+    await cache.delete(k);
+    await cache.delete(k.url.replace(/\.wav$/, '.json'));
+  }
+}
+
 async function sourcePiper(projet, audio, onProgress) {
-  const moteur = await getEngine('piper'), v = projet.audio.voix;
-  const r = await moteur.synthesize(projet.texte, { voixId: v.id, vitesse: v.vitesse, cpsFrappe: projet.terminal.vitesseCps, onProgress });
-  await audio.load(encodeWav(r.samples, r.sampleRate));
-  return { source: new FileSource(audio), segments: r.segments.map((s, i) => ({ id: i + 1, expression: 'auto', ...s })), vitesseBase: v.vitesse };
+  const v = projet.audio.voix;
+  const cle = await cleSynthese(projet);
+  let cache = null, wav = null, segs = null;
+  try { // synthèse déjà faite pour ce texte, cette voix et cette vitesse : on la reprend, sans rien recalculer
+    cache = await caches.open(CACHE_SYNTHESE);
+    const [a, j] = await Promise.all([cache.match(`${cle}.wav`), cache.match(`${cle}.json`)]);
+    if (a && j) { wav = await a.blob(); segs = await j.json(); onProgress?.(1, 1, t('scene.prep.audio')); }
+  } catch { cache = null; wav = null; segs = null; }
+  if (!wav) {
+    const moteur = await getEngine('piper');
+    const r = await moteur.synthesize(projet.texte, { voixId: v.id, vitesse: v.vitesse, cpsFrappe: projet.terminal.vitesseCps, onProgress });
+    wav = encodeWav(r.samples, r.sampleRate); segs = r.segments;
+    try { // mémorise pour la prochaine fois ; un échec (stockage plein) ne bloque jamais la lecture
+      if (cache) {
+        await cache.put(`${cle}.wav`, new Response(wav, { headers: { 'Content-Type': 'audio/wav' } }));
+        await cache.put(`${cle}.json`, new Response(JSON.stringify(segs), { headers: { 'Content-Type': 'application/json' } }));
+        await elaguer(cache);
+      }
+    } catch { /* ignoré */ }
+  }
+  await audio.load(wav);
+  return { source: new FileSource(audio), segments: segs.map((s, i) => ({ id: i + 1, expression: 'auto', ...s })), vitesseBase: v.vitesse };
 }
 
 async function sourceFichier(projet, audio) {
