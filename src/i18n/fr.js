@@ -201,4 +201,11 @@ export default {
   'expr.honteux': 'Honteux',
   'expr.provocateur': 'Provocateur',
   'expr.contemplatif': 'Contemplatif',
+  'reglages.decor': 'Décor de scène',
+  'reglages.decor.mur': 'Mur',
+  'reglages.decor.sol': 'Sol',
+  'reglages.decor.horizon': 'Horizon',
+  'reglages.decor.neon': 'Néon',
+  'reglages.decor.aide': 'Les couleurs s\'appliquent au prochain retour à la scène.',
+  'reglages.decor.reset': 'Réinitialiser',
 };

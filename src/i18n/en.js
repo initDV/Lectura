@@ -201,4 +201,11 @@ export default {
   'expr.honteux': 'Ashamed',
   'expr.provocateur': 'Provocative',
   'expr.contemplatif': 'Contemplative',
+  'reglages.decor': 'Stage decor',
+  'reglages.decor.mur': 'Wall',
+  'reglages.decor.sol': 'Floor',
+  'reglages.decor.horizon': 'Horizon',
+  'reglages.decor.neon': 'Neon',
+  'reglages.decor.aide': 'Colors are applied when you return to the scene.',
+  'reglages.decor.reset': 'Reset',
 };

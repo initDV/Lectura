@@ -21,6 +21,7 @@ import { getEngine } from '../modules/voice/engine.js';
 import { logError, notify, report } from '../modules/errors.js';
 import { createControls } from './scene-controls.js';
 import { creerExport } from './scene-export.js';
+import { creerDecor } from '../modules/scene-decor.js';
 import { ouvrirMesVideos } from './mes-videos.js';
 import { nomVoix, ouvrirListeVoix, choisirAudio } from './voix-liste.js';
 import { ouvrirMenu } from './menu.js';
@@ -82,7 +83,7 @@ export async function render(root) {
       const p = await loadProjectCharacter(projet);
       if (!vivant) return;
       perso = p;
-      clear(charPane).append(p.svg);
+      clear(charPane).append(creerDecor(store.settings.decor), p.svg);
       character = new Character(p.svg, p.def);
       character.setReduced(store.settings.reduireAnimations || character.reduce);
       character.setGain(GAINS[projet.reglages.mouvements] || 1);

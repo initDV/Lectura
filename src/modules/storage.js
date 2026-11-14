@@ -15,6 +15,7 @@ export const DEFAUTS = {
   reduireAnimations: false, modePresentation: false, idInstallation: '', licence: '',
   tutorielVu: false, motsPerso: {}, formatVideo: '9:16',
   personnageId: 'robot_lectura', titreTerminal: 'rhak_override@sentinel: ~/cours',
+  decor: { mur: '#28324d', sol: '#211a33', horizon: '#5ba5c9', neon: '#c67fa6' },
 };
 
 const promesse = (req) => new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); });

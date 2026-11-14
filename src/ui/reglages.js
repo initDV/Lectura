@@ -15,6 +15,27 @@ import { motsPersoPanel } from './mots-perso.js';
 export async function render(root) {
   const s = store.settings;
   const sauver = (patch) => majReglages(patch).catch((err) => report('reglages', err));
+  /** Section Décor : 4 couleurs modifiables + bouton Réinitialiser. */
+  const decorPanel = () => {
+    const d = store.settings.decor || {};
+    const DEF = { mur: '#1a2340', sol: '#1c1429', horizon: '#00d4ff', neon: '#ff3ea5' };
+    const entrees = [
+      ['mur', 'reglages.decor.mur'],
+      ['sol', 'reglages.decor.sol'],
+      ['horizon', 'reglages.decor.horizon'],
+      ['neon', 'reglages.decor.neon'],
+    ];
+    const champs = entrees.map(([cle, label]) => {
+      const inp = h('input', { type: 'color', value: d[cle] || DEF[cle], id: `decor-${cle}`, 'aria-label': t(label) });
+      inp.addEventListener('change', () => sauver({ decor: { ...store.settings.decor, [cle]: inp.value } }));
+      return h('div', { class: 'field' }, h('label', { for: `decor-${cle}`, text: t(label) }), inp);
+    });
+    return h('div', null,
+      h('div', { class: 'grid-2' }, ...champs),
+      h('p', { class: 'muted small', text: t('reglages.decor.aide') }),
+      h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', text: t('reglages.decor.reset'), onClick: () => sauver({ decor: { ...DEF } }) })),
+    );
+  };
   const sauverDoux = debounce(sauver, 300);
   /** Reporte aussi le réglage du terminal sur le projet ouvert (les réglages sont les valeurs par défaut). */
   const terminal = (cleReglage, cleProjet, v) => { if (store.projet) { store.projet.terminal[cleProjet] = v; store.modifie = true; } sauverDoux({ [cleReglage]: v }); };
@@ -95,6 +116,7 @@ export async function render(root) {
         field(t('reglages.fond'), fond, store.projet ? null : t('reglages.projetRequis')), field(t('reglages.mouvements'), mouvements, store.projet ? null : t('reglages.projetRequis')))),
     h('section', { class: 'card' }, h('h2', { text: t('reglages.animations') }),
       coche('reduireAnimations', t('reglages.reduire')), coche('modePresentation', t('reglages.presentation'))),
+    h('section', { class: 'card' }, h('h2', { text: t('reglages.decor') }), decorPanel()),
     h('section', { class: 'card' }, h('h2', null, t('reglages.mots'), ' ', pro()), motsPersoPanel({ sauver }).el),
     h('section', { class: 'card' }, h('h2', { text: t('reglages.stockage') }), jauge, stock, h('div', { class: 'row' }, proteger, liberer)),
     h('section', { class: 'card' }, h('h2', { text: t('reglages.version') }), h('p', { text: `Lectura ${VERSION} (${BUILD})` }),
