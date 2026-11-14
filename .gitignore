@@ -6,3 +6,5 @@ private.pem
 .DS_Store
 coverage/
 test-results/
+private.pem
+*.pem
