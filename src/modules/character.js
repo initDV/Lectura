@@ -35,7 +35,7 @@ export class Character {
     this.el.foreL = grouperAvantBras(this.el.armL); this.el.foreR = grouperAvantBras(this.el.armR);
     brasDevant(this.el.body, this.el.armL, this.el.armR);
     this.reflets = [...svg.querySelectorAll('#eye-l ~ circle:not([id]), #eye-r ~ circle:not([id])')].filter((c) => +c.getAttribute('r') <= 4);
-    this.expr = 'neutre'; this.viseme = 0; this.talk = 0; this.blinkUntil = 0; this.nextBlink = 2000;
+    this.expr = 'neutre'; this.viseme = 0; this.talk = 0; this.talkLisse = 0; this.blinkUntil = 0; this.nextBlink = 2000;
     this.reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.mp = motionParams(def.mouvements);
     const pv = def.pivots || {};
@@ -64,6 +64,8 @@ export class Character {
   setRich(v) { this.rich = !!v; }                                   // Pro : gestes plus amples
   /** Geste ponctuel : 'bras' (mot-clé important), 'hoche' (oui), 'secoue' (non), 'sursaut', 'coucou' (salut de la main). */
   gesture(t = performance.now(), type = 'bras') {
+    if (this.geste.type && t - this.geste.t0 < GESTES[this.geste.type] * 0.8) return;
+    if (this.gesteFin && t < this.gesteFin - 140) return;
     if (GESTES[type]) this.geste = { type, t0: t };
     else { this.gesteFin = t + 700; this.gesteBras = this.gesteBras === 1 ? -1 : 1; }
   }
@@ -77,7 +79,12 @@ export class Character {
     const p = this.mp, o = this.pose, e = this.el, k = (this.reduce ? 0.25 : 1) * this.gain;
     this.phase += (dt / 1000) * p.vitesse * o.tempo;               // le rythme suit l'humeur sans à-coup
     const s = this.phase;
-    if (t > this.nextBlink) { this.blinkUntil = t + 120; this.nextBlink = t + 2500 + Math.random() * 3000; }
+    this.talkLisse += (this.talk - this.talkLisse) * (1 - Math.exp(-dt / 250)); // lisse la source (audio ou booléen)
+    if (t > this.nextBlink) {
+      this.blinkUntil = t + 120;
+      const double = Math.random() < 0.12;
+      this.nextBlink = t + 120 + (double ? 170 : 2500 + Math.random() * 3000);
+    }
     // Coups d'œil : vers le terminal (à droite) quand il parle, au hasard au repos.
     if (t > this.nextCoup && !this.reduce) {
       this.coup = this.talk > 0.5 ? [4.5, 1] : [(Math.random() - 0.5) * 6, (Math.random() - 0.5) * 3];
@@ -95,28 +102,29 @@ export class Character {
       else saut = -Math.sin(u * Math.PI) * 9 * k;
     }
     // Corps : respiration (référence), rebond, tremblement, flottement ; les jambes ne suivent que les déplacements.
-    const br = Math.sin(s * 1.6) * 1.5 * k, tr = o.tremble * k;
+    const br = Math.sin(s * 1.6) * 4.0 * k, tr = o.tremble * k;
+    const dodeline = Math.sin(s * 0.55) * 1.8 * k;
     const dx = (p.ondule ? Math.sin(s * 1.1) * p.ondule * k : 0) + Math.sin(t * 0.055) * tr;
     const dy = (p.flotte ? -(Math.sin(s * 0.9) + 1) * p.flotte * k : 0) - Math.abs(Math.sin(s * 3.2)) * o.bounce * k + saut + Math.cos(t * 0.047) * tr * 0.4;
     const tout = Math.abs(dx) + Math.abs(dy) > 0.004 ? `translate(${f2(dx)} ${f2(dy)}) ` : '';
     const pench = Math.abs(o.lean) > 0.02 ? ` rotate(${f2(o.lean)} 120 354)` : '';
-    e.body.setAttribute('transform', `${tout}translate(0 ${f2(o.bodyY - br * 0.6)})${pench}`);
-    if (e.legs) e.legs.setAttribute('transform', tout.trim());
+    e.body.setAttribute('transform', `${tout}translate(${f2(dodeline * 1.0)} ${f2(o.bodyY - br * 1.3)})${pench}`);
+    if (e.legs) e.legs.setAttribute('transform', `${tout}rotate(${f2(dodeline * 0.8)} 120 354)`);
     // Tête : pose de l'expression + balancement + léger mouvement pendant la parole + geste ponctuel.
-    const hr = o.headR + Math.sin(s * 1.3) * o.sway * k + Math.sin(s * 2.1) * 1.3 * this.talk * k;
-    const hy = o.headY + gy + Math.sin(s * 4.2) * 0.9 * this.talk * k, hx = o.headX + gx;
+    const hr = o.headR + Math.sin(s * 1.1) * Math.max(o.sway, 2.5) * k + Math.sin(s * 2.1) * 1.3 * this.talk * k;
+    const hy = o.headY + gy + br * 0.55 + Math.sin(s * 4.2) * 0.9 * this.talk * k, hx = o.headX + gx;
     e.head.setAttribute('transform', `translate(${f2(hx)} ${f2(hy)}) rotate(${f2(hr)} ${this.cou[0]} ${this.cou[1]})`);
     // Bras : épaule et coude de l'expression + balancement pendant la parole (référence) + geste ; « pas » = mouvement saccadé.
     const cran = (a) => (p.pas ? Math.round(a / p.pas) * p.pas : a), base = `${tout}translate(0 ${f2(o.bodyY)})${pench} `;
     const g = t < this.gesteFin ? Math.sin(Math.PI * (1 - (this.gesteFin - t) / 700)) * (this.rich ? 42 : 24) * k : 0;
-    const amp = 10 * this.talk * k * p.amplitude * o.swing;
+    const amp = 7 * this.talkLisse * k * p.amplitude * o.swing;
     const epL = o.armL + (24 - o.armL) * salut, coL = o.foreL + (agite - 204 - o.foreL) * salut; // « coucou » : avant-bras gauche levé, main agitée
-    const aL = epL + cran(Math.sin(s * 3.1) * amp + (this.gesteBras < 0 ? g : 0));
-    const aR = -o.armR + cran(-Math.sin(s * 2.7 + 1) * amp - (this.gesteBras > 0 ? g : 0));
+    const aL = epL + cran(Math.sin(s * 1.3) * amp + (this.gesteBras < 0 ? g : 0));
+    const aR = -o.armR + cran(-Math.sin(s * 1.1 + 1) * amp - (this.gesteBras > 0 ? g : 0));
     e.armL.setAttribute('transform', `${base}rotate(${f2(aL)} ${this.pivL[0]} ${this.pivL[1]})`);
     e.armR.setAttribute('transform', `${base}rotate(${f2(aR)} ${this.pivR[0]} ${this.pivR[1]})`);
-    const fL = coL + cran(Math.sin(s * 3.7 + 2) * amp * 0.7 + (this.gesteBras < 0 ? g * 0.9 : 0));
-    const fR = -o.foreR + cran(-Math.sin(s * 3.3) * amp * 0.7 - (this.gesteBras > 0 ? g * 0.9 : 0));
+    const fL = coL + cran(Math.sin(s * 1.4 + 2) * amp * 0.8 + (this.gesteBras < 0 ? g * 0.9 : 0));
+    const fR = -o.foreR + cran(-Math.sin(s * 1.2) * amp * 0.8 - (this.gesteBras > 0 ? g * 0.9 : 0));
     e.foreL.setAttribute('transform', `rotate(${f2(fL)} ${this.coudeL[0]} ${this.coudeL[1]})`);
     e.foreR.setAttribute('transform', `rotate(${f2(fR)} ${this.coudeR[0]} ${this.coudeR[1]})`);
     // Bouche : la hauteur suit le niveau de lip-sync, l'expression fixe un minimum, une largeur et un décalage.
@@ -125,7 +133,9 @@ export class Character {
     m.setAttribute('width', f2(w)); m.setAttribute('x', f2(120 - w / 2));
     // Yeux : rayon et ouverture selon l'expression, regard, clignement par écrasement vertical autour du centre.
     const sy = t < this.blinkUntil ? 0.15 : o.lid, rx = o.gx + this.regard[0], ry = o.gy + this.regard[1], y = this.yeuxY;
-    const vers = `translate(${f2(rx)} ${f2(ry)})`;
+    const driftX = Math.sin(s * 0.55) * 1.3 * k + Math.sin(s * 1.5) * 0.6 * k;
+    const driftY = Math.cos(s * 0.45) * 0.8 * k;
+    const vers = `translate(${f2(rx + driftX)} ${f2(ry + driftY)})`;
     for (const eye of [e.eyeL, e.eyeR]) {
       eye.setAttribute('r', f2(o.r));
       eye.setAttribute('transform', sy > 0.995 ? vers : `${vers} translate(0 ${y}) scale(1 ${f2(sy)}) translate(0 ${-y})`);
