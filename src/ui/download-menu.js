@@ -4,14 +4,29 @@ import { ouvrirModale } from './modale.js';
 import { t, taille } from '../modules/i18n.js';
 import { downloadBlob } from '../modules/capture.js';
 import { videoVersMp3 } from '../modules/audio-export.js';
+import { remuxerMp4 } from '../modules/mp4-remux.js';
 import { notify, report } from '../modules/errors.js';
 
 export function ouvrirMenuTelechargement({ videoBlob, mime, fileBase }) {
   const estMp4 = mime.startsWith('video/mp4');
   const tailleVideo = taille(videoBlob.size);
-  const estAndroid = /Android/i.test(navigator.userAgent);
 
-  const telechargerVideo = (ext, fermer) => { downloadBlob(videoBlob, `${fileBase}.${ext}`); fermer(); };
+  const telechargerMp4 = async (fermer) => {
+    fermer();
+    notify(t('dl.mp4.reparation'), 'info', 3000);
+    try {
+      const blobCorrige = await remuxerMp4(videoBlob);
+      const blobFinal = blobCorrige || videoBlob;
+      downloadBlob(blobFinal, `${fileBase}.mp4`);
+      notify(t('dl.mp4.ok', { taille: taille(blobFinal.size) }), 'ok', 6000);
+    } catch (err) {
+      report('mp4', err);
+      downloadBlob(videoBlob, `${fileBase}.mp4`);
+      notify(t('dl.mp4.echec'), 'warn');
+    }
+  };
+
+  const telechargerWebm = (fermer) => { downloadBlob(videoBlob, `${fileBase}.webm`); fermer(); };
 
   const genererMp3 = async (fermer) => {
     fermer();
@@ -33,12 +48,11 @@ export function ouvrirMenuTelechargement({ videoBlob, mime, fileBase }) {
 
   ouvrirModale(t('dl.titre'), (fermer) => [
     h('p', { class: 'hint', text: t('dl.aide') }),
-    estAndroid && estMp4 ? h('p', { class: 'hint', style: 'color:#ffb84d; margin-bottom:.5rem;', text: t('dl.mp4.galerie') }) : null,
     estMp4
-      ? opt({ nom: 'MP4', sous: t('dl.formatVideo'), tailleTxt: tailleVideo, actif: true, onClick: () => telechargerVideo('mp4', fermer) })
+      ? opt({ nom: 'MP4 (lisible partout)', sous: t('dl.formatVideo'), tailleTxt: tailleVideo, actif: true, onClick: () => telechargerMp4(fermer) })
       : opt({ nom: 'MP4', sous: t('dl.mp4.indispo'), actif: false }),
     !estMp4
-      ? opt({ nom: 'WebM (recommandé sur Android)', sous: t('dl.formatVideo'), tailleTxt: tailleVideo, actif: true, onClick: () => telechargerVideo('webm', fermer) })
+      ? opt({ nom: 'WebM', sous: t('dl.formatVideo'), tailleTxt: tailleVideo, actif: true, onClick: () => telechargerWebm(fermer) })
       : opt({ nom: 'WebM', sous: t('dl.webm.indispo'), actif: false }),
     opt({ nom: 'MP3', sous: t('dl.mp3.genere'), actif: true, onClick: () => genererMp3(fermer) }),
   ]);
