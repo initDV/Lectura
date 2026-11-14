@@ -21,6 +21,7 @@ import { getEngine } from '../modules/voice/engine.js';
 import { logError, notify, report } from '../modules/errors.js';
 import { createControls } from './scene-controls.js';
 import { creerExport } from './scene-export.js';
+import { ouvrirMesVideos } from './mes-videos.js';
 import { nomVoix, ouvrirListeVoix, choisirAudio } from './voix-liste.js';
 import { ouvrirMenu } from './menu.js';
 import { projetInitial } from './projets.js';
@@ -239,7 +240,7 @@ export async function render(root) {
         importerTexte: async () => { if (await actionsProjet.importerTexte(projet)) { controls.setTexte(projet.texte); toucher(); } },
         importerSrt: async () => { if (await actionsProjet.importerSousTitres(projet)) { controls.setTexte(projet.texte); toucher(); } },
         exporterSrt: () => actionsProjet.exporterSousTitres(projet, 'srt'), exporterVtt: () => actionsProjet.exporterSousTitres(projet, 'vtt'),
-        apercu: () => lancer(true), capture: () => exportScene.capture(), video: () => exportScene.basculer(), pleinEcran,
+        apercu: () => lancer(true), capture: () => exportScene.capture(), video: () => exportScene.basculer(), pleinEcran, mesVideos: () => ouvrirMesVideos(),
       } });
   }
 

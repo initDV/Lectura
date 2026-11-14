@@ -47,7 +47,7 @@ export function ouvrirMenu(a) {
         bouton('fullscreen', t('scene.pleinEcran'), 'pleinEcran')),
       h('div', { class: 'field' }, h('label', { text: t('scene.format') }), format),
       h('h3', { text: t('menu.avance') }),
-      h('ul', { class: 'choix' }, lien('smile', 'personnages'), lien('settings', 'reglages'), lien('star', 'pro'), lien('info', 'apropos')),
+      h('ul', { class: 'choix' }, bouton('video', t('menu.mesVideos'), 'mesVideos'), lien('smile', 'personnages'), lien('settings', 'reglages'), lien('star', 'pro'), lien('info', 'apropos')),
       installer,
       h('p', { class: 'muted small' }, h('span', { class: `pill ${store.enLigne ? 'pill-on' : 'pill-off'}`, text: t(store.enLigne ? 'net.enLigne' : 'net.horsLigne') })),
     ];

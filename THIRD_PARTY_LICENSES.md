@@ -71,3 +71,6 @@ machine de développement et ne sont jamais publiées.
 - Source : https://github.com/zhuker/lamejs (portage JavaScript de LAME : https://lame.sourceforge.io/).
 - Conformité LGPL : lamejs est chargé comme fichier séparé (pas de modification du cœur), la licence est
   conservée à côté du bundle, et cette mention atteste l'usage de LAME dans Lectura.
+
+## fix-webm-duration 1.0.6 : MIT
+Copyright (c) 2018 Yury Sitnikov. Écrit la durée dans les WebM enregistrés. Copiée dans src/vendor/fixwebm/ (licence jointe).
