@@ -160,4 +160,7 @@ export default {
   'dl.mp3.encours': 'Encodage MP3 en cours…',
   'dl.mp3.ok': 'MP3 prêt · {taille}',
   'dl.mp3.echec': "Impossible d'extraire l'audio (fichier sans son ?).",
+  'dl.mp4.reparation': 'Réparation de la vidéo pour la galerie…',
+  'dl.mp4.ok': 'MP4 prêt pour la galerie · {taille}',
+  'dl.mp4.echec': 'Réparation impossible, le fichier original a été téléchargé.',
 };

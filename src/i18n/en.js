@@ -160,4 +160,7 @@ export default {
   'dl.mp3.encours': 'Encoding MP3…',
   'dl.mp3.ok': 'MP3 ready · {taille}',
   'dl.mp3.echec': 'Could not extract audio (silent file?).',
+  'dl.mp4.reparation': 'Fixing video for gallery…',
+  'dl.mp4.ok': 'MP4 ready for gallery · {taille}',
+  'dl.mp4.echec': 'Fixing failed, original file downloaded.',
 };

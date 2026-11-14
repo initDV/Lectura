@@ -25,6 +25,7 @@
     "vitest": "^2.1.4"
   },
   "dependencies": {
-    "lamejs": "^1.2.1"
+    "lamejs": "^1.2.1",
+    "mp4box": "^2.5.0"
   }
 }
