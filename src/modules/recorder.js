@@ -23,7 +23,7 @@ export async function startRecording({ canvas, audioStream, fps = 30 }) {
   audioStream?.getAudioTracks().forEach((t) => stream.addTrack(t)); // audioStream = audioCtx.createMediaStreamDestination().stream
   const mime = supportedMime();
   if (!mime) throw new Error("Ce navigateur ne sait pas enregistrer de vidéo. Utilise Chrome ou Edge.");
-  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5_000_000 });
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2_500_000 });
   const chunks = []; rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
   let echec = null;
   rec.onerror = (e) => { echec = e.error || new Error('erreur du MediaRecorder'); };

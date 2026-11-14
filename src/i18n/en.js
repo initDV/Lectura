@@ -155,6 +155,7 @@ export default {
   'dl.formatVideo': 'Video with sound, ready to share',
   'dl.mp4.indispo': 'This browser cannot record MP4. Use WebM (works everywhere) or another browser.',
   'dl.webm.indispo': 'This browser recorded in MP4.',
+  'dl.mp4.galerie': 'On Android, the gallery may reject this MP4 (browser limitation). Use WebM or share the video directly.',
   'dl.mp3.genere': 'Audio only, encoded to MP3 (a few seconds).',
   'dl.mp3.encours': 'Encoding MP3…',
   'dl.mp3.ok': 'MP3 ready · {taille}',

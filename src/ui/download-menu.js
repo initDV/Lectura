@@ -42,6 +42,7 @@ export function ouvrirMenuTelechargement({ videoBlob, mime, fileBase }) {
 
   ouvrirModale(t('dl.titre'), (fermer) => [
     h('p', { class: 'hint', text: t('dl.aide') }),
+    estMp4 && /Android/i.test(navigator.userAgent) ? h('p', { class: 'hint', text: t('dl.mp4.galerie') }) : null,
     estMp4
       ? opt({ nom: 'MP4', sous: t('dl.formatVideo'), tailleTxt: tailleVideo, actif: true, onClick: () => telecharger('mp4', fermer) })
       : opt({ nom: 'MP4', sous: t('dl.mp4.indispo'), actif: false }),
