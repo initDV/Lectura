@@ -70,6 +70,38 @@
         "pfff", "galère*", "j'en peux plus", "à bout", "zzz", "nuit blanche", "lent", "lente", "lentement"],
       "forts": []
     },
+    "curieux": {
+      "mots": ["tiens", "intéressant*", "curieu*", "vraiment", "pourquoi", "comment ça", "ah bon", "c'est vrai", "dis-moi", "raconte*", "ensuite"],
+      "forts": ["fascinant*", "captivant*"]
+    },
+    "inquiet": {
+      "mots": ["danger", "problème*", "risque*", "inqui*", "prudent*", "méfian*", "pas sûr", "grave", "urgent*", "attention"],
+      "forts": ["catastrophe*", "désastre*", "panique"]
+    },
+    "emerveille": {
+      "mots": ["sublime*", "merveilleu*", "féerique", "magique", "époustouflant*", "à couper le souffle", "jamais vu", "somptueu*", "éblouissant*"],
+      "forts": ["hallucinant*", "spectaculaire*"]
+    },
+    "ennuye": {
+      "mots": ["bof", "ennuy*", "ennui*", "toujours pareil", "mouais", "pas terrible", "moyen", "lassé*", "fatigant*", "longuet*", "ça traîne", "rasant*"],
+      "forts": ["ras-le-bol", "marre"]
+    },
+    "degoute": {
+      "mots": ["beurk", "dégueu*", "dégoût*", "répugnant*", "écœurant*", "infect*", "dégoutant*", "pouah", "berk", "ça pue", "nausée*"],
+      "forts": ["immangeable", "immonde*"]
+    },
+    "soulage": {
+      "mots": ["enfin", "soulag*", "c'est fini", "enfin là", "ça y est", "libéré*", "résolu*", "accompli*"],
+      "forts": ["ouf de soulagement"]
+    },
+    "determine": {
+      "mots": ["il faut", "on va", "allons*", "déterminé*", "motivé*", "décidé*", "je vais", "vous allez", "c'est décidé", "objectif", "sans hésiter", "on continue", "on avance"],
+      "forts": ["je vais le faire", "on va y arriver"]
+    },
+    "malicieu": {
+      "mots": ["hé hé", "hihi", "je sais", "secret", "surprise", "malicieu*", "espiègle", "farceur*", "je te dis pas", "devine", "chut", "entre nous", "petit coquin", "vilain"],
+      "forts": []
+    },
     "concentre": {
       "mots": ["regarde*", "regardons", "observe*", "notez", "note bien", "retiens", "retenez", "important*", "essentiel*", "concentr*", "précis*",
         "exactement", "étape*", "d'abord", "ensuite", "analys*", "vérifi*", "examin*", "calcul*", "voici", "tape", "tapez", "écris", "écrivez", "saisis",

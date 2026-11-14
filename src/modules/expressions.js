@@ -47,6 +47,23 @@ export const EXPRESSIONS = {
     foreL: -55, foreR: -55, swing: 1.2, tremble: 1.5, tempo: 1.6, geste: 'secoue' },          // poings serrés
   peur: { pro: true, base: 'surpris', r: 13.5, gx: -3, browL: -6, browR: -6, rot: 14, h: 9, w: 30, headY: 6, bodyY: 3, armL: -210, armR: -210,
     foreL: 120, foreR: 120, swing: 0.3, tremble: 2.2, tempo: 1.4, geste: 'sursaut' },         // mains sur les joues
+  // Paquet 1 : 8 sentiments supplémentaires.
+  curieux: { pro: true, base: 'concentre', browL: -4, browR: -4, r: 12, headR: 6, headX: 2, gx: 2, gy: -1,
+    w: 46, armL: 4, armR: 4, swing: 0.4, tempo: 1.1, geste: 'hoche' },
+  inquiet: { pro: true, base: 'concentre', browL: 4, browR: 4, rot: 4, r: 9, lid: 0.85, headY: 4,
+    w: 40, my: 1, bodyY: 2, armL: -3, armR: -3, swing: 0.3, tremble: 0.3, tempo: 0.8, geste: 'secoue' },
+  emerveille: { pro: true, base: 'surpris', r: 14, browL: -6, browR: -6, h: 10, w: 34, headY: -5,
+    armL: 6, armR: 6, foreL: -50, foreR: -50, swing: 0.4, tempo: 1.2, geste: 'sursaut' },
+  ennuye: { pro: true, base: 'fatigue', lid: 0.5, browL: 2, browR: 2, r: 10, headR: 6, headY: 3,
+    w: 44, my: 1, armL: 3, armR: 3, swing: 0.3, tempo: 0.7, geste: 'secoue' },
+  degoute: { pro: true, base: 'concentre', browL: 3, browR: -3, r: 9, lid: 0.7, gx: -3, headY: 3, headR: -4, lean: -2,
+    w: 36, my: 1, armR: 10, swing: 0.3, tempo: 0.9, geste: 'secoue' },
+  soulage: { pro: true, base: 'content', lid: 0.5, browL: -2, browR: -2, h: 6, w: 52, headY: -2, bodyY: -1,
+    armL: 4, armR: 4, foreL: 12, foreR: 12, swing: 0.4, tempo: 0.9, geste: 'hoche' },
+  determine: { pro: true, base: 'concentre', browL: 3, browR: 3, rot: -3, r: 10, lid: 0.9, w: 46, h: 2, headR: -2,
+    swing: 0.5, tempo: 1.3, geste: 'hoche' },
+  malicieu: { pro: true, base: 'content', browL: -2, browR: 3, rot: -2, r: 11, lid: 0.85, gx: 3, h: 5, w: 46, my: -1, headR: -4, headY: -1,
+    armR: 8, foreR: 20, swing: 0.4, tempo: 1.1, geste: 'hoche' },
 };
 
 export const NOMS = Object.keys(EXPRESSIONS);

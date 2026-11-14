@@ -177,4 +177,12 @@ export default {
   'mv.introuvable': 'Video not found.',
   'mv.lecteur': 'Video player',
   'dl.garder': 'Also save in the app (offline access)',
+  'expr.curieux': 'Curious',
+  'expr.inquiet': 'Worried',
+  'expr.emerveille': 'Amazed',
+  'expr.ennuye': 'Bored',
+  'expr.degoute': 'Disgusted',
+  'expr.soulage': 'Relieved',
+  'expr.determine': 'Determined',
+  'expr.malicieu': 'Mischievous',
 };

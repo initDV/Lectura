@@ -177,4 +177,12 @@ export default {
   'mv.introuvable': 'Vidéo introuvable.',
   'mv.lecteur': 'Lecteur vidéo',
   'dl.garder': 'Sauvegarder aussi dans l\'app (accessible hors ligne)',
+  'expr.curieux': 'Curieux',
+  'expr.inquiet': 'Inquiet',
+  'expr.emerveille': 'Émerveillé',
+  'expr.ennuye': 'Ennuyé',
+  'expr.degoute': 'Dégoûté',
+  'expr.soulage': 'Soulagé',
+  'expr.determine': 'Déterminé',
+  'expr.malicieu': 'Malicieux',
 };

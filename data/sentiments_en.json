@@ -63,6 +63,38 @@
         "slowly"],
       "forts": []
     },
+    "curieux": {
+      "mots": ["interesting*", "curious*", "really", "why", "how come", "oh really", "is that true", "tell me", "go on"],
+      "forts": ["fascinating*", "captivating*"]
+    },
+    "inquiet": {
+      "mots": ["danger", "problem*", "risk*", "worried*", "worry*", "careful", "suspicious*", "not sure", "serious", "urgent*", "warning", "watch out"],
+      "forts": ["catastroph*", "disaster*", "panic"]
+    },
+    "emerveille": {
+      "mots": ["sublime*", "marvelous*", "magical*", "breathtaking*", "never seen", "gorgeous*", "stunning*"],
+      "forts": ["mind-blowing*", "spectacular*"]
+    },
+    "ennuye": {
+      "mots": ["meh", "boring*", "bored*", "same as always", "not great", "average", "tired of*", "tedious*", "dull*"],
+      "forts": ["fed up"]
+    },
+    "degoute": {
+      "mots": ["yuck", "gross*", "disgusting*", "revolting*", "repulsive*", "nasty", "sickening*", "smells bad"],
+      "forts": ["unbearable*", "hideous*"]
+    },
+    "soulage": {
+      "mots": ["finally", "relieved*", "relief", "it's over", "done at last", "liberated*", "resolved*", "accomplished*"],
+      "forts": ["what a relief"]
+    },
+    "determine": {
+      "mots": ["we must", "determined*", "motivated*", "decided*", "i will", "you will", "goal", "without hesitation", "keep going"],
+      "forts": ["i'll do it", "we can do it"]
+    },
+    "malicieu": {
+      "mots": ["hehe", "i know", "secret", "surprise", "sly*", "mischievous*", "prankster*", "guess", "shh", "between us", "naughty"],
+      "forts": []
+    },
     "concentre": {
       "mots": ["look", "watch", "observe*", "note", "remember", "important", "essential", "focus*", "precise*", "exactly", "step*", "first", "then",
         "analy*", "check*", "verif*", "examin*", "calculat*", "here is", "type", "write", "enter", "run", "execut*", "don't forget", "tip", "tips",
