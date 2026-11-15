@@ -1,41 +1,72 @@
 // @ts-check
-// voix-hd.js : gestion de la voix « Lectura HD hors ligne » (taille annoncée, accord explicite, progression, suppression).
+// voix-hd.js : gestion de la voix « Lectura HD hors ligne ». Carte unique avec menu déroulant
+// groupé (Féminin / Masculin) et fiche détaillée de la voix sélectionnée (installer, supprimer, progression).
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { t, taille } from '../modules/i18n.js';
 import { getEngine } from '../modules/voice/engine.js';
 import { report, notify } from '../modules/errors.js';
 
-/** @param {{ onChange?: ()=>void }} o */
+/** Détecte le genre depuis le nom (« · F · » ou « · M · »). */
+function genreDe(v) {
+  if (/·\s*F\s*·/.test(v.nom)) return 'F';
+  if (/·\s*M\s*·/.test(v.nom)) return 'M';
+  return 'F'; // par défaut
+}
+
 export function voixHdPanel({ onChange } = {}) {
-  const liste = h('div', { class: 'stack' }), el = h('div', { class: 'stack' }, h('p', { class: 'muted small', text: t('voix.hd.aide') }), liste);
-  let moteur = null, annuler = null;
+  const el = h('div', { class: 'stack' }, h('p', { class: 'muted small', text: t('voix.hd.aide') }));
+  const zone = h('div', { class: 'stack' });
+  el.append(zone);
+  let moteur = null, annuler = null, voix = [], selectEl = null, detailEl = null;
 
   async function dessiner() {
-    clear(liste).append(h('p', { class: 'muted', text: t('commun.chargement') }));
-    let voix;
+    clear(zone).append(h('p', { class: 'muted', text: t('commun.chargement') }));
     try {
       moteur = await getEngine('piper');
       voix = await moteur.etat();
     } catch (err) {
-      clear(liste).append(h('p', { class: 'banner banner-warn', role: 'status', text: err.message }));
+      clear(zone).append(h('p', { class: 'banner banner-warn', role: 'status', text: err.message }));
       return;
     }
-    clear(liste);
-    for (const v of voix) liste.append(ligne(v));
-    if (!voix.length) liste.append(h('p', { class: 'muted', text: t('voix.hd.err.absente') }));
+    if (!voix.length) {
+      clear(zone).append(h('p', { class: 'muted', text: t('voix.hd.err.absente') }));
+      return;
+    }
+    const feminin = voix.filter((v) => genreDe(v) === 'F');
+    const masculin = voix.filter((v) => genreDe(v) === 'M');
+
+    // ── Menu déroulant groupé
+    selectEl = h('select', { 'aria-label': t('voix.hd.choisir'), style: 'width:100%;padding:.4rem;font:inherit;' },
+      feminin.length ? h('optgroup', { label: t('voix.hd.feminin') }, ...feminin.map((v) => h('option', { value: v.id }, `${v.nom}${v.installe ? ' ✓' : ''}`))) : null,
+      masculin.length ? h('optgroup', { label: t('voix.hd.masculin') }, ...masculin.map((v) => h('option', { value: v.id }, `${v.nom}${v.installe ? ' ✓' : ''}`))) : null,
+    );
+    selectEl.addEventListener('change', () => afficherDetail(selectEl.value));
+
+    detailEl = h('div', { class: 'stack', style: 'margin-top:.6rem;' });
+    clear(zone).append(
+      h('label', { style: 'display:block;' }, h('span', { class: 'muted small', text: t('voix.hd.choisir') }), selectEl),
+      detailEl,
+    );
+    afficherDetail(voix[0].id);
   }
 
-  function ligne(v) {
+  function afficherDetail(id) {
+    const v = voix.find((x) => x.id === id);
+    if (!v) return;
+    clear(detailEl);
+
     const barre = h('progress', { max: 1, value: 0, hidden: true, 'aria-label': t('voix.hd.progression') });
-    const etat = h('span', { class: 'muted small', role: 'status', text: v.installe ? t('voix.hd.installee') : t('voix.hd.nonInstallee', { taille: taille(v.taille) }) });
+    const statut = h('span', { class: 'muted small', role: 'status', text: v.installe ? t('voix.hd.installee') : t('voix.hd.meta', { type: 'non installée', taille: taille(v.taille) }) });
     const actions = h('div', { class: 'row' });
+
     const boutons = () => {
       clear(actions);
       if (annuler) actions.append(h('button', { type: 'button', class: 'btn', text: t('commun.annuler'), onClick: () => annuler?.abort() }));
       else if (v.installe) actions.append(h('button', { type: 'button', class: 'btn btn-danger', onClick: supprimer }, icon('trash'), t('voix.hd.supprimer')));
       else actions.append(h('button', { type: 'button', class: 'btn btn-primary', onClick: telecharger }, icon('download'), t('voix.hd.telecharger', { taille: taille(v.taille) })));
     };
+
     async function telecharger() {
       if (!confirm(t('voix.hd.confirmer', { taille: taille(v.taille) }))) return;
       annuler = new AbortController();
@@ -43,37 +74,55 @@ export function voixHdPanel({ onChange } = {}) {
       try {
         await moteur.download(v.id, { signal: annuler.signal, onProgress: (fait, total) => {
           barre.value = total ? fait / total : 0;
-          etat.textContent = t('voix.hd.progressionTexte', { fait: taille(fait), total: taille(total), pct: Math.round((100 * fait) / (total || 1)) });
+          statut.textContent = t('voix.hd.progressionTexte', { fait: taille(fait), total: taille(total), pct: Math.round((100 * fait) / (total || 1)) });
         } });
         v.installe = true;
-        etat.textContent = t('voix.hd.installee');
+        statut.textContent = t('voix.hd.installee');
         notify(t('voix.hd.prete'), 'ok');
         onChange?.();
+        // Rafraîchir le menu pour mettre à jour les ✓
+        const opt = selectEl?.querySelector(`option[value="${v.id}"]`);
+        if (opt) opt.textContent = `${v.nom} ✓`;
       } catch (err) {
-        etat.textContent = t('voix.hd.reprise');
+        statut.textContent = t('voix.hd.reprise');
         report('voix-hd', err);
       }
       annuler = null; barre.hidden = true; boutons();
     }
+
     async function supprimer() {
       if (!confirm(t('voix.hd.supprimer.confirmer', { taille: taille(v.taille) }))) return;
       try {
         await moteur.remove(v.id);
         v.installe = false;
-        etat.textContent = t('voix.hd.nonInstallee', { taille: taille(v.taille) });
+        statut.textContent = t('voix.hd.meta', { type: 'non installée', taille: taille(v.taille) });
         notify(t('voix.hd.supprimee'), 'info');
         onChange?.();
+        const opt = selectEl?.querySelector(`option[value="${v.id}"]`);
+        if (opt) opt.textContent = v.nom;
       } catch (err) { report('voix-hd', err); }
       boutons();
     }
+
     boutons();
-    return h('div', { class: 'card stack' }, h('div', { class: 'row between' }, h('strong', { text: v.nom }), etat), barre, actions,
-      h('p', { class: 'muted small', text: `${t('voix.hd.licence')} : ${v.licence}. ${v.attribution}` }));
+    detailEl.append(
+      h('div', { class: 'card stack', style: 'padding:.75rem;border:1px solid #333;border-radius:.5rem;' },
+        h('div', { class: 'row between' }, h('strong', { text: v.nom }), statut),
+        barre,
+        actions,
+        h('p', { class: 'muted small', style: 'margin:0;', text: `${t('voix.hd.licence')} : ${v.licence}. ${v.attribution}` }),
+      ),
+    );
   }
 
   dessiner();
   return {
     el,
-    async toutSupprimer() { annuler?.abort(); await (moteur || (await getEngine('piper'))).removeAll(); onChange?.(); await dessiner(); },
+    async toutSupprimer() {
+      annuler?.abort();
+      await (moteur || (await getEngine('piper'))).removeAll();
+      onChange?.();
+      await dessiner();
+    },
   };
 }

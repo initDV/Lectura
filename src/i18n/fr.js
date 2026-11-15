@@ -209,4 +209,9 @@ export default {
   'reglages.decor.aide': 'Les couleurs s\'appliquent au prochain retour à la scène.',
   'reglages.decor.reset': 'Réinitialiser',
   'voix.hd.cache': 'Lecture depuis le cache · {i}/{n}',
+  'voix.hd.choisir': 'Choisir une voix',
+  'voix.hd.feminin': 'Voix féminines',
+  'voix.hd.masculin': 'Voix masculines',
+  'voix.hd.installee': 'Installée',
+  'voix.hd.meta': '{type} · {taille}',
 };

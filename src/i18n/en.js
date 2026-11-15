@@ -209,4 +209,9 @@ export default {
   'reglages.decor.aide': 'Colors are applied when you return to the scene.',
   'reglages.decor.reset': 'Reset',
   'voix.hd.cache': 'Playing from cache · {i}/{n}',
+  'voix.hd.choisir': 'Choose a voice',
+  'voix.hd.feminin': 'Female voices',
+  'voix.hd.masculin': 'Male voices',
+  'voix.hd.installee': 'Installed',
+  'voix.hd.meta': '{type} · {taille}',
 };
