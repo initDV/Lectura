@@ -26,6 +26,9 @@ function ouvrir() {
 }
 
 const promesse = (req) => new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); });
+const txComplete = (tx) => new Promise((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error || new Error('tx abort')); });
+/** Cache L1 : en mémoire, accès instantané. Évite IndexedDB à chaque phrase. */
+const L1 = new Map();
 
 /** Hash SHA-1 stable d'une phrase (texte + voix + vitesse). */
 export async function hashPhrase(texte, voixId, vitesse) {
@@ -36,22 +39,26 @@ export async function hashPhrase(texte, voixId, vitesse) {
 
 /** Récupère une entrée { samples, sampleRate } ou null. */
 export async function getPhrase(id) {
+  if (L1.has(id)) return L1.get(id);
   const db = await ouvrir(); if (!db) return null;
   try {
     const e = await promesse(db.transaction(STORE, 'readonly').objectStore(STORE).get(id));
     if (!e) return null;
-    return { samples: new Float32Array(e.buffer), sampleRate: e.sr };
+    const val = { samples: new Float32Array(e.buffer), sampleRate: e.sr };
+    L1.set(id, val);
+    return val;
   } catch { return null; }
 }
 
 /** Stocke { samples, sampleRate }, avec éviction LRU si nécessaire. */
 export async function setPhrase(id, samples, sampleRate) {
+  L1.set(id, { samples, sampleRate });
   const db = await ouvrir(); if (!db) return;
   const buffer = samples.slice().buffer;
   try {
     const tx = db.transaction(STORE, 'readwrite'), store = tx.objectStore(STORE);
     await promesse(store.put({ id, buffer, sr: sampleRate, date: Date.now(), taille: buffer.byteLength }));
-    await tx.complete;
+    await txComplete(tx);
     await evincer();
   } catch { /* silencieux : le cache ne doit jamais bloquer la lecture */ }
 }
@@ -88,6 +95,6 @@ export async function viderCache() {
   try {
     const tx = db.transaction(STORE, 'readwrite');
     tx.objectStore(STORE).clear();
-    await tx.complete;
+    await txComplete(tx);
   } catch { /* ignore */ }
 }
