@@ -1,90 +1,89 @@
-#!/usr/bin/env node
-// tools/fetch_voice.mjs : prépare le dossier models/ (voix Lectura HD), servi depuis NOTRE site (aucun CDN à l'exécution).
-//   node tools/fetch_voice.mjs            télécharge la voix par défaut + copie le moteur ONNX
-//   node tools/fetch_voice.mjs --moteur   copie seulement le moteur (aucun téléchargement de modèle)
-//   node tools/fetch_voice.mjs --depuis /chemin/dossier   utilise des fichiers .onnx déjà téléchargés
-// En pratique c'est GitHub Actions qui lance ce script : la connexion du développeur n'est pas utilisée.
-import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync, statSync, rmSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+// tools/fetch_voice.mjs : télécharge les voix Piper depuis HuggingFace vers models/.
+// Lancé UNIQUEMENT dans GitHub Actions (pas en local) pour éviter 350 Mo sur ton PC.
+// Les fichiers sont ensuite copiés dans dist/ et servis depuis ton propre domaine : pas de CORS.
+import { mkdir, writeFile, stat, rename } from 'node:fs/promises';
+import { existsSync, createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import { join } from 'node:path';
 
-const racine = join(dirname(fileURLToPath(import.meta.url)), '..');
-const dest = join(racine, 'models'), args = process.argv.slice(2);
-const PART = 8 * 1024 * 1024; // morceaux de 8 Mio : reprise possible sur une connexion instable, et < 25 Mio (limite Cloudflare Pages)
-const REV = '6b9cfaacb4fb2e02a9621227e3c1a48bec9710c3'; // révision figée du dépôt rhasspy/piper-voices
-const HF = `https://huggingface.co/rhasspy/piper-voices/resolve/${REV}`;
+const HF = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR';
 
-/** Voix retenues : seules celles dont la licence autorise la redistribution ET l'usage commercial de l'audio produit. */
-const VOIX = [{
-  id: 'fr_FR-siwis-medium', nom: 'Siwis · voix féminine (français)', langue: 'fr', chemin: 'fr/fr_FR/siwis/medium',
-  licence: 'CC-BY-4.0', attribution: 'Voix Piper « fr_FR-siwis-medium » (rhasspy/piper-voices), entraînée sur le corpus SIWIS French Speech Synthesis Database (Université d’Édimbourg, CC BY 4.0).',
-  sha256: 'b1d946fd68d0347155fa59bce0a018924abbef3c1561181db45ca463d83963ef',
-}];
-const ORT = ['ort.wasm.min.mjs', 'ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm'];
+const MODELES = {
+  siwis: `${HF}/siwis/medium/fr_FR-siwis-medium`,
+  tom: `${HF}/tom/medium/fr_FR-tom-medium`,
+  gilles: `${HF}/gilles/low/fr_FR-gilles-low`,
+  upmc: `${HF}/upmc/medium/fr_FR-upmc-medium`,
+  mls: `${HF}/mls/medium/fr_FR-mls-medium`,
+};
 
-const sha = (buf) => createHash('sha256').update(buf).digest('hex');
-const mo = (n) => `${(n / 1048576).toFixed(1)} Mo`;
+const VOIX = [
+  { id: 'siwis',  nom: 'Siwis · F · douce',       modele: 'siwis' },
+  { id: 'upmc',   nom: 'UPMC · F · posée',        modele: 'upmc' },
+  { id: 'mls_f1', nom: 'MLS 1 · F · claire',      modele: 'mls', speakerId: 0 },
+  { id: 'mls_f2', nom: 'MLS 2 · F · chaleureuse', modele: 'mls', speakerId: 1 },
+  { id: 'mls_f3', nom: 'MLS 3 · F · neutre',      modele: 'mls', speakerId: 2 },
+  { id: 'tom',    nom: 'Tom · M · grave',         modele: 'tom' },
+  { id: 'gilles', nom: 'Gilles · M · posé',       modele: 'gilles' },
+  { id: 'mls_m1', nom: 'MLS 4 · M · clair',       modele: 'mls', speakerId: 3 },
+  { id: 'mls_m2', nom: 'MLS 5 · M · jeune',       modele: 'mls', speakerId: 4 },
+  { id: 'mls_m3', nom: 'MLS 6 · M · chaleureux',  modele: 'mls', speakerId: 5 },
+];
 
-async function telecharger(url) {
-  process.stdout.write(`  ↓ ${url}\n`);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Téléchargement impossible (${res.status}) : ${url}`);
-  const total = +res.headers.get('content-length') || 0, morceaux = [];
-  let recu = 0, dernier = 0;
-  for await (const m of res.body) {
-    morceaux.push(m); recu += m.length;
-    if (total && recu - dernier > 5 * 1048576) { dernier = recu; process.stdout.write(`    ${mo(recu)} / ${mo(total)}\n`); }
+async function telecharger(url, dest) {
+  if (existsSync(dest)) {
+    const s = await stat(dest);
+    if (s.size > 1024 * 1024) { console.log(`  ✓ déjà là : ${dest} (${(s.size/1048576).toFixed(1)} Mo)`); return s.size; }
   }
-  return Buffer.concat(morceaux);
+  console.log(`  ↓ ${url}`);
+  const tmp = dest + '.part';
+  const res = await fetch(url, { redirect: 'follow' });
+  if (!res.ok) throw new Error(`Erreur ${res.status} sur ${url}`);
+  await pipeline(res.body, createWriteStream(tmp));
+  await rename(tmp, dest);
+  const s = await stat(dest);
+  console.log(`  ✓ ${dest} (${(s.size/1048576).toFixed(1)} Mo)`);
+  return s.size;
 }
 
-function copierMoteur() {
-  const src = join(racine, 'node_modules', 'onnxruntime-web', 'dist');
-  if (!existsSync(src)) throw new Error('onnxruntime-web est absent : lance d\'abord « npm install ».');
-  mkdirSync(join(dest, 'ort'), { recursive: true });
-  const fichiers = ORT.map((f) => {
-    copyFileSync(join(src, f), join(dest, 'ort', f));
-    const buf = readFileSync(join(dest, 'ort', f));
-    return { fichier: `ort/${f}`, taille: buf.length, sha256: sha(buf) };
-  });
-  const version = JSON.parse(readFileSync(join(racine, 'node_modules', 'onnxruntime-web', 'package.json'), 'utf8')).version;
-  console.log(`✔ moteur onnxruntime-web ${version} copié (${mo(fichiers.reduce((a, f) => a + f.taille, 0))})`);
-  return { nom: 'onnxruntime-web', version, licence: 'MIT', entree: 'ort/ort.wasm.min.mjs', dossier: 'ort/', fichiers };
-}
+async function main() {
+  await mkdir('models', { recursive: true });
+  await mkdir('models/ort', { recursive: true });
 
-async function preparerVoix(v, depuis) {
-  const local = depuis && join(depuis, `${v.id}.onnx`);
-  const modele = local && existsSync(local) ? readFileSync(local) : await telecharger(`${HF}/${v.chemin}/${v.id}.onnx`);
-  const empreinte = sha(modele);
-  if (empreinte !== v.sha256) throw new Error(`Empreinte inattendue pour ${v.id}.onnx : ${empreinte}. Fichier corrompu ou modifié : rien n'est installé.`);
-  const cfgLocal = depuis && join(depuis, `${v.id}.onnx.json`);
-  const cfg = cfgLocal && existsSync(cfgLocal) ? readFileSync(cfgLocal) : await telecharger(`${HF}/${v.chemin}/${v.id}.onnx.json`);
-  JSON.parse(cfg.toString('utf8')); // doit être un JSON valide
-  for (const f of readdirSync(dest)) if (f.startsWith(`${v.id}.`)) rmSync(join(dest, f));
-  writeFileSync(join(dest, `${v.id}.onnx.json`), cfg);
-  const parts = [];
-  for (let i = 0, k = 0; i < modele.length; i += PART, k++) {
-    const bloc = modele.subarray(i, Math.min(modele.length, i + PART)), fichier = `${v.id}.onnx.part${String(k).padStart(2, '0')}`;
-    writeFileSync(join(dest, fichier), bloc);
-    parts.push({ fichier, taille: bloc.length, sha256: sha(bloc) });
+  // Copie du runtime onnxruntime-web (WASM + API) depuis node_modules.
+  const { copyFile } = await import('node:fs/promises');
+  const ort = [
+    ['node_modules/onnxruntime-web/dist/ort.min.mjs', 'models/ort/ort.min.mjs'],
+    ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs', 'models/ort/ort-wasm-simd-threaded.mjs'],
+    ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm', 'models/ort/ort-wasm-simd-threaded.wasm'],
+    ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs', 'models/ort/ort-wasm-simd-threaded.jsep.mjs'],
+    ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm', 'models/ort/ort-wasm-simd-threaded.jsep.wasm'],
+  ];
+  for (const [src, dst] of ort) {
+    try { await copyFile(src, dst); console.log(`  ✓ ${dst}`); }
+    catch (e) { console.warn(`  ⚠ ${dst} (${e.code})`); }
   }
-  console.log(`✔ ${v.id} : ${mo(modele.length)} en ${parts.length} morceaux (licence ${v.licence})`);
-  return { id: v.id, nom: v.nom, langue: v.langue, licence: v.licence, attribution: v.attribution, source: `${HF}/${v.chemin}/`,
-    config: `${v.id}.onnx.json`, tailleConfig: cfg.length, sha256: v.sha256, parts };
+  // 1. Télécharger chaque modèle unique UNE seule fois
+  const tailles = {};
+  for (const [id, base] of Object.entries(MODELES)) {
+    const onnx = join('models', `${id}.onnx`);
+    const cfg = join('models', `${id}.onnx.json`);
+    tailles[id] = await telecharger(`${base}.onnx`, onnx);
+    await telecharger(`${base}.onnx.json`, cfg);
+  }
+  // 2. Générer index.json avec URLs RELATIVES
+  const moteur = { entree: 'ort/ort.min.mjs', dossier: 'ort/', fichiers: [] };
+  const voix = VOIX.map((v) => ({
+    id: v.id,
+    nom: v.nom,
+    config: `${v.modele}.onnx.json`,
+    tailleConfig: 6000,
+    parts: [{ fichier: `${v.modele}.onnx`, taille: tailles[v.modele] }],
+    speakerId: v.speakerId ?? null,
+    licence: 'MIT (Piper)',
+    attribution: 'rhasspy/piper-voices',
+  }));
+  await writeFile('models/index.json', JSON.stringify({ moteur, voix }, null, 2));
+  const total = Object.values(tailles).reduce((a, b) => a + b, 0);
+  console.log(`✔ models/index.json généré : ${voix.length} voix, ${(total/1048576).toFixed(0)} Mo téléchargés.`);
 }
-
-try {
-  mkdirSync(dest, { recursive: true });
-  const moteur = copierMoteur();
-  const i = args.indexOf('--depuis'), depuis = i >= 0 ? args[i + 1] : null;
-  const index = join(dest, 'index.json');
-  let voix = existsSync(index) ? JSON.parse(readFileSync(index, 'utf8')).voix || [] : [];
-  if (!args.includes('--moteur')) { voix = []; for (const v of VOIX) voix.push(await preparerVoix(v, depuis)); }
-  writeFileSync(index, `${JSON.stringify({ genere: new Date().toISOString(), moteur, voix }, null, 1)}\n`);
-  const total = readdirSync(dest, { recursive: true }).reduce((a, f) => { const s = statSync(join(dest, String(f))); return a + (s.isFile() ? s.size : 0); }, 0);
-  console.log(`✔ models/index.json écrit : ${voix.length} voix, ${mo(total)} au total. Le dossier models/ n'est pas versionné (.gitignore).`);
-} catch (err) {
-  console.error(`✖ ${err.message}`);
-  process.exit(1);
-}
+main().catch((e) => { console.error(e); process.exit(1); });

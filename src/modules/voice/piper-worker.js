@@ -14,7 +14,7 @@ async function init({ ortUrl, wasmBase, modele, cfg }) {
   session = await ort.InferenceSession.create(new Uint8Array(modele), { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
 }
 
-async function synth({ texte, vitesse }) {
+async function synth({ texte, vitesse, speakerId }) {
   const phonemes = phonemiser(texte);
   if (!phonemes) return { samples: new Float32Array(0), phonemes };
   const ids = phonemesEnIds(phonemes, config.phoneme_id_map);
@@ -24,7 +24,10 @@ async function synth({ texte, vitesse }) {
     input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)]), [1]),
     scales: new ort.Tensor('float32', Float32Array.from([inf.noise_scale ?? 0.667, (inf.length_scale ?? 1) / (vitesse || 1), inf.noise_w ?? 0.8]), [3]),
   };
-  if ((config.num_speakers || 1) > 1) entrees.sid = new ort.Tensor('int64', BigInt64Array.from([BigInt(config.default_speaker_id || 0)]), [1]);
+  if ((config.num_speakers || 1) > 1) {
+    const sid = speakerId ?? config.default_speaker_id ?? 0;
+    entrees.sid = new ort.Tensor('int64', BigInt64Array.from([BigInt(sid)]), [1]);
+  }
   const sortie = await session.run(entrees);
   const t = sortie.output || Object.values(sortie)[0];
   return { samples: new Float32Array(t.data), phonemes };

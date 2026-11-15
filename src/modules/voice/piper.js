@@ -4,7 +4,6 @@
 import { splitSentences, CPS_FRAPPE } from '../timeline.js';
 import { t } from '../i18n.js';
 import { getCatalogue, etatVoix, lire, urlFichier, telecharger, supprimer, toutSupprimer } from './piper-store.js';
-import { hashPhrase, getPhrase, setPhrase } from './audio-cache.js';
 
 export const LIMITE_CARACTERES = 12000; // ≈ 14 min d'audio : au-delà, la mémoire d'un téléphone d'entrée de gamme sature
 const PAUSE_PHRASE = 0.22, PAUSE_PARAGRAPHE = 0.45; // secondes de silence ajoutées
@@ -68,58 +67,31 @@ export class PiperEngine {
    */
   async synthesize(texte, { voixId, vitesse = 1, cpsFrappe = CPS_FRAPPE, onProgress } = /** @type {any} */ ({})) {
     if (texte.length > LIMITE_CARACTERES) throw new Error(t('voix.hd.err.tropLong', { max: LIMITE_CARACTERES, n: texte.length }));
-    const phrases = splitSentences(texte);
-    if (!phrases.length) throw new Error(t('scene.err.vide'));
     onProgress?.(0, 1, t('voix.hd.chargement'));
-
-    // 1. Phase cache : hash + lookup pour chaque phrase « parle » (sans charger le worker).
-    const enCache = await Promise.all(phrases.map(async (p) => {
-      if (p.type !== 'parle') return null;
-      const id = await hashPhrase(p.texte, voixId, vitesse);
-      return { id, entree: await getPhrase(id) };
-    }));
-    const toutEnCache = phrases.every((p, i) => p.type !== 'parle' || enCache[i]?.entree);
-
-    // 2. Chargement du worker seulement si nécessaire ; sr vient du cache si tout y est, sinon de la config.
-    let sr;
-    if (toutEnCache) {
-      sr = enCache.find((c) => c?.entree)?.entree.sampleRate || 22050;
-    } else {
-      await this.#charger(voixId);
-      sr = this.#cfg.audio?.sample_rate || 22050;
-    }
-
-    // 3. Assemblage / synthèse phrase par phrase (synthèse uniquement pour les non-cachées).
+    await this.#charger(voixId);
+    const sr = this.#cfg.audio?.sample_rate || 22050, phrases = splitSentences(texte);
+    if (!phrases.length) throw new Error(t('scene.err.vide'));
+    const cat = await getCatalogue();
+    const voixCat = cat.voix.find((v) => v.id === voixId);
     const blocs = [], segments = [];
     let n = 0;
     for (let i = 0; i < phrases.length; i++) {
       const p = phrases[i];
-      onProgress?.(i, phrases.length, toutEnCache
-        ? t('voix.hd.cache', { i: i + 1, n: phrases.length })
-        : t('voix.hd.synthesePhrase', { i: i + 1, n: phrases.length }));
-      let son;
-      if (p.type !== 'parle') {
-        son = new Float32Array(Math.round((sr * p.texte.length) / (cpsFrappe * vitesse)));
-      } else if (enCache[i].entree) {
-        son = enCache[i].entree.samples;
-      } else {
-        const r = await this.#appel({ type: 'synth', texte: p.texte, vitesse });
-        son = r.samples.length ? r.samples : new Float32Array(Math.round(sr * 0.3));
-        setPhrase(enCache[i].id, son, sr).catch(() => {});
-      }
+      onProgress?.(i, phrases.length, t('voix.hd.synthesePhrase', { i: i + 1, n: phrases.length }));
+      // Commande ou commentaire : pas de voix, un silence de la durée de la « frappe » de la ligne.
+      const r = p.type === 'parle' ? await this.#appel({ type: 'synth', texte: p.texte, vitesse, speakerId: voixCat?.speakerId }) : { samples: new Float32Array(Math.round((sr * p.texte.length) / (cpsFrappe * vitesse))) };
+      const son = r.samples.length ? r.samples : new Float32Array(Math.round(sr * 0.3)); // phrase sans rien à dire (symboles) : court silence
       const suite = phrases[i + 1], paragraphe = suite && /\n/.test(texte.slice(p.end, suite.start));
       const silence = new Float32Array(Math.round(sr * (suite ? (paragraphe ? PAUSE_PARAGRAPHE : PAUSE_PHRASE) : 0.15) / Math.max(0.5, vitesse)));
       const debut = n;
       blocs.push(son, silence); n += son.length + silence.length;
       segments.push({ texte: p.texte, type: p.type, debutMs: Math.round((debut / sr) * 1000), finMs: Math.round((n / sr) * 1000) });
     }
-
-    // 4. Normalisation douce.
     const samples = new Float32Array(n);
     let pos = 0, crete = 0;
     for (const b of blocs) { samples.set(b, pos); pos += b.length; }
     for (let i = 0; i < n; i++) { const a = Math.abs(samples[i]); if (a > crete) crete = a; }
-    if (crete > 0.001) { const g = Math.min(4, 0.9 / crete); for (let i = 0; i < n; i++) samples[i] *= g; }
+    if (crete > 0.001) { const g = Math.min(4, 0.9 / crete); for (let i = 0; i < n; i++) samples[i] *= g; } // normalisation douce
     onProgress?.(phrases.length, phrases.length, t('voix.hd.pret'));
     return { samples, sampleRate: sr, segments };
   }
