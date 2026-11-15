@@ -21,6 +21,7 @@ import { getEngine } from '../modules/voice/engine.js';
 import { logError, notify, report } from '../modules/errors.js';
 import { createControls } from './scene-controls.js';
 import { creerExport } from './scene-export.js';
+import { nettoyer } from '../modules/text-clean.js';
 import { creerDecor } from '../modules/scene-decor.js';
 import { ouvrirMesVideos } from './mes-videos.js';
 import { nomVoix, ouvrirListeVoix, choisirAudio } from './voix-liste.js';
@@ -64,7 +65,12 @@ export async function render(root) {
   const pourCanvas = () => ({ projet, svg: perso.svg, terminal, pro: store.pro, titreTerminal: store.settings.titreTerminal, texteMasque: masque });
   const exportScene = creerExport({ projet, badge: badgeRec, pret: () => pret() && !!terminal, pourCanvas, source: () => prep.source, pause, chercher, jouer, format: () => store.settings.formatVideo });
   const majUi = () => controls.update({ etat: store.etat === 'PREPARATION' ? 'preparation' : store.etat === 'LECTURE' ? 'lecture' : store.etat === 'PAUSE' && !arrete ? 'pause' : 'repos', muet });
-  const signer = (apercu) => JSON.stringify([projet.texte, apercu, projet.audio.source, projet.audio.nomFichier, projet.audio.voix.moteur, projet.audio.voix.id,
+  let _brut = '', _propre = '';
+  const textePropre = () => {
+    if (_brut !== projet.texte) { _brut = projet.texte; _propre = nettoyer(projet.texte); }
+    return _propre;
+  };
+  const signer = (apercu) => JSON.stringify([textePropre(), apercu, projet.audio.source, projet.audio.nomFichier, projet.audio.voix.moteur, projet.audio.voix.id,
     projet.audio.voix.moteur === 'piper' ? projet.audio.voix.vitesse : 0, projet.personnageId, projet.terminal.vitesseCps]);
 
   function carte(titre, ...contenu) { clear(overlay).append(h('div', { class: 'card', role: 'alert' }, h('h2', { text: titre }), ...contenu)); overlay.hidden = false; }
@@ -117,12 +123,13 @@ export async function render(root) {
     try {
       prep?.source.dispose(); prep = null;
       if (!perso) await chargerPerso();
-      const nouveau = await prepare(projet, { audio, apercu, perso, onProgress: (fait, total, texte) => { barre.value = total ? fait / total : 0; if (texte) etape.textContent = texte; } });
+      const projetLecture = { ...projet, texte: textePropre() };
+      const nouveau = await prepare(projetLecture, { audio, apercu, perso, onProgress: (fait, total, texte) => { barre.value = total ? fait / total : 0; if (texte) etape.textContent = texte; } });
       if (!vivant) { nouveau.source.dispose(); return false; }
       prep = nouveau; signature = sig; derniereExpr = ''; dernierSeg = null;
       humeur = creerHumeur({ lexique: prep.lexique, matcher: prep.matcher, pro: store.pro, actif: projet.reglages.emotions });
       terminal = new Terminal(termBody, prep.dict, prep.matcher);
-      terminal.load(projet.texte);
+      terminal.load(textePropre());
       prep.source.onEnd = fin;
       prep.source.onError = erreur;
       prep.source.setVolume(store.settings.volume ?? 1);
@@ -155,7 +162,7 @@ export async function render(root) {
     if (store.etat === 'PREPARATION') return;
     if (store.etat === 'LECTURE' && apercu !== true) return pause();
     if (store.etat === 'PAUSE' && !arrete && apercu !== true && signer(false) === signature) return jouer();
-    if (!projet.texte.trim()) { notify(t('scene.err.texteVide'), 'warn'); controls.texte.focus(); return; }
+    if (!textePropre().trim()) { notify(t('scene.err.texteVide'), 'warn'); controls.texte.focus(); return; }
     arrete = true;
     if (await preparer(apercu === true)) await jouer();
   }
@@ -214,7 +221,7 @@ export async function render(root) {
     if (!character) return;
     if (prep && terminal && store.etat !== 'PREPARATION' && store.etat !== 'ERREUR') {
       const s = prep.source, lecture = store.etat === 'LECTURE', ms = s.timeMs();
-      const chars = store.etat === 'FIN' ? projet.texte.length : s.charPos ? s.charPos() : prep.timeline.charAt(ms);
+      const chars = store.etat === 'FIN' ? textePropre().length : s.charPos ? s.charPos() : prep.timeline.charAt(ms);
       terminal.revealTo(chars);
       const seg = prep.timeline.segmentAtChar(chars), parle = lecture && !!seg && typeLigne(seg.texte) === 'parle';
       if (lecture && seg && parle) detecterPonctuation(seg, chars, now);
