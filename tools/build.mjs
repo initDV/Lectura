@@ -77,6 +77,11 @@ function construire() {
   const initial = fichiers.filter((f) => /\.(js|css|html|webmanifest)$/.test(f) || f.startsWith('fonts/') && f.endsWith('.woff2'));
   const optionnels = lister(dist).map((p) => relative(dist, p).split(sep).join('/')).filter((p) => p.startsWith('src/vendor/aac/'));
 
+  if (optionnels.length) {
+    const total = optionnels.reduce((a, f) => a + statSync(join(dist, f)).size, 0);
+    console.log(`  (optionnels à la demande : ${optionnels.length} fichiers, ${(total/1024).toFixed(0)} Ko — chargés au 1er usage)`);
+  }
+
   const gz = initial.reduce((a, f) => a + (f.endsWith('.woff2') ? statSync(join(dist, f)).size : gzipSync(readFileSync(join(dist, f))).length), 0);
   const total = fichiers.reduce((a, f) => a + statSync(join(dist, f)).size, 0);
   console.log(`✔ dist/ prêt : ${fichiers.length} fichiers, ${(total / 1024).toFixed(0)} Ko (hors voix HD)`);
