@@ -12,6 +12,41 @@ body.route-scene main#app { max-width: 1100px; padding: 10px 12px max(16px, env(
 .menu-btn { position: absolute; top: 0; left: 0; z-index: 4; width: var(--tap); height: var(--tap); display: grid; place-items: center; background: none; border: none; border-radius: 50%; color: var(--muted-text); cursor: pointer; }
 .menu-btn:hover { color: var(--text-strong); }
 
+/* FAB Réglages : bouton flottant en bas à droite du stage, avec pulsation douce.
+   Accès rapide depuis n'importe quel écran de la scène sans ouvrir le menu complet. */
+.fab-settings {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 4;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25), 0 0 0 0 var(--accent);
+  animation: fabPulse 3.5s ease-in-out infinite;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.fab-settings:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.35), 0 0 0 4px rgba(155,69,224,0.15);
+}
+.fab-settings:active { transform: scale(0.95); }
+.fab-settings svg { width: 22px; height: 22px; }
+@keyframes fabPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 4px 12px rgba(0,0,0,0.25), 0 0 0 0 rgba(155,69,224,0.4); }
+  50% { transform: scale(1.05); box-shadow: 0 6px 16px rgba(0,0,0,0.3), 0 0 0 8px rgba(155,69,224,0); }
+}
+.scene.presenting .fab-settings { display: none; }
+
+/* Watermark : décalé à gauche pour ne pas chevaucher le FAB. */
+.watermark { right: auto; left: 14px; }
+
 .term-window { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--term-bg); border: 1px solid var(--term-bord); border-radius: var(--radius-lg); overflow: hidden; container-type: inline-size; }
 .term-bar { display: flex; align-items: center; gap: 7px; padding: 4px 6px 4px 14px; min-height: 46px; background: var(--term-bar); border-bottom: 1px solid var(--term-bord); }
 .term-bar i { width: 11px; height: 11px; border-radius: 50%; flex: none; }

@@ -46,7 +46,8 @@ export async function render(root) {
   const overlay = h('div', { class: 'overlay', hidden: true });
   const badgeRec = h('div', { class: 'rec-badge', hidden: true, text: 'REC' });
   const menuBtn = h('button', { type: 'button', class: 'menu-btn', 'aria-label': t('scene.menu'), title: t('scene.menu'), 'aria-haspopup': 'dialog', onClick: menu }, icon('menu'));
-  const stage = h('div', { class: 'stage' }, menuBtn, charPane, h('div', { class: 'term-pane' }, fenetre), overlay, badgeRec,
+  const fabBtn = h('button', { type: 'button', class: 'fab-settings', 'aria-label': t('reglages.themeApp') || 'Réglages', title: t('reglages.themeApp') || 'Réglages', onClick: () => go('reglages') }, icon('settings'));
+  const stage = h('div', { class: 'stage' }, menuBtn, fabBtn, charPane, h('div', { class: 'term-pane' }, fenetre), overlay, badgeRec,
     store.pro ? null : h('div', { class: 'watermark', text: 'Lectura', 'aria-hidden': 'true' }));
   const toucher = () => { store.modifie = true; };
   const controls = createControls({
