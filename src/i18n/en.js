@@ -217,4 +217,6 @@ export default {
   'dl.mp4.aac': 'Converting audio to AAC for TikTok…',
   'dl.mp4.aacOk': 'TikTok-ready MP4 · {taille}',
   'dl.mp4.aacEchec': 'AAC conversion failed (MP4 only playable in browser)',
+  'scene.video.verifOk': 'Video verified · {detail}',
+  'scene.video.verifKo': 'Check warning · {detail}',
 };

@@ -10,6 +10,7 @@ import { SvgFrame } from '../modules/svgframe.js';
 import { fileBase } from '../modules/project.js';
 import { notify, report } from '../modules/errors.js';
 import { ouvrirMenuTelechargement } from './download-menu.js';
+import { verifierExport, resumerVerification } from '../modules/verif-export.js';
 
 /**
  * @param {{ projet: any, badge: HTMLElement, pret: ()=>boolean, pourCanvas: ()=>any, source: ()=>any,
@@ -57,6 +58,13 @@ export function creerExport(o) {
     try {
       const blob = await r.stop();
       if (!blob.size) throw new Error('Enregistrement vide.');
+      // Vérification : relit le fichier et signale les défauts classiques (durée absente,
+      // index à la fin, piste audio muette, images manquantes). Ne bloque jamais le téléchargement.
+      try {
+        const verif = await verifierExport(blob);
+        const resume = resumerVerification(verif);
+        notify(t(verif.ok ? 'scene.video.verifOk' : 'scene.video.verifKo', { detail: resume }), verif.ok ? 'ok' : 'warn', 8000);
+      } catch (err) { report('verif-export', err); }
       ouvrirMenuTelechargement({ videoBlob: blob, mime: r.mime, fileBase: fileBase(o.projet) });
     } catch (err) { report('video', err); }
   }
