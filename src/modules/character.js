@@ -21,7 +21,15 @@ export function motionParams(m = {}) {
 }
 
 const BOUCHES = { normal: 48, large: 58, rond: 32 };          // largeur de la bouche (Pro : lip-sync par bandes)
-const GESTES = { hoche: 650, secoue: 750, sursaut: 380, coucou: 1400 }; // gestes ponctuels (tête, corps, main) : durée (ms)
+const GESTES = {
+  hoche: 650, secoue: 750, sursaut: 380, coucou: 1400,
+  // Nouveaux gestes expressifs (2026-11-16) : plus de variété selon l'émotion.
+  sursaut_fort: 500,    // saut vertical ample (enthousiaste, excite)
+  sursaut_double: 700,  // deux petits sauts (peur intense, surprise)
+  hoche_lent: 1100,     // hochement profond et lent (triste, contemplatif, pensif)
+  dodeline: 800,        // tête qui se balance latéralement (amuse, malicieux, curieux)
+  tremble: 500,         // vibration rapide de la tête (colère contenue, peur)
+};
 /** Gestes scénarisés : séquences multi-articulations jouées au repos. Keyframes sur armR/foreR/headR/gx. */
 const GESTES_SCENES = {
   gratter: {
@@ -148,8 +156,13 @@ export class Character {
     const u = this.geste.type ? (t - this.geste.t0) / GESTES[this.geste.type] : 1;
     if (u >= 0 && u < 1) {
       if (this.geste.type === 'hoche') gy = Math.sin(u * 4 * Math.PI) * 5 * (1 - u) * k;
+      else if (this.geste.type === 'hoche_lent') gy = Math.sin(u * 2 * Math.PI) * 7 * (1 - u) * k;
       else if (this.geste.type === 'secoue') gx = Math.sin(u * 6 * Math.PI) * 5 * (1 - u) * k;
+      else if (this.geste.type === 'dodeline') { gx = Math.sin(u * 3 * Math.PI) * 7 * (1 - u) * k; gy = Math.sin(u * 2 * Math.PI) * 2 * (1 - u) * k; }
+      else if (this.geste.type === 'tremble') gx = Math.sin(u * 15 * Math.PI) * 3 * (1 - u) * k;
       else if (this.geste.type === 'coucou') { salut = Math.min(1, Math.sin(u * Math.PI) * 1.8); agite = Math.sin(u * 10 * Math.PI) * 22; }
+      else if (this.geste.type === 'sursaut_fort') saut = -Math.sin(u * Math.PI) * 18 * k;
+      else if (this.geste.type === 'sursaut_double') saut = -Math.abs(Math.sin(u * 2 * Math.PI)) * 12 * k;
       else saut = -Math.sin(u * Math.PI) * 9 * k;
     }
     // Corps : respiration (référence), rebond, tremblement, flottement ; les jambes ne suivent que les déplacements.
