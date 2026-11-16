@@ -1,0 +1,61 @@
+{
+ "id": "yasmine",
+ "nom": "Yasmine",
+ "role": "base",
+ "pro": false,
+ "svg": "yasmine.svg",
+ "sexe": "f",
+ "metier": "pilote",
+ "dit": null,
+ "pivots": {
+  "epaule_g": [
+   58,
+   122
+  ],
+  "epaule_d": [
+   142,
+   122
+  ],
+  "coude_g": [
+   58,
+   160
+  ],
+  "coude_d": [
+   142,
+   160
+  ],
+  "cou": [
+   100,
+   104
+  ],
+  "bouche": 84,
+  "centre": 100,
+  "sourcil_g": [
+   85,
+   47
+  ],
+  "sourcil_d": [
+   115,
+   47
+  ],
+  "bassin": [
+   100,
+   208
+  ]
+ },
+ "bouche": {
+  "type": "levres",
+  "demiLargeur": 9.5,
+  "ouvertureMax": 8
+ },
+ "mouvements": {
+  "vitesseIdle": 0.9,
+  "amplitudeBras": 0.8,
+  "style": "calme"
+ },
+ "personnalite": "nerveux",
+ "voixSuggeree": {
+  "hauteur": 1,
+  "vitesse": 1
+ }
+}

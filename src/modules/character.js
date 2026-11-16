@@ -5,6 +5,7 @@
 // corps) fondues en douceur, regard, gestes ponctuels, style de mouvement par personnage, forme de bouche (Pro).
 import { EXPRESSIONS, NEUTRE, poseDe, approcher } from './expressions.js';
 import { grouperTete, grouperAvantBras, brasDevant } from './rig.js';
+import { appliquer as appliquerBouche, formeDe, VISEMES } from './mouth.js';
 
 export { EXPRESSIONS };
 const VIS = [5, 9, 14, 19]; // hauteur de la bouche par niveau de lip-sync (0 = fermé)
@@ -76,7 +77,61 @@ export class Character {
     const pv = def.pivots || {};
     this.pivL = pv.epaule_g || [34, 224]; this.pivR = pv.epaule_d || [208, 224]; this.cou = pv.cou || [120, 202];
     this.coudeL = pv.coude_g || [this.pivL[0], 266]; this.coudeR = pv.coude_d || [this.pivR[0], 266];
-    this.yeuxY = +this.el.eyeL.getAttribute('cy') || 129;
+    // Lit cy sur l'élément #eye-l directement (circle) OU sur son premier enfant (groupe)
+    // → permet aux SVG qui utilisent <g id="eye-l"><ellipse .../></g> de cligner au bon endroit.
+    const eyeNode = this.el.eyeL;
+    const eyeCy = eyeNode.getAttribute('cy')
+      || eyeNode.querySelector('ellipse')?.getAttribute('cy')
+      || eyeNode.querySelector('circle')?.getAttribute('cy')
+      || 129;
+    this.yeuxY = +eyeCy;
+    // Attributs de BASE du SVG : chaque personnage peut avoir des yeux et une bouche de tailles
+    // différentes. On lit les valeurs d'origine et on les utilise comme référence pour les expressions.
+    // Robot : r=11, w=48. Amina (viewBox 200x330) : r=4, w=28 par exemple.
+    this.rBase = Math.max(1, +this.el.eyeL.getAttribute('r') || 11);
+    this.wBase = Math.max(1, +this.el.mouth.getAttribute('width') || 48);
+    this.hBase = Math.max(1, +this.el.mouth.getAttribute('height') || 5);
+    this.yBase = +this.el.mouth.getAttribute('y') || 163;
+    this.xBase = +this.el.mouth.getAttribute('x') || 96;
+    // Détection : <rect id="mouth"> (robot, bouche simple) ou <g id="mouth"> (humains, lèvres dessinées).
+    // Le type "lèvres" vient aussi de la fiche JSON : def.bouche?.type === 'levres'.
+    const gm = this.el.mouth;
+    const estGroupe = gm && gm.tagName.toLowerCase() === 'g';
+    const typeLevre = (def.bouche && def.bouche.type === 'levres');
+    // Détection humain : le personnage a des lèvres dessinées (def.bouche.type === 'levres').
+    // On adapte alors les amplitudes de mouvement (le robot fait 600px de haut, l'humain 330).
+    this.estHumain = estGroupe && typeLevre;
+    this.bassin = pv.bassin || [120, 354];  // pivot de rotation du corps (robot par défaut)
+    // Facteur d'échelle : 1.0 pour le robot, ~0.55 pour un humain de 330px.
+    this.scale = this.estHumain ? 0.55 : 1.0;
+    // Les bras des humains sont collés au corps par défaut (dans le SVG), contrairement au robot
+    // qui a les bras écartés. On atténue donc les rotations de bras pour les humains, sinon ils
+    // ressemblent à des ailes qui s'ouvrent.
+    // Humains : les gestes de bras obéissent à des règles différentes du robot.
+    // Le robot a des bras mécaniques (rotations amples, gestes précis).
+    // L'humain gesticule naturellement pendant la parole (balancement + amplitude).
+    this.membreScale = this.estHumain ? 0.6 : 1.0;
+    if (estGroupe && typeLevre) {
+      this.bouche = {
+        interieur: gm.querySelector('#levre-creux'),
+        levreHaut: gm.querySelector('#levre-haut'),
+        levreBas: gm.querySelector('#levre-bas'),
+        dents: gm.querySelector('#bouche-dents'),
+        langue: gm.querySelector('#bouche-langue'),
+        demiLargeur: def.bouche.demiLargeur || 9.5,
+        ouvertureMax: def.bouche.ouvertureMax || 8,
+      };
+      const pvM = def.pivots || {};
+      this.centreX = (Array.isArray(pvM.centre) && pvM.centre) || pvM.bouche * 0 + 100;
+      this.centreX = typeof pvM.centre === 'number' ? pvM.centre : (pvM.bouche || 100);
+      this.centreX = (Array.isArray(pvM.centre) ? pvM.centre[0] : pvM.centre) || (pvM.bouche || 100);
+      this.boucheY = typeof pvM.bouche === 'number' ? pvM.bouche : (pvM.centre || 84);
+      // Simplification : le JSON stocke centre=100, bouche=84 (nombres).
+      this.centreX = typeof pvM.centre === 'number' ? pvM.centre : 100;
+      this.boucheY = typeof pvM.bouche === 'number' ? pvM.bouche : 84;
+    } else {
+      this.bouche = null;
+    }
     this.gain = 1; this.rich = false; this.shape = 'normal'; this.gesteFin = 0; this.gesteBras = 1; this.raf = 0;
     this.pose = { ...NEUTRE }; this.cible = { ...NEUTRE }; this.phase = 0; this.dernier = 0;
     this.geste = { type: '', t0: 0 }; this.regard = [0, 0]; this.coup = [0, 0]; this.coupFin = 0; this.nextCoup = 1500;
@@ -92,6 +147,16 @@ export class Character {
   setExpression(n, force = 1, mix = '', poids = 0) {
     this.expr = EXPRESSIONS[n] ? n : 'neutre';
     this.cible = poseDe(this.expr, force, mix, poids);
+    // Humains : les gestes de bras des expressions sont LIMITÉS à des valeurs humaines.
+    // Un robot peut lever les bras à 195° (bras tendus vers le haut) ; un humain ne lève
+    // pas les bras aussi haut en parlant. On clamp : bras max ±50°, coudes max ±70°.
+    if (this.estHumain) {
+      const clamp = (v, lim) => Math.max(-lim, Math.min(lim, v));
+      this.cible.armL = clamp(this.cible.armL * 0.6, 50);
+      this.cible.armR = clamp(this.cible.armR * 0.6, 50);
+      this.cible.foreL = clamp(this.cible.foreL * 0.6, 70);
+      this.cible.foreR = clamp(this.cible.foreR * 0.6, 70);
+    }
   }
   /** Applique tout de suite la pose visée, sans transition (vignettes, tests). */
   snap() { this.pose = { ...this.cible }; }
@@ -155,27 +220,28 @@ export class Character {
     let gx = 0, gy = 0, saut = 0, salut = 0, agite = 0;
     const u = this.geste.type ? (t - this.geste.t0) / GESTES[this.geste.type] : 1;
     if (u >= 0 && u < 1) {
-      if (this.geste.type === 'hoche') gy = Math.sin(u * 4 * Math.PI) * 5 * (1 - u) * k;
-      else if (this.geste.type === 'hoche_lent') gy = Math.sin(u * 2 * Math.PI) * 7 * (1 - u) * k;
-      else if (this.geste.type === 'secoue') gx = Math.sin(u * 6 * Math.PI) * 5 * (1 - u) * k;
-      else if (this.geste.type === 'dodeline') { gx = Math.sin(u * 3 * Math.PI) * 7 * (1 - u) * k; gy = Math.sin(u * 2 * Math.PI) * 2 * (1 - u) * k; }
-      else if (this.geste.type === 'tremble') gx = Math.sin(u * 15 * Math.PI) * 3 * (1 - u) * k;
-      else if (this.geste.type === 'coucou') { salut = Math.min(1, Math.sin(u * Math.PI) * 1.8); agite = Math.sin(u * 10 * Math.PI) * 22; }
-      else if (this.geste.type === 'sursaut_fort') saut = -Math.sin(u * Math.PI) * 18 * k;
-      else if (this.geste.type === 'sursaut_double') saut = -Math.abs(Math.sin(u * 2 * Math.PI)) * 12 * k;
-      else saut = -Math.sin(u * Math.PI) * 9 * k;
+      const gs = this.scale;  // 1.0 robot, ~0.55 humain : gestes moins amples
+      if (this.geste.type === 'hoche') gy = Math.sin(u * 4 * Math.PI) * 5 * (1 - u) * k * gs;
+      else if (this.geste.type === 'hoche_lent') gy = Math.sin(u * 2 * Math.PI) * 7 * (1 - u) * k * gs;
+      else if (this.geste.type === 'secoue') gx = Math.sin(u * 6 * Math.PI) * 5 * (1 - u) * k * gs;
+      else if (this.geste.type === 'dodeline') { gx = Math.sin(u * 3 * Math.PI) * 7 * (1 - u) * k * gs; gy = Math.sin(u * 2 * Math.PI) * 2 * (1 - u) * k * gs; }
+      else if (this.geste.type === 'tremble') gx = Math.sin(u * 15 * Math.PI) * 3 * (1 - u) * k * gs;
+      else if (this.geste.type === 'coucou') { salut = Math.min(1, Math.sin(u * Math.PI) * 1.8); agite = Math.sin(u * 10 * Math.PI) * 22 * gs; }
+      else if (this.geste.type === 'sursaut_fort') saut = -Math.sin(u * Math.PI) * 18 * k * gs;
+      else if (this.geste.type === 'sursaut_double') saut = -Math.abs(Math.sin(u * 2 * Math.PI)) * 12 * k * gs;
+      else saut = -Math.sin(u * Math.PI) * 9 * k * gs;
     }
     // Corps : respiration (référence), rebond, tremblement, flottement ; les jambes ne suivent que les déplacements.
-    const br = Math.sin(s * 1.6) * 4.0 * k, tr = o.tremble * k;
-    const dodeline = Math.sin(s * 0.55) * 1.8 * k;
+    const br = Math.sin(s * 1.6) * 4.0 * k * this.scale, tr = o.tremble * k;
+    const dodeline = Math.sin(s * 0.55) * 1.8 * k * this.scale;
     const dx = (p.ondule ? Math.sin(s * 1.1) * p.ondule * k : 0) + Math.sin(t * 0.055) * tr;
     const dy = (p.flotte ? -(Math.sin(s * 0.9) + 1) * p.flotte * k : 0) - Math.abs(Math.sin(s * 3.2)) * o.bounce * k + saut + Math.cos(t * 0.047) * tr * 0.4 + rDy;
     const tout = Math.abs(dx) + Math.abs(dy) > 0.004 ? `translate(${f2(dx)} ${f2(dy)}) ` : '';
-    const pench = Math.abs(o.lean) > 0.02 ? ` rotate(${f2(o.lean)} 120 354)` : '';
+    const pench = Math.abs(o.lean) > 0.02 ? ` rotate(${f2(o.lean * this.scale)} ${this.bassin[0]} ${this.bassin[1]})` : '';
     e.body.setAttribute('transform', `${tout}translate(${f2(dodeline * 1.0)} ${f2(o.bodyY - br * 1.3)})${pench}`);
     if (e.legs) e.legs.setAttribute('transform', `${tout}rotate(${f2(dodeline * 0.8)} 120 354)`);
     // Tête : pose de l'expression + balancement + léger mouvement pendant la parole + geste ponctuel.
-    const hr = o.headR + rHeadR + sceneHeadR + Math.sin(s * 1.1) * Math.max(o.sway, 2.5) * k + Math.sin(s * 2.1) * 1.3 * this.talk * k;
+    const hr = o.headR + rHeadR + sceneHeadR + Math.sin(s * 1.1) * Math.max(o.sway, 2.5 * this.scale) * k + Math.sin(s * 2.1) * 1.3 * this.talk * k * this.scale;
     const hy = o.headY + gy + br * 0.55 + Math.sin(s * 4.2) * 0.9 * this.talk * k + rHeadY, hx = o.headX + gx;
     e.head.setAttribute('transform', `translate(${f2(hx)} ${f2(hy)}) rotate(${f2(hr)} ${this.cou[0]} ${this.cou[1]})`);
     // Geste scénarisé : séquence multi-articulations (gratter, lunettes). Interpolation entre keyframes.
@@ -208,7 +274,7 @@ export class Character {
         const TYPES = ['bras', 'epauleG', 'epauleD', 'coudeG', 'coudeD'];
         const type = TYPES[(Math.random() * TYPES.length) | 0];
         const duree = 400 + Math.random() * 500;
-        const amp = (type.startsWith('coude') ? 5 : 3) + Math.random() * 5;
+        const amp = ((type.startsWith('coude') ? 5 : 3) + Math.random() * 5) * this.scale;
         this.parasite = { type, t0: t, duree, amp };
         this.nextParasite = t + (this.talk > 0.3 ? 12000 + Math.random() * 6000 : 5500 + Math.random() * 3500);
       }
@@ -227,10 +293,14 @@ export class Character {
     // Bras : épaule et coude de l'expression + balancement pendant la parole (référence) + geste + parasite ; « pas » = mouvement saccadé.
     const cran = (a) => (p.pas ? Math.round(a / p.pas) * p.pas : a), base = `${tout}translate(0 ${f2(o.bodyY)})${pench} `;
     const g = t < this.gesteFin ? Math.sin(Math.PI * (1 - (this.gesteFin - t) / 700)) * (this.rich ? 42 : 24) * k : 0;
-    const amp = 7 * this.talkLisse * k * p.amplitude * o.swing;
+    // Humains : gesticulent naturellement avec les mains en parlant. Le robot a un balancement
+    // plus mécanique ; l'humain bouge plus, plus lentement, plus organique.
+    const amp = (this.estHumain ? 12 : 7) * this.talkLisse * k * p.amplitude * o.swing;
     const epL = o.armL + (24 - o.armL) * salut, coL = o.foreL + (agite - 204 - o.foreL) * salut; // « coucou » : avant-bras gauche levé, main agitée
-    const aL = epL + cran(Math.sin(s * 1.3) * amp + (this.gesteBras < 0 ? g : 0)) + paraL;
-    const aR = -o.armR + cran(-Math.sin(s * 1.1 + 1) * amp - (this.gesteBras > 0 ? g : 0)) + paraR + sceneArmR;
+    const f1 = this.estHumain ? 0.85 : 1.3; // humains : balancement plus lent
+    const f2b = this.estHumain ? 0.7 : 1.1;
+    const aL = epL + cran(Math.sin(s * f1) * amp + (this.gesteBras < 0 ? g : 0)) + paraL;
+    const aR = -o.armR + cran(-Math.sin(s * f2b + 1) * amp - (this.gesteBras > 0 ? g : 0)) + paraR + sceneArmR;
     e.armL.setAttribute('transform', `${base}rotate(${f2(aL)} ${this.pivL[0]} ${this.pivL[1]})`);
     e.armR.setAttribute('transform', `${base}rotate(${f2(aR)} ${this.pivR[0]} ${this.pivR[1]})`);
     const fL = coL + cran(Math.sin(s * 1.4 + 2) * amp * 0.8 + (this.gesteBras < 0 ? g * 0.9 : 0)) + paraFL;
@@ -239,15 +309,33 @@ export class Character {
     e.foreR.setAttribute('transform', `rotate(${f2(fR)} ${this.coudeR[0]} ${this.coudeR[1]})`);
     // Bouche : la hauteur suit le niveau de lip-sync, l'expression fixe un minimum, une largeur et un décalage.
     const h = Math.max(VIS[this.viseme], o.h), w = o.w * (this.rich ? BOUCHES[this.shape] / 48 : 1), m = e.mouth;
-    m.setAttribute('height', f2(h)); m.setAttribute('y', f2(165.5 + o.my - h / 2)); m.setAttribute('rx', f2(Math.min(h / 2, 6)));
-    m.setAttribute('width', f2(w)); m.setAttribute('x', f2(120 - w / 2));
+    // Bouche : deux modèles selon le personnage.
+    if (this.bouche) {
+      // Humains : lèvres dessinées (courbes, dents, langue) via mouth.js.
+      const v = VISEMES[this.visemeNom] || (this.lettre && formeDe(this.lettre)) || {};
+      appliquerBouche(this.bouche, this.centreX + o.gx * 0.2, this.boucheY + o.my,
+        this.bouche.demiLargeur * (w / 48),
+        h * (this.bouche.ouvertureMax / 19),
+        { courbure: o.sourire || 0, arrondi: Math.max(o.rond || 0, v.arrondi || 0), etirement: v.etirement || 0 });
+    } else {
+      // Robot : ouverture symétrique (rect).
+      const hAdapte = Math.max(1, h * this.hBase / 5);
+      const wAdapte = Math.max(1, w * this.wBase / 48);
+      const cx = this.xBase + this.wBase / 2;
+      const cy = this.yBase + this.hBase / 2 + o.my;
+      m.setAttribute('height', f2(hAdapte));
+      m.setAttribute('width', f2(wAdapte));
+      m.setAttribute('x', f2(cx - wAdapte / 2));
+      m.setAttribute('y', f2(cy - hAdapte / 2));
+      m.setAttribute('rx', f2(Math.min(hAdapte / 2, wAdapte / 2, 6)));
+    }
     // Yeux : rayon et ouverture selon l'expression, regard, clignement par écrasement vertical autour du centre.
     const sy = t < this.blinkUntil ? 0.15 : o.lid, rx = o.gx + this.regard[0], ry = o.gy + this.regard[1], y = this.yeuxY;
     const driftX = Math.sin(s * 0.55) * 1.3 * k + Math.sin(s * 1.5) * 0.6 * k + rGx + sceneGx;
     const driftY = Math.cos(s * 0.45) * 0.8 * k + rGy;
     const vers = `translate(${f2(rx + driftX)} ${f2(ry + driftY)})`;
     for (const eye of [e.eyeL, e.eyeR]) {
-      eye.setAttribute('r', f2(o.r));
+      eye.setAttribute('r', f2(o.r * this.rBase / 11)); // rBase : adapte le rayon au personnage
       eye.setAttribute('transform', sy > 0.995 ? vers : `${vers} translate(0 ${y}) scale(1 ${f2(sy)}) translate(0 ${-y})`);
     }
     for (const r of this.reflets) { r.setAttribute('transform', vers); r.setAttribute('opacity', sy > 0.6 ? '1' : '0'); }
