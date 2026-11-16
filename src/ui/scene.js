@@ -18,6 +18,7 @@ import { applyTheme } from '../modules/themes.js';
 import { EXPRESSIONS_BASE, EXPRESSIONS_PRO } from '../modules/project.js';
 import { wakeLock } from '../modules/pwa.js';
 import { getEngine } from '../modules/voice/engine.js';
+import { prechaufferTexte } from '../modules/voice/prechauffer-texte.js';
 import { logError, notify, report } from '../modules/errors.js';
 import { createControls } from './scene-controls.js';
 import { creerExport } from './scene-export.js';
@@ -52,7 +53,14 @@ export async function render(root) {
     texte: projet.texte, vitesse: projet.audio.voix.vitesse, volume: store.settings.volume ?? 1,
     onCapture: presentation, onVitesse: changerVitesse, onVoix: () => ouvrirListeVoix(projet, voixChangee),
     onFichier: async () => { if (await choisirAudio(projet)) voixChangee(); },
-    onTexte: (v) => { projet.texte = v; toucher(); }, onLancer: lancer, onArreter: arreter, onMuet: basculerMuet,
+    onTexte: (v) => {
+      projet.texte = v; toucher();
+      // Pré-chauffage en arrière-plan : si la voix Piper est active, on synthétise les
+      // premières phrases dès la saisie. Lancer devient instantané si on clique dans les 30 s.
+      if (projet.audio?.voix?.moteur === 'piper' && projet.audio.voix.id) {
+        prechaufferTexte(v, projet.audio.voix.id, { vitesse: projet.audio.voix.vitesse || 1 });
+      }
+    }, onLancer: lancer, onArreter: arreter, onMuet: basculerMuet,
     onVolume: (v) => { prep?.source.setVolume(v); majReglages({ volume: v }).catch((err) => report('reglages', err)); },
   });
   const scene = h('section', { class: 'scene', 'aria-label': t('nav.scene') }, stage, controls.el);
