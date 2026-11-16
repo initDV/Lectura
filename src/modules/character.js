@@ -5,7 +5,7 @@
 // corps) fondues en douceur, regard, gestes ponctuels, style de mouvement par personnage, forme de bouche (Pro).
 import { EXPRESSIONS, NEUTRE, poseDe, approcher } from './expressions.js';
 import { grouperTete, grouperAvantBras, brasDevant } from './rig.js';
-import { appliquer as appliquerBouche, formeDe, VISEMES } from './mouth.js';
+import { appliquer as appliquerBouche, formeDe, VISEMES, visemeDe } from './mouth.js';
 
 export { EXPRESSIONS };
 const VIS = [5, 9, 14, 19]; // hauteur de la bouche par niveau de lip-sync (0 = fermé)
@@ -89,6 +89,7 @@ export class Character {
     // différentes. On lit les valeurs d'origine et on les utilise comme référence pour les expressions.
     // Robot : r=11, w=48. Amina (viewBox 200x330) : r=4, w=28 par exemple.
     this.rBase = Math.max(1, +this.el.eyeL.getAttribute('r') || 11);
+    this._visemeDe = visemeDe;
     this.wBase = Math.max(1, +this.el.mouth.getAttribute('width') || 48);
     this.hBase = Math.max(1, +this.el.mouth.getAttribute('height') || 5);
     this.yBase = +this.el.mouth.getAttribute('y') || 163;
@@ -102,6 +103,8 @@ export class Character {
     // On adapte alors les amplitudes de mouvement (le robot fait 600px de haut, l'humain 330).
     this.estHumain = estGroupe && typeLevre;
     this.bassin = pv.bassin || [120, 354];  // pivot de rotation du corps (robot par défaut)
+    this.sourcilG = pv.sourcil_g || [92, 104];
+    this.sourcilD = pv.sourcil_d || [148, 104];
     // Facteur d'échelle : 1.0 pour le robot, ~0.55 pour un humain de 330px.
     this.scale = this.estHumain ? 0.55 : 1.0;
     // Les bras des humains sont collés au corps par défaut (dans le SVG), contrairement au robot
@@ -160,7 +163,12 @@ export class Character {
   }
   /** Applique tout de suite la pose visée, sans transition (vignettes, tests). */
   snap() { this.pose = { ...this.cible }; }
-  setViseme(l) { this.viseme = Math.max(0, Math.min(3, l | 0)); }
+  setViseme(l, car = '', nom = '') {
+    this.viseme = Math.max(0, Math.min(3, l | 0));
+    this.lettre = car;
+    // visemeNom : forme de bouche pour mouth.js (a/e/i/o/u). Si non fourni, calculé depuis la lettre.
+    this.visemeNom = nom || (car ? (this._visemeDe ? this._visemeDe(car) : '') : '');
+  }
   setTalking(v) { this.talk = Math.max(0, Math.min(1, v)); }
   setMouthShape(shape) { this.shape = BOUCHES[shape] ? shape : 'normal'; } // Pro : 'normal' | 'large' | 'rond'
   setReduced(v) { this.reduce = !!v; }
@@ -340,7 +348,7 @@ export class Character {
     }
     for (const r of this.reflets) { r.setAttribute('transform', vers); r.setAttribute('opacity', sy > 0.6 ? '1' : '0'); }
     // Sourcils : hauteur de chacun + inclinaison symétrique (positive = triste, négative = fâché).
-    e.browL.setAttribute('transform', `translate(0 ${f2(o.browL + rBrow)}) rotate(${f2(-o.rot)} 92 104)`);
-    e.browR.setAttribute('transform', `translate(0 ${f2(o.browR + rBrow)}) rotate(${f2(o.rot)} 148 104)`);
+    e.browL.setAttribute('transform', `translate(0 ${f2(o.browL + rBrow)}) rotate(${f2(-o.rot * this.scale)} ${this.sourcilG[0]} ${this.sourcilG[1]})`);
+    e.browR.setAttribute('transform', `translate(0 ${f2(o.browR + rBrow)}) rotate(${f2(o.rot * this.scale)} ${this.sourcilD[0]} ${this.sourcilD[1]})`);
   }
 }

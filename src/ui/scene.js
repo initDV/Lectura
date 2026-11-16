@@ -242,7 +242,11 @@ export async function render(root) {
       if (seg !== dernierSeg) { dernierSeg = seg; dernierRang = 0; if (parle && prep.matcher(seg.texte).some((j) => j.cat)) character.gesture(now); }
       if (lecture && hu.rang !== dernierRang) { if (hu.rang > dernierRang && hu.geste) character.gesture(now, hu.geste); dernierRang = hu.rang; } // mot déclencheur
       const niveau = parle ? s.viseme(now) : 0; // commandes et commentaires : bouche fermée, bras au repos
-      character.setViseme(niveau);
+      // Passer la lettre en cours au personnage : mouth.js l'utilise pour arrondir (o/u)
+      // ou étirer (i/e) la bouche → lip-sync naturel au lieu d'un simple rectangle qui bouge.
+      const texteLu = textePropre();
+      const lettreEnCours = chars < texteLu.length ? texteLu[chars] : '';
+      character.setViseme(niveau, lettreEnCours);
       character.setTalking(parle ? (niveau > 0 ? 1 : 0.15) : 0);
       if (store.pro && s.bands) character.setMouthShape(parle ? mouthShape(s.bands()) : 'normal'); // Pro : lip-sync par bandes
       if (lecture) bus.emit('timeline:tick', { ms, chars });
