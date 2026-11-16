@@ -6,6 +6,7 @@ import { icon } from './icons.js';
 import { t, taille } from '../modules/i18n.js';
 import { getEngine } from '../modules/voice/engine.js';
 import { report, notify } from '../modules/errors.js';
+import { encodeWav } from '../modules/audio.js';
 
 /** Détecte le genre depuis le nom (« · F · » ou « · M · »). */
 function genreDe(v) {
@@ -18,7 +19,7 @@ export function voixHdPanel({ onChange } = {}) {
   const el = h('div', { class: 'stack' }, h('p', { class: 'muted small', text: t('voix.hd.aide') }));
   const zone = h('div', { class: 'stack' });
   el.append(zone);
-  let moteur = null, annuler = null, voix = [], selectEl = null, detailEl = null;
+  let moteur = null, annuler = null, voix = [], selectEl = null, detailEl = null, lecteur = null, urlLecteur = null;
 
   async function dessiner() {
     clear(zone).append(h('p', { class: 'muted', text: t('commun.chargement') }));
@@ -60,11 +61,39 @@ export function voixHdPanel({ onChange } = {}) {
     const statut = h('span', { class: 'muted small', role: 'status', text: v.installe ? t('voix.hd.installee') : t('voix.hd.meta', { type: 'non installée', taille: taille(v.taille) }) });
     const actions = h('div', { class: 'row' });
 
+    // Écouter un court échantillon : synthétise "Bonjour, je suis <Nom>" et joue.
+    // Ne peut se faire que si la voix est installée. Cache implicite via le cache L1/IDB
+    // de piper.js (une même phrase n'est synthétisée qu'une fois).
+    async function ecouter() {
+      if (!v.installe || annuler) return;
+      // Annule l'écoute précédente si on clique une autre voix.
+      try { lecteur?.pause(); } catch { /* ignoré */ }
+      if (urlLecteur) { URL.revokeObjectURL(urlLecteur); urlLecteur = null; }
+      try {
+        const nomCourt = (v.nom || '').split(' ·')[0].trim() || 'Lectura';
+        const r = await moteur.synthesize(`Bonjour, je suis ${nomCourt}.`, { voixId: v.id, vitesse: 1 });
+        const wav = encodeWav(r.samples, r.sampleRate);
+        urlLecteur = URL.createObjectURL(wav);
+        lecteur = new Audio(urlLecteur);
+        lecteur.onended = () => { if (urlLecteur) { URL.revokeObjectURL(urlLecteur); urlLecteur = null; } lecteur = null; };
+        await lecteur.play();
+      } catch (err) {
+        report('voix-hd', err);
+        notify(t('voix.hd.ecoute.echec') || "Impossible d'écouter cet échantillon.", 'warn', 4000);
+      }
+    }
+
     const boutons = () => {
       clear(actions);
       if (annuler) actions.append(h('button', { type: 'button', class: 'btn', text: t('commun.annuler'), onClick: () => annuler?.abort() }));
-      else if (v.installe) actions.append(h('button', { type: 'button', class: 'btn btn-danger', onClick: supprimer }, icon('trash'), t('voix.hd.supprimer')));
-      else actions.append(h('button', { type: 'button', class: 'btn btn-primary', onClick: telecharger }, icon('download'), t('voix.hd.telecharger', { taille: taille(v.taille) })));
+      else if (v.installe) {
+        // Voix installée : Écouter + Supprimer
+        actions.append(h('button', { type: 'button', class: 'btn', onClick: ecouter, title: t('voix.hd.ecouter') }, icon('play'), t('voix.hd.ecouter')));
+        actions.append(h('button', { type: 'button', class: 'btn btn-danger', onClick: supprimer }, icon('trash'), t('voix.hd.supprimer')));
+      } else {
+        // Voix non installée : Installer
+        actions.append(h('button', { type: 'button', class: 'btn btn-primary', onClick: telecharger }, icon('download'), t('voix.hd.telecharger', { taille: taille(v.taille) })));
+      }
     };
 
     async function telecharger() {

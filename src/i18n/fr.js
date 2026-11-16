@@ -221,4 +221,6 @@ export default {
   'scene.video.verifKo': 'À vérifier · {detail}',
   'reglages.themeApp': 'Apparence',
   'reglages.themeApp.aide': 'Choisis un thème visuel. L\'aperçu est immédiat.',
+  'voix.hd.ecouter': 'Écouter',
+  'voix.hd.ecoute.echec': "Impossible d'écouter cet échantillon.",
 };

@@ -221,4 +221,6 @@ export default {
   'scene.video.verifKo': 'Check warning · {detail}',
   'reglages.themeApp': 'Appearance',
   'reglages.themeApp.aide': 'Pick a visual theme. Preview is immediate.',
+  'voix.hd.ecouter': 'Listen',
+  'voix.hd.ecoute.echec': 'Could not play this sample.',
 };
