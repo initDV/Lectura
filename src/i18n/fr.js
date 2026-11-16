@@ -222,5 +222,6 @@ export default {
   'reglages.themeApp': 'Apparence',
   'reglages.themeApp.aide': 'Choisis un thème visuel. L\'aperçu est immédiat.',
   'voix.hd.ecouter': 'Écouter',
+  'voix.hd.ecoute.chargement': 'Chargement de la voix…',
   'voix.hd.ecoute.echec': "Impossible d'écouter cet échantillon.",
 };

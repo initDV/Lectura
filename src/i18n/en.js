@@ -222,5 +222,6 @@ export default {
   'reglages.themeApp': 'Appearance',
   'reglages.themeApp.aide': 'Pick a visual theme. Preview is immediate.',
   'voix.hd.ecouter': 'Listen',
+  'voix.hd.ecoute.chargement': 'Loading voice…',
   'voix.hd.ecoute.echec': 'Could not play this sample.',
 };

@@ -19,7 +19,7 @@ export function voixHdPanel({ onChange } = {}) {
   const el = h('div', { class: 'stack' }, h('p', { class: 'muted small', text: t('voix.hd.aide') }));
   const zone = h('div', { class: 'stack' });
   el.append(zone);
-  let moteur = null, annuler = null, voix = [], selectEl = null, detailEl = null, lecteur = null, urlLecteur = null;
+  let moteur = null, annuler = null, voix = [], selectEl = null, detailEl = null, lecteur = null, urlLecteur = null, ecouteEnCours = false, ecouteAbort = null;
 
   async function dessiner() {
     clear(zone).append(h('p', { class: 'muted', text: t('commun.chargement') }));
@@ -62,24 +62,40 @@ export function voixHdPanel({ onChange } = {}) {
     const actions = h('div', { class: 'row' });
 
     // Écouter un court échantillon : synthétise "Bonjour, je suis <Nom>" et joue.
-    // Ne peut se faire que si la voix est installée. Cache implicite via le cache L1/IDB
-    // de piper.js (une même phrase n'est synthétisée qu'une fois).
+    // Ne peut se faire que si la voix est installée.
+    // Protections : (1) un seul appel à la fois (sinon deux syntheses Piper se tuent),
+    // (2) annulation propre si on reclique sur une autre voix.
     async function ecouter() {
       if (!v.installe || annuler) return;
-      // Annule l'écoute précédente si on clique une autre voix.
+      if (ecouteEnCours) {
+        // Re-clic sur la même voix pendant qu'elle charge : on annule simplement le précédent.
+        ecouteAbort?.abort();
+        return;
+      }
+      // Annule l'écoute précédente (autre voix) si on clique une nouvelle.
       try { lecteur?.pause(); } catch { /* ignoré */ }
       if (urlLecteur) { URL.revokeObjectURL(urlLecteur); urlLecteur = null; }
+      ecouteEnCours = true;
+      const abort = new AbortController();
+      ecouteAbort = abort;
+      // Message "chargement" pendant la synthèse (le worker peut mettre 5-15s sur un nouveau modèle)
+      notify(t('voix.hd.ecoute.chargement') || 'Chargement de la voix…', 'info', 20000);
       try {
         const nomCourt = (v.nom || '').split(' ·')[0].trim() || 'Lectura';
-        const r = await moteur.synthesize(`Bonjour, je suis ${nomCourt}.`, { voixId: v.id, vitesse: 1 });
+        const phrase = `Bonjour, je suis ${nomCourt}.`;
+        const r = await moteur.synthesize(phrase, { voixId: v.id, vitesse: 1 });
+        if (abort.signal.aborted) { ecouteEnCours = false; ecouteAbort = null; return; }
         const wav = encodeWav(r.samples, r.sampleRate);
         urlLecteur = URL.createObjectURL(wav);
         lecteur = new Audio(urlLecteur);
         lecteur.onended = () => { if (urlLecteur) { URL.revokeObjectURL(urlLecteur); urlLecteur = null; } lecteur = null; };
         await lecteur.play();
       } catch (err) {
+        if (abort.signal.aborted) return;  // clic d'annulation : pas de message d'erreur
         report('voix-hd', err);
         notify(t('voix.hd.ecoute.echec') || "Impossible d'écouter cet échantillon.", 'warn', 4000);
+      } finally {
+        if (ecouteAbort === abort) { ecouteEnCours = false; ecouteAbort = null; }
       }
     }
 
