@@ -91,10 +91,16 @@ async function sauverBrouillon() {
   } catch (err) { report('brouillon', err); }
 }
 
+// Applique le thème d'apparence au démarrage (data-theme sur <html>).
+export function appliquerTheme(nom) {
+  document.documentElement.setAttribute('data-theme', nom || 'actuel');
+}
+
 export async function demarrer() {
   installGlobalHandlers();
   initToasts();
   store.settings = await loadSettings();
+  appliquerTheme(store.settings.themeApp || 'actuel');
   await setLang(store.settings.langue);
   await verifierLicenceEnregistree();
   initShell();

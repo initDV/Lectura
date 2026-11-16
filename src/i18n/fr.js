@@ -219,4 +219,6 @@ export default {
   'dl.mp4.aacEchec': 'Conversion AAC impossible (MP4 lisible uniquement dans le navigateur)',
   'scene.video.verifOk': 'Vidéo vérifiée · {detail}',
   'scene.video.verifKo': 'À vérifier · {detail}',
+  'reglages.themeApp': 'Apparence',
+  'reglages.themeApp.aide': 'Choisis un thème visuel. L\'aperçu est immédiat.',
 };

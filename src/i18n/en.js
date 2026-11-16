@@ -219,4 +219,6 @@ export default {
   'dl.mp4.aacEchec': 'AAC conversion failed (MP4 only playable in browser)',
   'scene.video.verifOk': 'Video verified · {detail}',
   'scene.video.verifKo': 'Check warning · {detail}',
+  'reglages.themeApp': 'Appearance',
+  'reglages.themeApp.aide': 'Pick a visual theme. Preview is immediate.',
 };

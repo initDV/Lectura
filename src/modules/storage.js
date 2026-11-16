@@ -13,7 +13,7 @@ export const DEFAUTS = {
   langue: 'fr', moteurVoix: 'webspeech', voixId: '', vitesseVoix: 1, hauteurVoix: 1, volume: 1,
   themeTerminal: 'sombre', policeTerminal: 'JetBrains Mono', tailleTexte: 18, vitesseDefilement: 28,
   reduireAnimations: false, modePresentation: false, idInstallation: '', licence: '',
-  tutorielVu: false, motsPerso: {}, formatVideo: '9:16',
+  tutorielVu: false, motsPerso: {}, formatVideo: '9:16', themeApp: 'actuel',
   personnageId: 'robot_lectura', titreTerminal: 'rhak_override@sentinel: ~/cours',
   decor: { mur: '#28324d', sol: '#211a33', horizon: '#5ba5c9', neon: '#c67fa6' },
 };

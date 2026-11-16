@@ -1,0 +1,152 @@
+/* themes.css : 10 thèmes d'apparence. Chaque bloc redéfinit les variables de tokens.css.
+   Application : <html data-theme="actuel"> (par défaut) ou l'un des 9 autres. */
+
+/* ───────────────────────── 1 · ACTUEL (violet tech) ───────────────────── */
+[data-theme="actuel"] {
+  --bg: #0d0d12; --surface: #13131a; --surface-2: #1a1a23;
+  --border: #2a2a35; --text: #b0b0b8; --text-strong: #ffffff;
+  --muted: #6b6b78; --muted-text: #8a8a98;
+  --violet: #9b45e0; --violet-fill: #a04be3;
+  --accent: #9b45e0; --accent-text: #c08cf5; --accent-2: #a76bff;
+  --danger: #ff4d4d; --ok: #3ddc84; --warn: #ff9f43; --focus: #d3a8ff;
+  --radius: 16px; --radius-lg: 20px;
+  --term-bg: #13131a; --term-bar: #13131a; --term-bord: #2a2a35;
+  --font-ui: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --robot-stroke: #9b45e0; --robot-fill: #1c1830;
+  --robot-eye: #3ddc84; --robot-mouth: #38bdf8;
+}
+
+/* ─────────────────────── 2 · EMINENCE CLAIR (papier) ──────────────────── */
+[data-theme="eminence-clair"] {
+  --bg: #faf9f6; --surface: #ffffff; --surface-2: #f7f5f0;
+  --border: #ebe7de; --text: #2a2825; --text-strong: #1a1a1a;
+  --muted: #a8a29a; --muted-text: #8a8279;
+  --violet: #b8663a; --violet-fill: #c97a4d;
+  --accent: #b8663a; --accent-text: #8b4a2a; --accent-2: #4a6b5a;
+  --danger: #c14343; --ok: #4a7c59; --warn: #b8763d; --focus: #d9a880;
+  --radius: 12px; --radius-lg: 16px;
+  --term-bg: #ffffff; --term-bar: #f7f5f0; --term-bord: #ebe7de;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --robot-stroke: #c9b89a; --robot-fill: #ffffff;
+  --robot-eye: #4a6b5a; --robot-mouth: #8aab9c;
+}
+
+/* ─────────────────────── 3 · EMINENCE SOMBRE (or) ─────────────────────── */
+[data-theme="eminence-sombre"] {
+  --bg: #0f0f0f; --surface: #161616; --surface-2: #1a1a1a;
+  --border: #242424; --text: #d8d5ce; --text-strong: #e8e6e1;
+  --muted: #4a4540; --muted-text: #6b6862;
+  --violet: #c9955a; --violet-fill: #d9a76a;
+  --accent: #c9955a; --accent-text: #d9a76a; --accent-2: #8fb89e;
+  --danger: #e57373; --ok: #8fb89e; --warn: #c9955a; --focus: #e0b880;
+  --radius: 10px; --radius-lg: 14px;
+  --term-bg: #161616; --term-bar: #1a1a1a; --term-bord: #242424;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --robot-stroke: #4a4540; --robot-fill: #161616;
+  --robot-eye: #8fb89e; --robot-mouth: #6b8c7a;
+}
+
+/* ──────────────────────────── 4 · PASTEL ──────────────────────────────── */
+[data-theme="pastel"] {
+  --bg: #fdf6f0; --surface: #ffffff; --surface-2: #faeae0;
+  --border: #f0d8c8; --text: #4a3a35; --text-strong: #2a1a15;
+  --muted: #b8a89a; --muted-text: #8a7a6a;
+  --violet: #f4a6c0; --violet-fill: #f7b8ce;
+  --accent: #f4a6c0; --accent-text: #b85580; --accent-2: #8bc9a5;
+  --danger: #e87a7a; --ok: #8bc9a5; --warn: #f9d77e; --focus: #f7c0d2;
+  --radius: 20px; --radius-lg: 24px;
+  --term-bg: #ffffff; --term-bar: #faeae0; --term-bord: #f0d8c8;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --robot-stroke: #f4a6c0; --robot-fill: #ffffff;
+  --robot-eye: #8bc9a5; --robot-mouth: #f9d77e;
+}
+
+/* ────────────────────────── 5 · PAPIER JOURNAL ────────────────────────── */
+[data-theme="papier"] {
+  --bg: #f8f4e8; --surface: #fefcf6; --surface-2: #f0ebd8;
+  --border: #e0d8c0; --text: #3a2f1f; --text-strong: #1a1008;
+  --muted: #a89a80; --muted-text: #6b5a3f;
+  --violet: #6b4a2f; --violet-fill: #7a5638;
+  --accent: #6b4a2f; --accent-text: #8b5a3f; --accent-2: #b89968;
+  --danger: #b85a3a; --ok: #5a8a5a; --warn: #b89968; --focus: #8b5a3f;
+  --radius: 8px; --radius-lg: 12px;
+  --term-bg: #fefcf6; --term-bar: #f0ebd8; --term-bord: #e0d8c0;
+  --font-ui: Georgia, "Times New Roman", serif;
+  --robot-stroke: #6b4a2f; --robot-fill: #fefcf6;
+  --robot-eye: #5a8a5a; --robot-mouth: #b89968;
+}
+
+/* ────────────────────────── 6 · MINIMALISTE ───────────────────────────── */
+[data-theme="minimaliste"] {
+  --bg: #ffffff; --surface: #ffffff; --surface-2: #f8f8f8;
+  --border: #e8e8e8; --text: #333333; --text-strong: #000000;
+  --muted: #cccccc; --muted-text: #888888;
+  --violet: #000000; --violet-fill: #1a1a1a;
+  --accent: #000000; --accent-text: #000000; --accent-2: #555555;
+  --danger: #d00000; --ok: #008000; --warn: #cc8800; --focus: #444444;
+  --radius: 4px; --radius-lg: 8px;
+  --term-bg: #ffffff; --term-bar: #f8f8f8; --term-bord: #e8e8e8;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --robot-stroke: #000000; --robot-fill: #ffffff;
+  --robot-eye: #000000; --robot-mouth: #333333;
+}
+
+/* ──────────────────────────── 7 · OCÉAN ───────────────────────────────── */
+[data-theme="ocean"] {
+  --bg: #0a1929; --surface: #0f2436; --surface-2: #142d44;
+  --border: #1e3a52; --text: #a0c0d8; --text-strong: #e8f2f8;
+  --muted: #506a80; --muted-text: #7898b0;
+  --violet: #4ecdc4; --violet-fill: #5fd4cb;
+  --accent: #4ecdc4; --accent-text: #6fe0d8; --accent-2: #f5e6d3;
+  --danger: #ff6b6b; --ok: #4ecdc4; --warn: #f5e6d3; --focus: #6fe0d8;
+  --radius: 14px; --radius-lg: 18px;
+  --term-bg: #0f2436; --term-bar: #142d44; --term-bord: #1e3a52;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --robot-stroke: #4ecdc4; --robot-fill: #0f2436;
+  --robot-eye: #6fe0d8; --robot-mouth: #f5e6d3;
+}
+
+/* ──────────────────────────── 8 · FORÊT ───────────────────────────────── */
+[data-theme="foret"] {
+  --bg: #1a2a1f; --surface: #22362a; --surface-2: #2a4234;
+  --border: #3a5244; --text: #b8c8a8; --text-strong: #e8f0d8;
+  --muted: #5a7060; --muted-text: #8aa090;
+  --violet: #d4a76a; --violet-fill: #e0b880;
+  --accent: #d4a76a; --accent-text: #e0b880; --accent-2: #8ba870;
+  --danger: #c87a5a; --ok: #8ba870; --warn: #d4a76a; --focus: #e0b880;
+  --radius: 12px; --radius-lg: 16px;
+  --term-bg: #22362a; --term-bar: #2a4234; --term-bord: #3a5244;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --robot-stroke: #d4a76a; --robot-fill: #22362a;
+  --robot-eye: #8ba870; --robot-mouth: #d4a76a;
+}
+
+/* ──────────────────────────── 9 · RÉTRO ───────────────────────────────── */
+[data-theme="retro"] {
+  --bg: #000000; --surface: #0a0a0a; --surface-2: #111111;
+  --border: #2a0a2a; --text: #cccccc; --text-strong: #ffffff;
+  --muted: #555555; --muted-text: #999999;
+  --violet: #ff2e93; --violet-fill: #ff4ba3;
+  --accent: #ff2e93; --accent-text: #ff6bb0; --accent-2: #00d9ff;
+  --danger: #ff2e93; --ok: #00d9ff; --warn: #ffff00; --focus: #ff6bb0;
+  --radius: 0px; --radius-lg: 2px;
+  --term-bg: #0a0a0a; --term-bar: #111111; --term-bord: #2a0a2a;
+  --font-ui: 'JetBrains Mono', ui-monospace, monospace;
+  --robot-stroke: #ff2e93; --robot-fill: #0a0a0a;
+  --robot-eye: #00d9ff; --robot-mouth: #ffff00;
+}
+
+/* ──────────────────────────── 10 · SAFRAN ─────────────────────────────── */
+[data-theme="safran"] {
+  --bg: #fdf6e3; --surface: #fefbf0; --surface-2: #f8eed2;
+  --border: #e8d8b0; --text: #4a3820; --text-strong: #2a1808;
+  --muted: #a89070; --muted-text: #8b6a3f;
+  --violet: #d4a017; --violet-fill: #e0b030;
+  --accent: #d4a017; --accent-text: #b8880a; --accent-2: #8b4513;
+  --danger: #b83a1a; --ok: #6b8a3a; --warn: #d4a017; --focus: #e0b030;
+  --radius: 16px; --radius-lg: 20px;
+  --term-bg: #fefbf0; --term-bar: #f8eed2; --term-bord: #e8d8b0;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --robot-stroke: #d4a017; --robot-fill: #fefbf0;
+  --robot-eye: #6b8a3a; --robot-mouth: #8b4513;
+}
