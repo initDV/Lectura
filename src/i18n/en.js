@@ -214,4 +214,7 @@ export default {
   'voix.hd.masculin': 'Male voices',
   'voix.hd.installee': 'Installed',
   'voix.hd.meta': '{type} · {taille}',
+  'dl.mp4.aac': 'Converting audio to AAC for TikTok…',
+  'dl.mp4.aacOk': 'TikTok-ready MP4 · {taille}',
+  'dl.mp4.aacEchec': 'AAC conversion failed (MP4 only playable in browser)',
 };
