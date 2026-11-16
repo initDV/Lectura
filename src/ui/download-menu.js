@@ -41,7 +41,23 @@ export function ouvrirMenuTelechargement({ videoBlob, mime, fileBase }) {
   const preparerMp4 = async () => {
     notify(t('dl.mp4.reparation'), 'info', 3000);
     const corrige = await remuxerMp4(videoBlob);
-    return corrige || videoBlob;
+    const base = corrige || videoBlob;
+    // Conversion AAC : Chrome enregistre en Opus dans le MP4, qu'aucun reseau social
+    // ne decode. On reencode l'audio seul (video H.264 recopiee) avant telechargement/partage.
+    try {
+      const { convertirEnAac } = await import('../modules/mp4-audio-aac.js');
+      const converti = await convertirEnAac(base, {
+        surProgres: (etape) => { if (etape === 'encodage') notify(t('dl.mp4.aac'), 'info', 4000); }
+      });
+      if (converti) {
+        notify(t('dl.mp4.aacOk', { taille: taille(converti.blob.size) }), 'ok', 6000);
+        return converti.blob;
+      }
+    } catch (err) {
+      report('aac', err);
+      notify(t('dl.mp4.aacEchec'), 'warn', 8000);
+    }
+    return base;
   };
 
   const telechargerMp4 = async (fermer) => {

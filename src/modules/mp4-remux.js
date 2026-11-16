@@ -2,16 +2,16 @@
 // mp4-remux.js : remet en forme un MP4 fragmenté (celui de MediaRecorder) en MP4 classique :
 // index (moov) au début, durée correcte, tables d'échantillons complètes. Aucun transcodage,
 // pur JavaScript, aucune dépendance, aucun réseau.
-const enc = new TextEncoder();
-const cat = (parts) => { let n = 0; for (const p of parts) n += p.length; const o = new Uint8Array(n); let i = 0; for (const p of parts) { o.set(p, i); i += p.length; } return o; };
-const be32 = (v) => new Uint8Array([(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255]);
-const be16 = (v) => new Uint8Array([(v >>> 8) & 255, v & 255]);
-const mk = (type, ...parts) => { const body = cat(parts); return cat([be32(body.length + 8), enc.encode(type), body]); };
-const full = (type, version, flags, ...parts) => mk(type, new Uint8Array([version, (flags >> 16) & 255, (flags >> 8) & 255, flags & 255]), ...parts);
+export const enc = new TextEncoder();
+export const cat = (parts) => { let n = 0; for (const p of parts) n += p.length; const o = new Uint8Array(n); let i = 0; for (const p of parts) { o.set(p, i); i += p.length; } return o; };
+export const be32 = (v) => new Uint8Array([(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255]);
+export const be16 = (v) => new Uint8Array([(v >>> 8) & 255, v & 255]);
+export const mk = (type, ...parts) => { const body = cat(parts); return cat([be32(body.length + 8), enc.encode(type), body]); };
+export const full = (type, version, flags, ...parts) => mk(type, new Uint8Array([version, (flags >> 16) & 255, (flags >> 8) & 255, flags & 255]), ...parts);
 const tag = (dv, o) => String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
 const u64 = (dv, o) => dv.getUint32(o) * 4294967296 + dv.getUint32(o + 4);
 
-function* enfants(dv, debut, fin) {
+export function* enfants(dv, debut, fin) {
   let p = debut;
   while (p + 8 <= fin) {
     let taille = dv.getUint32(p), hdr = 8;

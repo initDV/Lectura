@@ -55,7 +55,8 @@ function construire() {
 
   // Fichiers gardés hors ligne dès la première visite : tout sauf models/ (à la demande) et les fichiers de service.
   const fichiers = lister(dist).map((p) => relative(dist, p).split(sep).join('/'))
-    .filter((p) => (!p.startsWith('models/') || p === 'models/index.json') && !['sw.js', '.nojekyll', 'LICENSE', 'THIRD_PARTY_LICENSES.md'].includes(p)).sort();
+    .filter((p) => (!p.startsWith('models/') || p === 'models/index.json') && !['sw.js', '.nojekyll', 'LICENSE', 'THIRD_PARTY_LICENSES.md'].includes(p))
+    .filter((p) => !p.startsWith('src/vendor/aac/')).sort();
   // models/index.json (catalogue des voix, quelques Ko) est gardé hors ligne ; les fichiers de voix restent à la demande.
   const empreinte = createHash('sha256');
   for (const f of fichiers) empreinte.update(f).update(readFileSync(join(dist, f)));
@@ -74,6 +75,8 @@ function construire() {
 
   // Poids du premier chargement (objectif du cahier des charges : moins de 300 Ko gzip).
   const initial = fichiers.filter((f) => /\.(js|css|html|webmanifest)$/.test(f) || f.startsWith('fonts/') && f.endsWith('.woff2'));
+  const optionnels = lister(dist).map((p) => relative(dist, p).split(sep).join('/')).filter((p) => p.startsWith('src/vendor/aac/'));
+
   const gz = initial.reduce((a, f) => a + (f.endsWith('.woff2') ? statSync(join(dist, f)).size : gzipSync(readFileSync(join(dist, f))).length), 0);
   const total = fichiers.reduce((a, f) => a + statSync(join(dist, f)).size, 0);
   console.log(`✔ dist/ prêt : ${fichiers.length} fichiers, ${(total / 1024).toFixed(0)} Ko (hors voix HD)`);
