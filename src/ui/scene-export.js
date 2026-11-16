@@ -4,7 +4,7 @@
 import { store } from '../state.js';
 import { h } from './dom.js';
 import { t } from '../modules/i18n.js';
-import { drawScene, capturePng, downloadBlob } from '../modules/capture.js';
+import { drawScene, capturePng, downloadBlob, renderDecor } from '../modules/capture.js';
 import { startRecording, supportedMime, FORMATS } from '../modules/recorder.js';
 import { SvgFrame } from '../modules/svgframe.js';
 import { fileBase } from '../modules/project.js';
@@ -23,7 +23,8 @@ export function creerExport(o) {
     if (!o.pret()) return notify(t('scene.err.rienACapturer'), 'info');
     try {
       const portrait = window.innerHeight > window.innerWidth;
-      const blob = await capturePng(o.pourCanvas(), portrait ? { w: 1080, h: 1920 } : { w: 1280, h: 720 });
+      const decorCouleurs = store.settings?.decor || null;
+      const blob = await capturePng(o.pourCanvas(), { w: portrait ? 1080 : 1280, h: portrait ? 1920 : 720, decorCouleurs });
       downloadBlob(blob, `${fileBase(o.projet)}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`);
       notify(t('scene.captureOk'), 'ok');
     } catch (err) { report('capture', err); }
@@ -40,10 +41,11 @@ export function creerExport(o) {
       o.pause(); o.chercher(0);
       const sc = o.pourCanvas(), frame = new SvgFrame(sc.svg);
       sc.terminal.revealTo(0);
-      drawScene(ctx, f.w, f.h, { ...sc, persoImage: await frame.pret() });
+      const decorImage = store.settings?.decor ? await renderDecor(store.settings.decor) : null;
+      drawScene(ctx, f.w, f.h, { ...sc, persoImage: await frame.pret(), decorImage });
       const flux = o.source().stream;
       const r = await startRecording({ canvas, audioStream: flux, fps: 30 });
-      rec = { ...r, ctx, w: f.w, h: f.h, frame };
+      rec = { ...r, ctx, w: f.w, h: f.h, frame, decorImage };
       o.badge.hidden = false;
       notify(t(flux ? 'scene.videoDebut' : 'scene.videoSansSon'), flux ? 'info' : 'warn', 7000);
       await o.jouer();
@@ -77,7 +79,7 @@ export function creerExport(o) {
     image(now) {
       if (!rec) return;
       rec.frame.update();
-      drawScene(rec.ctx, rec.w, rec.h, { ...o.pourCanvas(), persoImage: rec.frame.image }, now);
+      drawScene(rec.ctx, rec.w, rec.h, { ...o.pourCanvas(), persoImage: rec.frame.image, decorImage: rec.decorImage }, now);
     },
     /** Quitte l'écran : on jette l'enregistrement en cours. */
     abandonner() { if (rec) { rec.stop().catch(() => {}); rec = null; } },

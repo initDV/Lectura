@@ -1,5 +1,16 @@
 // @ts-check
 // capture.js : redessine la scène (fond, personnage, terminal) sur un canvas → capture PNG et images de la vidéo.
+import { creerDecor } from './scene-decor.js';
+
+/** Convertit le décor SVG (créé par creerDecor) en Image bitmap, pour le dessiner sur un canvas.
+ *  @param {{mur?:string, sol?:string, horizon?:string, neon?:string}|null} couleurs
+ *  @returns {Promise<HTMLImageElement|null>} */
+export async function renderDecor(couleurs) {
+  try {
+    const svg = creerDecor(couleurs || {});
+    return await renderSvg(svg);
+  } catch { return null; }
+}
 import { renderSvg, drawSvgImage } from './svgframe.js';
 import { themeOf, fontOf } from './themes.js';
 
@@ -94,6 +105,7 @@ export function drawScene(ctx, W, H, sc, tMs = performance.now()) {
   ensureRoundRect();
   const s = Math.min(W, H) / 720;
   ctx.fillStyle = sc.projet.reglages.fond; ctx.fillRect(0, 0, W, H);
+  if (sc.decorImage) { try { ctx.drawImage(sc.decorImage, 0, 0, W, H); } catch { /* SVG défaillant, on garde le fond uni */ } }
   const cb = { x: 0, y: 0, w: W * 0.38, h: H }, tb = { x: W * 0.38, y: 0, w: W * 0.62, h: H };
   const img = sc.persoImage, vb = sc.svg?.viewBox?.baseVal;
   if (img && vb?.width) {
@@ -108,13 +120,14 @@ export function drawScene(ctx, W, H, sc, tMs = performance.now()) {
 }
 
 /** Capture PNG de la scène (mêmes dessins que la vidéo). Renvoie un Blob. */
-export async function capturePng(sc, { w = 1280, h = 720 } = {}) {
+export async function capturePng(sc, { w = 1280, h = 720, decorCouleurs = null } = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error("Capture impossible : ce navigateur refuse de créer l'image (mémoire insuffisante ?).");
   await document.fonts?.ready;
-  drawScene(ctx, w, h, { ...sc, persoImage: await renderSvg(sc.svg), figer: true });
+  const decorImage = decorCouleurs ? await renderDecor(decorCouleurs) : null;
+  drawScene(ctx, w, h, { ...sc, persoImage: await renderSvg(sc.svg), decorImage, figer: true });
   const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
   if (!blob) throw new Error('Capture impossible : le navigateur n\'a pas pu produire le fichier PNG.');
   return blob;
