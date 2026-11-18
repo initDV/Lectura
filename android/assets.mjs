@@ -23,11 +23,17 @@ for (const [, key, block] of (await read('src/ui/styles/themes.css')).matchAll(/
   themes[key] = Object.fromEntries([...block.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
 }
 const voiceScript = await read('tools/fetch_voice.mjs');
-const voices = (await import(`data:text/javascript,${encodeURIComponent('export default ' + voiceScript.match(/const VOIX = (\[[\s\S]+?\]);/)[1])}`)).default;
+const piper = (await import(`data:text/javascript,${encodeURIComponent('export default ' + voiceScript.match(/const VOIX = (\[[\s\S]+?\]);/)[1])}`)).default;
+const voices = [
+  { id: 'estelle', nom: 'Estelle · F · Pocket TTS', moteur: 'pocket', modele: 'estelle' },
+  { id: 'kokoro-siwis', nom: 'Siwis · F · Kokoro', moteur: 'kokoro', modele: 'kokoro-siwis' },
+  ...piper.filter((v) => ['siwis', 'tom'].includes(v.id)),
+  ...piper.filter((v) => !['siwis', 'tom'].includes(v.id)),
+];
 const versions = JSON.parse(await read('package.json'));
 // Android uses the full catalogue; the web originals keep their own access rules.
 const characterIndex = JSON.parse(await read('characters/index.json'));
-const defaults = { ...DEFAUTS };
+const defaults = { ...DEFAUTS, moteurVoix: 'auto', voixId: '' };
 delete defaults.licence;
 delete defaults.idInstallation;
 const androidStrings = (labels, overrides) => ({
@@ -63,12 +69,34 @@ await Promise.all([
     'apropos.confidentialite.texte': 'Tes textes, projets et lectures restent sur cet appareil. Lectura utilise Internet seulement pour télécharger les voix HD à ta demande. Aucun compte ni traceur.',
     'voix.err.aucune': 'Aucune voix locale disponible. Installe une voix dans les réglages du téléphone ou télécharge une voix Lectura HD.',
     'android.terminal.fontSystem': 'Système',
+    'android.voice.auto': 'Automatique · Estelle en priorité',
+    'android.voice.autoHelp': 'Sans Estelle : Siwis, Tom ou une voix système locale déjà installée.',
+    'android.voice.main': 'Voix principale',
+    'android.voice.backup': 'Secours Piper',
+    'android.voice.use': 'Utiliser cette voix',
+    'android.voice.installedSize': 'Espace après installation : {taille}',
+    'android.voice.notSupported': 'Ce moteur vocal n’est pas disponible sur cet appareil.',
+    'android.voice.extract': 'Vérification et installation de la voix…',
+    'android.voice.sources': 'Voix locales Lectura',
+    'android.voice.fallback': 'Voix prioritaire indisponible · secours : {nom}',
+    'android.voice.noAudio': 'Télécharge Estelle ou choisis une voix déjà installée.',
   })),
   put('en.json', androidStrings(en, {
     'persos.emotions.aide': en['persos.emotions.aidePro'],
     'apropos.confidentialite.texte': 'Your text, projects and playback stay on this device. Lectura only uses the Internet to download HD voices on request. No accounts or trackers.',
     'voix.err.aucune': 'No local voice available. Install one in your phone settings or download a Lectura HD voice.',
     'android.terminal.fontSystem': 'System',
+    'android.voice.auto': 'Automatic · Estelle first',
+    'android.voice.autoHelp': 'Without Estelle: Siwis, Tom or an already installed local system voice.',
+    'android.voice.main': 'Primary voice',
+    'android.voice.backup': 'Piper fallback',
+    'android.voice.use': 'Use this voice',
+    'android.voice.installedSize': 'Installed size: {taille}',
+    'android.voice.notSupported': 'This voice engine is not available on this device.',
+    'android.voice.extract': 'Verifying and installing the voice…',
+    'android.voice.sources': 'Lectura local voices',
+    'android.voice.fallback': 'Preferred voice unavailable · fallback: {nom}',
+    'android.voice.noAudio': 'Download Estelle or choose an already installed voice.',
   })),
   put('defaults.json', defaults),
   put('themes.json', { app: themes, terminal: THEMES }), put('expressions.json', { neutral: NEUTRE, expressions }),

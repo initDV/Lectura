@@ -59,9 +59,16 @@ public final class DeviceChecks extends Instrumentation {
                 });
                 check("piper",()->hd(refs));
                 check("piper-mls",()->mls(refs));
+                check("packs-estelle-kokoro",()->newPacks(refs));
                 break;
             case "offline-hd":
                 check("piper-en-avion",()->offlineHd(ctx));
+                break;
+            case "offline-estelle":
+                check("estelle-auto-en-avion",()->offlineNewVoice(ctx,"estelle"));
+                break;
+            case "offline-kokoro":
+                check("kokoro-en-avion",()->offlineNewVoice(ctx,"kokoro-siwis"));
                 break;
             default:
                 check("avion",()->airplane(ctx));
@@ -709,10 +716,55 @@ public final class DeviceChecks extends Instrumentation {
                 +startup+" ms, pic PCM "+signal.get()+", "+frames+" observations";
         }finally{main(a::finish);}
     }
+    private String newPacks(Refs refs)throws Exception {
+        try(Hd h=new Hd(refs)) {
+            File models=new File(refs.context.getFilesDir(),"models");VoicePacks store=new VoicePacks(models);
+            require(h.autoVoice("fr").isEmpty(),"Une voix ne doit pas être téléchargée au démarrage");
+            VoicePacks.Spec estelle=VoicePacks.ESTELLE,kokoro=VoicePacks.KOKORO;
+            require(estelle.supported()&&kokoro.supported(),"Runtimes Estelle/Sherpa absents de l’APK");
+            File partial=store.partial(estelle);
+            try{downloadWithRetry(h,estelle.id,(n,total)->{if(n<total)throw new java.util.concurrent.CancellationException();});
+                throw new AssertionError("Arrêt du téléchargement Estelle non testé");
+            }catch(java.util.concurrent.CancellationException expected){require(partial.length()>0&&!store.installed(estelle),"Pack partiel visible en lecture");}
+            long resumed=partial.length();downloadWithRetry(h,estelle.id,(n,total)->{});
+            require(!partial.exists()&&store.installed(estelle)&&h.autoVoice("fr").equals(estelle.id),"Reprise et Estelle prioritaire");
+            downloadWithRetry(h,kokoro.id,(n,total)->{});
+            require(store.installed(kokoro)&&h.autoVoice("fr").equals(estelle.id)&&h.autoVoice("en").isEmpty(),"Installation Kokoro sans changer la priorité FR");
+            require(!new File(store.path(estelle),"models/mimi_encoder.onnx").exists()&&!new File(store.path(kokoro),"espeak-ng-data").exists(),"Données inutiles du pack installées");
+            return "Estelle reprise à partir de "+resumed+" octets présents, archives publiques vérifiées, deux installations intactes, Estelle prioritaire";
+        }
+    }
+    private String offlineNewVoice(Context ctx,String id)throws Exception {
+        require(noNetwork(ctx),"Réseau actif avant synthèse "+id);
+        MainActivity a=open(ctx);File dir=ctx.getExternalFilesDir("verification");
+        try {
+            waitFor("Fenêtre voix native au premier plan",()->a.isForeground&&a.hasWindowFocus(),15000);
+            String text=id.equals("estelle")?"Tu veux venir ce soir ?\nBravo !":"Tu as aimé cette lecture ?\nMerci !";
+            main(()->{
+                require(a.hd.installed(a.hd.voice(id)),"Pack absent après relance : "+id);
+                a.dismiss();Project p=new Project(a.db.settings);p.text=text;p.speed=1.25f;
+                p.engine=id.equals("estelle")?"auto":"kokoro";p.voice=id.equals("estelle")?"":id;
+                a.open(p);a.launch(false);
+            });
+            long started=android.os.SystemClock.elapsedRealtime();
+            try{waitFor("Démarrage "+id,()->a.reading!=null&&a.reading.playing||!a.preparing&&a.reading==null,150000);}
+            catch(AssertionError e){throw new AssertionError("Préparation "+id+" trop lente",e);}
+            main(()->require(a.reading!=null&&a.synthesisVoice.equals(id),"Voix effective "+a.synthesisVoice+" ; "+a.journal.peekLast()));
+            long startup=android.os.SystemClock.elapsedRealtime()-started;
+            JSONArray observed=sampleReading(a,dir,id,20000);
+            main(()->{
+                Reading r=a.reading;require(r.pcm!=null&&r.pcm.rate==24000&&r.rate==1.25&&r.ended&&r.text.equals(text)&&noNetwork(ctx),"Lecture native incomplète");
+                require(pcmPeak(r.pcm,0,(long)r.duration)>900,"Voix muette : "+id);
+                List<Script.Segment> parts=r.timeline.parts;
+                require(parts.size()==2&&parts.get(0).to-parts.get(0).speechEnd==560&&parts.get(1).to-parts.get(1).speechEnd==400,"Pauses du vrai PCM");
+            });
+            return id+" à froid en avion, lecture à 1,25× (PCM 24 kHz), démarrage "+startup+" ms, "+observed.length()+" observations";
+        }finally{main(a::finish);}
+    }
     private String hd(Refs refs)throws Exception {
         try(Hd h=new Hd(refs)){
             require(Hd.supported(),"AAR ONNX absent");
-            require(h.voices.size()==10,"Catalogue des voix HD");
+            require(h.voices.size()==12&&h.voice("tom")!=null&&h.voice("siwis")!=null,"Catalogue des voix et deux secours Piper");
             File partial=new File(refs.context.getFilesDir(),"models/gilles.onnx.part");
             h.remove("gilles");
             try{downloadWithRetry(h,"gilles",(a,b)->{if(a<b)throw new java.util.concurrent.CancellationException();});throw new AssertionError("Téléchargement Piper non interrompu");}

@@ -69,6 +69,8 @@ jobs:
           ort=1.24.3
           curl --fail --retry 2 --location "https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/$ort/onnxruntime-android-$ort.aar" -o "$RUNNER_TEMP/ort.aar"
           echo "LECTURA_ORT_AAR=$RUNNER_TEMP/ort.aar" >> "$GITHUB_ENV"
+          bash android/fetch-voice-runtimes.sh "$RUNNER_TEMP/voice-runtime"
+          echo "LECTURA_VOICE_DEPS=$RUNNER_TEMP/voice-runtime" >> "$GITHUB_ENV"
           if curl --fail --retry 2 --location 'https://initdv.github.io/Lectura/models/index.json' -o "$RUNNER_TEMP/hd.json"; then
             echo "LECTURA_HD_INDEX=$RUNNER_TEMP/hd.json" >> "$GITHUB_ENV"
           fi
@@ -103,8 +105,8 @@ jobs:
         with:
           name: Lectura-Android-API31+
           github-token: ${{ github.token }}
-          # v21 is the first delivered APK signed with the permanent certificate.
-          run-id: ${{ inputs.predecessor_run || '44329414529' }}
+          # Default to the last delivered v25, signed with the permanent certificate.
+          run-id: ${{ inputs.predecessor_run || '44339482883' }}
           path: ${{ runner.temp }}/lectura-predecessor
       - name: Comparer les certificats de signature
         id: certificates
@@ -199,7 +201,7 @@ jobs:
           echo "LECTURA_TEST_TTS_APK=$RUNNER_TEMP/espeak.apk" >> "$GITHUB_ENV"
       - name: Test Android 12
         id: android_checks
-        timeout-minutes: 16
+        timeout-minutes: 24
         env:
           LECTURA_REPORT: ${{ runner.temp }}/lectura-report
         run: |

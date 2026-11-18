@@ -204,24 +204,19 @@ final class Screens {
         c=card(t("reglages.version"),14);para(c,"Lectura "+version()+" ("+build()+")",0);addButton(c,t("nav.apropos"),null,false,()->a.go("apropos"),12);
     }
     private void voicePanel(LinearLayout c){
-        boolean hd=settings.optString("moteurVoix").equals("piper");
-        select(c,t("voix.moteur"),List.of(t("voix.moteur.webspeech"),t("voix.moteur.piper")),hd?1:0,true,i->{p.engine=i==0?"webspeech":"piper";p.voice="";a.db.set("moteurVoix",p.engine);a.db.set("voixId","");refresh();});
-        List<String> ids=new ArrayList<>(),labels=new ArrayList<>();
-        if(!hd)for(android.speech.tts.Voice v:a.talk.voices(a.db.locale())){ids.add(v.getName());labels.add(v.getName()+" ("+v.getLocale().toLanguageTag()+")");}
-        else a.installedHd().forEach(v->{ids.add(v.optString("id"));labels.add(v.optString("nom"));});
-        int selected=ids.indexOf(settings.optString("voixId"));if(selected<0&&!ids.isEmpty())selected=0;
-        select(c,t("voix.voix"),labels,selected,true,i->{p.voice=ids.get(i);a.db.set("voixId",p.voice);});
-        if(labels.isEmpty())small(c,t(hd?"voix.hd.aucune":a.talk.failure?"voix.err.absente":"voix.err.aucune"),0);
-        slider(c,t("voix.vitesse"),10,40,(int)Math.round(settings.optDouble("vitesseVoix",1)*20),true,n->number(n/20.),n->{p.speed=n/20f;a.db.set("vitesseVoix",p.speed);},null);
+        String id=a.hdId();boolean hd=Hd.hdEngine(p.engine)||!id.isEmpty();
+        TextView voice=u.button(a.voiceName(),"chevron",a::chooseVoice);voice.setContentDescription(t("scene.voix.choisir"));u.add(c,voice,5);
+        if(p.engine.equals("auto"))small(c,t("android.voice.autoHelp"),5);
+        slider(c,t("voix.vitesse"),10,40,Math.round(p.speed*20),true,n->number(n/20.),n->{p.speed=n/20f;a.db.set("vitesseVoix",p.speed);},null);
         if(hd)small(c,t("voix.hauteurIndispo"),0);
-        slider(c,t("voix.hauteur"),0,40,(int)Math.round(settings.optDouble("hauteurVoix",1)*20),!hd,n->number(n/20.),n->{p.pitch=n/20f;a.db.set("hauteurVoix",p.pitch);},null);
+        slider(c,t("voix.hauteur"),0,40,Math.round(p.pitch*20),!hd,n->number(n/20.),n->{p.pitch=n/20f;a.db.set("hauteurVoix",p.pitch);},null);
         slider(c,t("voix.volume"),0,20,Math.round(a.volume()*20),true,n->(n*5)+" %",n->a.db.set("volume",n/20f),null);
         TextView b=u.button(t("voix.ecouter"),"volume",()->{
-            if(hd){String choice=settings.optString("voixId",ids.get(0));a.hdExample(choice,t("voix.exemple"),p.speed);return;}
-            android.speech.tts.Voice v=a.talk.choose(a.db.locale(),settings.optString("voixId"));
-            if(v==null&&ids.size()>0)v=a.talk.choose(a.db.locale(),ids.get(0));
+            if(hd){if(a.hd.installed(a.hd.voice(id)))a.hdExample(id,t("voix.exemple"),p.speed);else a.note(t("voix.hd.err.manquant"),"warn");return;}
+            android.speech.tts.Voice v=a.talk.choose(a.db.locale(),p.voice);
             if(v!=null)a.talk.speak(t("voix.exemple"),v,p.speed,p.pitch,a.volume(),new Talk.Listener(){@Override public void error(String code){a.note(t("voix.err.lecture","code",code),"error");}});
-        });u.enable(b,!labels.isEmpty(),.5f);c.addView(b,u.lp(Ui.WRAP,Ui.WRAP));
+            else a.note(t("voix.err.aucune"),"warn");
+        });c.addView(b,u.lp(Ui.WRAP,Ui.WRAP));
     }
     private String number(double v){NumberFormat f=NumberFormat.getNumberInstance(Locale.ROOT);f.setMaximumFractionDigits(2);return f.format(v);}
     private void custom(LinearLayout c){

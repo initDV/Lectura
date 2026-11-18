@@ -73,7 +73,7 @@ echo "::notice file=docs/ANDROID_PARITE.md,title=Outils Android::SDK=${ANDROID_H
   ls -l /dev/kvm
   "$ANDROID_HOME/emulator/emulator" -accel-check
 } >"$log" 2>&1
-"$ANDROID_HOME/emulator/emulator" -avd lectura_ci -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none >>"$log" 2>&1 &
+"$ANDROID_HOME/emulator/emulator" -avd lectura_ci -memory 4096 -partition-size 4096 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none >>"$log" 2>&1 &
 emu=$!
 for ((i=0;i<150;i++)); do
     if [[ $(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r') == 1 ]]; then
@@ -128,6 +128,8 @@ for ((i=0;i<150;i++)); do
         if instrument telechargement DeviceChecks -e mode download; then
             no_radios
             instrument redemarrage-en-avion DeviceChecks -e mode offline-hd || failures=1
+            instrument estelle-en-avion DeviceChecks -e mode offline-estelle || failures=1
+            instrument kokoro-en-avion DeviceChecks -e mode offline-kokoro || failures=1
         else
             failures=1
         fi

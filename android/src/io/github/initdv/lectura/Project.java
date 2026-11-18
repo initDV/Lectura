@@ -43,7 +43,7 @@ final class Project {
         p.prompt=cut(s(t,"prompt","$ "),12);p.motion=s(r,"mouvements","normal");if(!Set.of("calme","normal","vif").contains(p.motion))p.motion="normal";
         p.background=s(r,"fond",p.background);if(!p.background.matches("(?i)#[0-9a-f]{6}")||p.background.equals("#0b0f14"))p.background="#0d0d12";
         p.emotions=!Boolean.FALSE.equals(r.opt("emotions"));p.subtitles="sous-titres".equals(o.optString("timing"));p.fileAudio="fichier".equals(a.optString("source"));
-        p.fileName=s(a,"nomFichier","");p.duration=(long)bounded(a,"dureeMs",0,0,1e9);p.engine=v.optString("moteur").equals("piper")?"piper":"webspeech";
+        p.fileName=s(a,"nomFichier","");p.duration=(long)bounded(a,"dureeMs",0,0,1e9);p.engine=v.optString("moteur");if(!Hd.hdEngine(p.engine)&&!p.engine.equals("auto"))p.engine="webspeech";
         p.voice=s(v,"id","");p.speed=(float)bounded(v,"vitesse",1,.5,2);p.pitch=(float)bounded(v,"hauteur",1,0,2);
         JSONArray segs=array(o,"segments");for(int i=0;i<segs.length();i++){
             JSONObject x=segs.optJSONObject(i);if(x==null||s(x,"texte","").isEmpty())continue;

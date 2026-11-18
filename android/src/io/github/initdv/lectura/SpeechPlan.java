@@ -80,7 +80,7 @@ final class SpeechPlan {
     }
 
     private static void mark(String line,boolean[] ignore,boolean[] literal) {
-        if(line.stripLeading().matches("```[\\p{L}0-9_+-]*[ \\t]*")) {Arrays.fill(ignore,true);return;}
+        if(line.trim().matches("```[\\p{L}0-9_+-]*[ \\t]*")) {Arrays.fill(ignore,true);return;}
         Matcher m=LINK.matcher(line);
         while(m.find()) {
             if(!m.group(1).isEmpty())Arrays.fill(ignore,m.start(),m.end(),true);
@@ -148,7 +148,7 @@ final class SpeechPlan {
             }
             i+=n;
         }
-        String spoken=b.text.toString().stripTrailing();
+        String spoken=b.text.toString().trim();
         if(!END_WORD.matcher(spoken).find())spoken="";
         // A second run of decorative punctuation adjacent to the first must not add another silence.
         if(spoken.isEmpty()&&gap>0&&!out.isEmpty()&&out.get(out.size()-1).original.start>=start) {

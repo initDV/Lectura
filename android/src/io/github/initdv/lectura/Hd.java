@@ -31,17 +31,20 @@ import java.util.Locale;
 import java.util.Map;
 import static io.github.initdv.lectura.Refs.*;
 
-/** Piper VITS: the five model files and ten voices used by Pages. Never downloads on launch. */
+/** Native text voices, serialized inference and bounded caches. No voice downloads on launch. */
 final class Hd implements AutoCloseable {
     private static final String BASE="https://initdv.github.io/Lectura/models/";
     private static final long LIMIT=150L*1024*1024,PHRASE_LIMIT=80L*1024*1024;
     final List<JSONObject> voices=new ArrayList<>();
     private final File models,phrases,whole;
     private final G2p g2p;
+    private final VoicePacks packs;
     private final JSONObject pronunciation;
     private final Map<String,float[]> l1=new LinkedHashMap<>(16,.75f,true);
     private long l1Bytes;
     private Ort ort;
+    private Pocket pocket;
+    private Kokoro kokoro;
     private String loaded="";
     private JSONObject catalogue;
     interface Progress {void update(long value,long total);}
@@ -51,26 +54,43 @@ final class Hd implements AutoCloseable {
     }
     Hd(Refs refs){
         Context context=refs.context;models=Library.dir(context.getFilesDir(),"models");phrases=Library.dir(context.getCacheDir(),"phrases");whole=Library.dir(context.getCacheDir(),"synthese");
+        packs=new VoicePacks(models);
         JSONArray data=array(refs.json("hd-voices.json"),"voices");
         for(int i=0;i<data.length();i++)voices.add(data.optJSONObject(i));g2p=new G2p(refs.json("g2p.json"));pronunciation=refs.json("prononciation.json");
         try{catalogue=Library.readJson(new File(models,"index.json"));}catch(Exception ignored){try{catalogue=refs.json("hd-index.json");}catch(Exception ignored2){}}
     }
-    static boolean supported(){try{Class.forName("ai.onnxruntime.OrtEnvironment",false,Hd.class.getClassLoader());return true;}catch(ClassNotFoundException e){return false;}}
+    static boolean supported(){try{Class.forName("ai.onnxruntime.OrtEnvironment",false,Hd.class.getClassLoader());return true;}catch(ClassNotFoundException|LinkageError e){return false;}}
     JSONObject voice(String id){for(JSONObject v:voices)if(v.optString("id").equals(id))return v;return null;}
+    static String engine(JSONObject voice){return voice==null?"piper":voice.optString("moteur","piper");}
+    static boolean hdEngine(String engine){return engine.equals("piper")||engine.equals("kokoro")||engine.equals("pocket");}
     private String model(JSONObject voice){return voice.optString("modele");}
+    private VoicePacks.Spec pack(JSONObject v){return v==null?null:VoicePacks.byId(v.optString("id"));}
+    long diskSize(JSONObject v){VoicePacks.Spec spec=pack(v);return spec==null?size(v):spec.installedBytes;}
+    boolean available(JSONObject v){VoicePacks.Spec spec=pack(v);return spec==null?supported():spec.supported();}
+    List<String> automatic(String lang){
+        List<String> names=new ArrayList<>();if(lang.equals("fr"))for(String id:List.of("estelle","siwis","tom"))if(installed(voice(id)))names.add(id);return names;
+    }
+    String autoVoice(String lang){List<String> names=automatic(lang);return names.isEmpty()?"":names.get(0);}
     private File part(String name){return new File(models,name);}
     private File onnx(JSONObject v){return part(model(v)+".onnx");}
     private File cfg(JSONObject v){return part(model(v)+".onnx.json");}
-    boolean installed(JSONObject v){return v!=null&&onnx(v).length()>1024*1024&&cfg(v).isFile();}
+    boolean installed(JSONObject v){
+        if(v==null||!available(v))return false;
+        VoicePacks.Spec spec=pack(v);return spec==null?onnx(v).length()>1024*1024&&cfg(v).isFile():packs.installed(spec);
+    }
     List<JSONObject> installed(){List<JSONObject> out=new ArrayList<>();if(supported())for(JSONObject v:voices)if(installed(v))out.add(v);return out;}
     private JSONObject deployed(JSONObject v){JSONArray a=catalogue==null?new JSONArray():array(catalogue,"voix");for(int i=0;i<a.length();i++){
         JSONObject entry=a.optJSONObject(i);if(entry!=null&&entry.optString("id").equals(v.optString("id")))return entry;}return new JSONObject();}
     long size(JSONObject v){
+        VoicePacks.Spec spec=pack(v);if(spec!=null)return spec.bytes;
         JSONObject source=deployed(v),part=array(source,"parts").optJSONObject(0);
         long bytes=part==null?0:part.optLong("taille")+source.optLong("tailleConfig",6000);
         return bytes>0?bytes:installed(v)?onnx(v).length()+cfg(v).length():0;
     }
     String attribution(JSONObject v){
+        VoicePacks.Spec spec=pack(v);
+        if(spec==VoicePacks.ESTELLE)return "Kyutai Pocket TTS et voix Estelle · CC BY 4.0 · ONNX par Okuvia";
+        if(spec==VoicePacks.KOKORO)return "Kokoro / Sherpa-ONNX · Apache-2.0 · SIWIS French Speech Synthesis Database, University of Edinburgh · CC BY 4.0";
         if(model(v).equals("siwis"))return "SIWIS French Speech Synthesis Database · University of Edinburgh · CC BY 4.0";
         return deployed(v).optString("attribution","rhasspy/piper-voices");
     }
@@ -83,6 +103,7 @@ final class Hd implements AutoCloseable {
         if(!supported())throw new IOException("Runtime ONNX Android absent.");
         JSONObject v=voice(id);if(v==null)throw new IOException("Voix Lectura HD inconnue : "+id);
         if(installed(v))return;
+        VoicePacks.Spec spec=pack(v);if(spec!=null){packs.download(spec,progress);return;}
         if(catalogue==null){HttpURLConnection c=connect("index.json",0);try{
             if(c.getResponseCode()!=200)throw new IOException("Catalogue Lectura HD : HTTP "+c.getResponseCode());
             try(InputStream in=c.getInputStream()){catalogue=parse(new String(Refs.read(in,350000),StandardCharsets.UTF_8));Library.writeJson(part("index.json"),catalogue);}
@@ -118,8 +139,8 @@ final class Hd implements AutoCloseable {
         String expected=p.optString("sha256");if(!expected.isEmpty()&&!expected.equalsIgnoreCase(digest(temp))){temp.delete();throw new IOException("Modèle Piper corrompu : "+target.getName());}
         Files.move(temp.toPath(),target.toPath(),StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);progress.update(n,n);
     }
-    void remove(String id){JSONObject v=voice(id);if(v==null)return;if(loaded.equals(model(v)))close();onnx(v).delete();part(onnx(v).getName()+".part").delete();cfg(v).delete();}
-    void removeAll(){close();for(File dir:new File[]{models,phrases,whole}){File[] all=dir.listFiles();if(all!=null)for(File f:all)f.delete();}l1.clear();l1Bytes=0;}
+    void remove(String id){JSONObject v=voice(id);if(v==null)return;if(loaded.equals(model(v)))close();VoicePacks.Spec spec=pack(v);if(spec!=null){packs.remove(spec);return;}onnx(v).delete();part(onnx(v).getName()+".part").delete();cfg(v).delete();}
+    void removeAll(){close();for(File dir:new File[]{models,phrases,whole}){File[] all=dir.listFiles();if(all!=null)for(File f:all)VoicePacks.erase(f);}l1.clear();l1Bytes=0;}
     private String digest(File file)throws IOException {try(InputStream in=new BufferedInputStream(new FileInputStream(file))){MessageDigest sha=hash("SHA-256");byte[] b=new byte[65536];
         for(int n;(n=in.read(b))!=-1;){Pcm.interrupted();sha.update(b,0,n);}return hex(sha.digest());}}
     private static MessageDigest hash(String alg){try{return MessageDigest.getInstance(alg);}catch(Exception e){throw new IllegalStateException(e);}}
@@ -127,15 +148,21 @@ final class Hd implements AutoCloseable {
     private static String key(String alg,String s){return hex(hash(alg).digest(s.getBytes(StandardCharsets.UTF_8)));}
     private void remember(String key,float[] pcm){
         float[] prev=l1.put(key,pcm);l1Bytes+=4L*(pcm.length-(prev==null?0:prev.length));while(l1Bytes>8*1024*1024&&l1.size()>1){String first=l1.keySet().iterator().next();l1Bytes-=4L*l1.remove(first).length;}}
-    private float[] phrase(JSONObject v,String text,JSONObject config,float speed,int rate)throws Exception {
-        String id=key("SHA-1","v2|"+v.optString("id")+"|"+speed+"|"+text);float[] out=l1.get(id);if(out!=null)return out;
+    private float[] phrase(JSONObject v,String text,JSONObject config)throws Exception {
+        String id=key("SHA-1","phrase-3|"+v.optString("id")+"|"+text);float[] out=l1.get(id);if(out!=null)return out;
         File f=new File(phrases,id+".f32");if(f.length()>0&&f.length()%4==0&&f.length()<64*1024*1024){try(InputStream in=new FileInputStream(f)){
             byte[] raw=Refs.read(in,64*1024*1024);out=new float[raw.length/4];ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(out);
             f.setLastModified(System.currentTimeMillis());remember(id,out);return out;
         }catch(IOException e){f.delete();}}
-        if(ort==null||!loaded.equals(model(v))){close();ort=new Ort(onnx(v));loaded=model(v);}
-        String ph=g2p.phrase(text);out=ph.isEmpty()?new float[0]:ort.synth(G2p.ids(ph,object(config,"phoneme_id_map")),object(config,"inference"),speed,config.optInt("num_speakers",1)>1?v.optInt("speakerId",config.optInt("default_speaker_id",0)):-1);
-        if(out.length==0)out=new float[(int)Math.round(rate*.3)];
+        ensureLoaded(v);
+        if(pocket!=null)out=pocket.generate(text);
+        else if(kokoro!=null)out=kokoro.generate(text);
+        else {
+            String ph=g2p.phrase(text);
+            out=ph.isEmpty()?new float[0]:ort.synth(G2p.ids(ph,object(config,"phoneme_id_map")),object(config,"inference"),1,
+                config.optInt("num_speakers",1)>1?v.optInt("speakerId",config.optInt("default_speaker_id",0)):-1);
+        }
+        for(float sample:out)if(!Float.isFinite(sample))throw new IOException("La voix a produit un signal non fini.");
         if(out.length*4L>64*1024*1024)throw new IOException("Phrase trop longue pour la synthèse Lectura HD.");
         remember(id,out);
         try(FileOutputStream data=new FileOutputStream(f)){ByteBuffer b=ByteBuffer.allocate(16384).order(ByteOrder.LITTLE_ENDIAN);for(float x:out){b.putFloat(x);if(!b.hasRemaining()){data.write(b.array());b.clear();}}
@@ -147,24 +174,41 @@ final class Hd implements AutoCloseable {
         Arrays.sort(f,Comparator.comparingLong(File::lastModified).reversed());long size=0;
         for(int i=0;i<f.length;i++)if((size+=f[i].length())>bytes||i>=count){if(extension.equals(".wav"))new File(dir,f[i].getName().replace(".wav",".json")).delete();f[i].delete();}
     }
+    private void ensureLoaded(JSONObject voice)throws Exception {
+        if(loaded.equals(model(voice)))return;
+        close();Pcm.interrupted();VoicePacks.Spec spec=pack(voice);
+        try {
+            if(spec==VoicePacks.ESTELLE)pocket=new Pocket(packs.path(spec));
+            else if(spec==VoicePacks.KOKORO)kokoro=new Kokoro(packs.path(spec),g2p);
+            else ort=new Ort(onnx(voice));
+            loaded=model(voice);
+        }catch(LinkageError e){close();throw new IOException("Runtime vocal indisponible sur ce processeur.",e);}
+    }
+    void preload(String id)throws Exception {JSONObject v=voice(id);if(installed(v))ensureLoaded(v);}
     void prewarm(String text,String id)throws Exception {
         JSONObject v=voice(id);if(!installed(v))return;
-        JSONObject config=Library.readJson(cfg(v));int rate=object(config,"audio").optInt("sample_rate",22050),n=0;
+        JSONObject config=pack(v)==null?Library.readJson(cfg(v)):null;int n=0;
         for(SpeechPlan.Fragment p:SpeechPlan.plan(text,"fr",object(pronunciation,"fr"))){
-            Pcm.interrupted();if(!p.spoken.isEmpty()){phrase(v,p.spoken,config,1,rate);if(++n>=2)break;}
+            Pcm.interrupted();if(!p.spoken.isEmpty()){phrase(v,p.spoken,config);if(++n>=1)break;}
         }
     }
     Synthesis synth(String text,String id,int cps,Progress progress)throws Exception {
         if(text.length()>SpeechPlan.MAX_TEXT)throw new IOException("Texte trop long pour la synthèse.");
-        JSONObject v=voice(id);if(!installed(v))throw new IOException("voix HD non installée");
-        String key=key("SHA-256","rendu-2|"+id+"|"+cps+"|"+text);File wav=new File(whole,key+".wav"),json=new File(whole,key+".json");
-        JSONObject config=Library.readJson(cfg(v));int rate=object(config,"audio").optInt("sample_rate",22050);
+        JSONObject v=voice(id);if(!installed(v))throw new IOException("Voix HD non installée.");
+        String key=key("SHA-256","rendu-3|"+id+"|"+cps+"|"+text);File wav=new File(whole,key+".wav"),json=new File(whole,key+".json");
+        JSONObject config=pack(v)==null?Library.readJson(cfg(v)):null;
+        int rate=config==null?24000:object(config,"audio").optInt("sample_rate",22050);
         List<SpeechPlan.Fragment> plan=SpeechPlan.plan(text,"fr",object(pronunciation,"fr"));
         Synthesis saved=VoiceRender.cached(wav,json,plan,rate,progress);if(saved!=null)return saved;
-        Synthesis result=VoiceRender.render(whole,wav,json,plan,rate,cps,w->phrase(v,w,config,1,rate),progress);
+        Synthesis result=VoiceRender.render(whole,wav,json,plan,rate,cps,w->phrase(v,w,config),progress);
         prune(whole,".wav",6,Pcm.MAX_BYTES);return result;
     }
-    @Override public void close(){if(ort!=null){ort.close();ort=null;}loaded="";}
+    @Override public void close(){
+        if(ort!=null){ort.close();ort=null;}
+        if(pocket!=null){pocket.close();pocket=null;}
+        if(kokoro!=null){kokoro.close();kokoro=null;}
+        loaded="";
+    }
 
     /** Official Java API through a narrow boundary: the SDK-only checkpoint can be built without the AAR. */
     private static final class Ort implements AutoCloseable {

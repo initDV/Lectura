@@ -55,7 +55,10 @@ public final class MainActivity extends Activity {
     Future<?> preparation,prewarm,hdDownload,hdListening;
     Runnable prewarmTimer;
     android.media.MediaPlayer hdPlayer;
-    String hdChoice="";int generation,hdDemoGen;
+    String hdChoice="",synthesisVoice="",hdDownloading="";
+    int generation,hdDemoGen,downloadGen;
+    long hdDownloaded,hdDownloadTotal;
+    Runnable downloadProgress;
     Consumer<Uri> result;
     Runnable backModal,modalCleanup;
 
@@ -103,19 +106,27 @@ public final class MainActivity extends Activity {
             }
             stage=new Stage(this,d);scene=new ScenePage(this,stage);content.addView(scene.scroll,ui.fp(Ui.MATCH,Ui.MATCH,Gravity.TOP));
             if(db.settings.optBoolean("modePresentation"))presentation(true);
+            preloadVoice();
         }else renderRoute(name);
         content.requestFocus();
     }
     private void disposeScene(){exports.abandon();clearOverlay();cancelPrewarm();stopHdExample();generation++;if(preparation!=null)preparation.cancel(true);preparation=null;preparing=false;
         if(reading!=null)reading.close();reading=null;sig="";forced="";stopped=true;muted=false;scene=null;stage=null;screens=null;
-        if(talk!=null)talk.cancel();getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}
+        downloadProgress=null;if(talk!=null)talk.cancel();getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}
     void draft(){if(project==null)return;String key=project.json().toString();if(key.equals(lastDraft))return;
         try{db.draft(project);lastDraft=key;}catch(IOException ex){log("brouillon",ex);}}
     private void cancelPrewarm(){if(prewarmTimer!=null)handler.removeCallbacks(prewarmTimer);if(prewarm!=null)prewarm.cancel(true);}
     void changedText(){
-        cancelPrewarm();String text=project.text,id=project.voice;
-        if(!project.fileAudio&&project.engine.equals("piper")&&text.length()>=30&&text.length()<=12000&&hd.installed(hd.voice(id))){
+        cancelPrewarm();String text=project.text,id=hdId();
+        if(!project.fileAudio&&text.length()>=30&&text.length()<=SpeechPlan.MAX_TEXT&&hd.installed(hd.voice(id))){
             prewarmTimer=()->prewarm=queue.submit(()->{try{hd.prewarm(text,id);}catch(Exception ignored){}});handler.postDelayed(prewarmTimer,2000);
+        }
+    }
+    private void preloadVoice(){
+        cancelPrewarm();String id=hdId();
+        if(!project.fileAudio&&hd.installed(hd.voice(id))) {
+            prewarmTimer=()->prewarm=queue.submit(()->{try{hd.preload(id);}catch(Exception ignored){}});
+            handler.postDelayed(prewarmTimer,650);
         }
     }
     void presentation(boolean yes){if(scene==null)return;hideKeyboard();scene.present(yes);if(yes)note(t("scene.presentationAide"),"info",3500);}
@@ -164,7 +175,7 @@ public final class MainActivity extends Activity {
     void copy(String desc,String text){getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText(desc,text));note(t("commun.copie"),"ok");}
     void hideKeyboard(){if(getCurrentFocus()!=null)getSystemService(InputMethodManager.class).hideSoftInputFromWindow(getCurrentFocus().getWindowToken(),0);}
 
-    private String signature(boolean silent){return project.text+"\u0001"+silent+"|"+project.fileAudio+"|"+project.fileName+"|"+project.engine+"|"+project.voice+"|"+project.pitch+"|"+project.cps;}
+    private String signature(boolean silent){return project.text+"\u0001"+silent+"|"+project.fileAudio+"|"+project.fileName+"|"+project.engine+"|"+project.voice+"|"+hdId()+"|"+project.pitch+"|"+project.cps;}
     void launch(boolean silent){
         if(scene==null||preparing)return;if(reading!=null&&reading.playing&&!silent){reading.pause();playState();return;}
         String text=project.text;if(text.trim().isEmpty()){note(t("scene.err.texteVide"),"warn");scene.edit.requestFocus();return;}
@@ -173,38 +184,50 @@ public final class MainActivity extends Activity {
         if(exports.busy())return;
         if(reading!=null&&(sig.equals(signature)||!silent&&reading.silent&&!stopped&&!reading.ended)){
             if(stopped||reading.ended)reading.seek(0);startPlaying();return;}
-        if(!silent&&!project.fileAudio&&!project.engine.equals("piper")&&!talk.ready&&!talk.failure){note(t("scene.prep.ressources"),"info");return;}
+        if(!silent&&!project.fileAudio&&!Hd.hdEngine(project.engine)&&hdId().isEmpty()&&!talk.ready&&!talk.failure){note(t("scene.prep.ressources"),"info");return;}
         cancelPrewarm();hideKeyboard();content.requestFocus();if(reading!=null){reading.close();reading=null;}stopped=true;preparing=true;playState();
         int ticket=++generation;Project cfg=Project.fromJson(project.json());String lang=db.locale();
-        JSONObject personal=object(db.settings,"motsPerso");Voice v=!silent&&!cfg.fileAudio&&!cfg.engine.equals("piper")?talk.choose(lang,cfg.voice):null;
+        boolean automatic=cfg.engine.equals("auto");List<String> choices=automatic?hd.automatic(lang):Hd.hdEngine(cfg.engine)?List.of(cfg.voice):List.of();
+        JSONObject personal=object(db.settings,"motsPerso");Voice v=!silent&&!cfg.fileAudio&&!Hd.hdEngine(cfg.engine)?talk.choose(lang,automatic?"":cfg.voice):null;
         boolean localReady=talk.ready;File audio=db.audio(project),cache=getCacheDir();
         LinearLayout loading=sceneOverlay(t("scene.prep.titre"));TextView loadingText=ui.small(t("scene.prep.ressources"));ui.add(loading,loadingText,5);
         android.widget.ProgressBar bar=new android.widget.ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);bar.setMax(1000);ui.add(loading,bar,12);
+        ui.add(loading,ui.button(t("commun.annuler"),null,this::stop),8);
         preparation=queue.submit(()->{
             Pcm decoded=null;boolean delivered=false;try{
                 int cps=cfg.cps;
-                Script.Keywords words=new Script.Keywords(refs,lang,personal);List<Script.Segment> segments;float base=1;
+                Script.Keywords words=new Script.Keywords(refs,lang,personal);List<Script.Segment> segments;String spokenBy="";
                 if(silent)segments=Script.timing(text,text.length()*1000./cps,1);
                 else if(cfg.fileAudio){if(!audio.isFile())throw new IOException(t("scene.err.sansAudio"));
                     decoded=Pcm.decode(audio,cache);segments=cfg.subtitles?Script.locate(text,cfg.segments,true):null;
                     if(segments==null)segments=Script.timing(text,decoded.duration(),0);
-                }else if(cfg.engine.equals("piper")){
+                }else {
                     if(text.length()>SpeechPlan.MAX_TEXT)throw new IOException(t("voix.hd.err.tropLong","max",SpeechPlan.MAX_TEXT,"n",text.length()));
-                    if(!hd.installed(hd.voice(cfg.voice)))throw new IOException(t("voix.hd.err.manquant"));
-                    Hd.Synthesis syn=hd.synth(text,cfg.voice,cps,(n,total)->handler.post(()->{
-                        loadingText.setText(t("voix.hd.synthesePhrase","i",Math.min(n+1,total),"n",total));bar.setProgress((int)(1000*n/Math.max(1,total)));}));
-                    decoded=syn.pcm;segments=syn.segments;
-                }
-                else {
-                    if(v==null)throw new IOException(t(localReady?"voix.err.aucune":"voix.err.absente"));
-                    Hd.Synthesis syn=talk.render(cache,text,lang,object(refs.json("prononciation.json"),lang),v,cps,cfg.pitch,
-                        (n,total)->handler.post(()->bar.setProgress((int)(1000*n/Math.max(1,total)))));
+                    Hd.Progress progress=(n,total)->handler.post(()->{
+                        if(ticket!=generation)return;
+                        loadingText.setText(t("voix.hd.synthesePhrase","i",Math.min(n+1,total),"n",total));bar.setProgress((int)(1000*n/Math.max(1,total)));
+                    });
+                    Hd.Synthesis syn=null;Exception hdError=null;
+                    for(String id:choices) {
+                        try {
+                            if(!hd.installed(hd.voice(id)))throw new IOException(t("voix.hd.err.manquant"));
+                            syn=hd.synth(text,id,cps,progress);spokenBy=id;break;
+                        }catch(Exception e){Pcm.interrupted();if(!automatic)throw e;hdError=e;hd.close();}
+                    }
+                    if(syn==null) {
+                        if(v==null){if(hdError!=null)throw hdError;throw new IOException(t(automatic?"android.voice.noAudio":localReady?"voix.err.aucune":"voix.err.absente"));}
+                        syn=talk.render(cache,text,lang,object(refs.json("prononciation.json"),lang),v,cps,cfg.pitch,progress);spokenBy=v.getName();
+                    }
                     decoded=syn.pcm;segments=syn.segments;
                 }
                 Script.reportExpressions(text,segments,cfg.segments);if(segments.isEmpty())throw new IOException(t("scene.err.texteVide"));
-                Mood m=new Mood(refs,lang,words,cfg.emotions);Pcm pcm=decoded;final float baseRate=base;final List<Script.Segment> parts=segments;
+                Mood m=new Mood(refs,lang,words,cfg.emotions);Pcm pcm=decoded;String voiceUsed=spokenBy;List<Script.Segment> parts=segments;
                 handler.post(()->{if(generation!=ticket||scene==null){if(pcm!=null)pcm.close();return;}try{
-                    reading=new Reading(text,parts,words,silent,pcm,talk,v,cfg,baseRate,this::readingFinished,code->readingError(code));
+                    reading=new Reading(text,parts,words,silent,pcm,talk,v,cfg,1,this::readingFinished,this::readingError);
+                    synthesisVoice=voiceUsed;
+                    if(!silent&&!cfg.fileAudio&&!choices.isEmpty()&&!choices.get(0).equals(voiceUsed)){
+                        JSONObject fallback=hd.voice(voiceUsed);note(t("android.voice.fallback","nom",fallback==null?voiceUsed:fallback.optString("nom")),"warn",5000);
+                    }
                     mood=m;preparing=false;sig=signature;clearOverlay();reading.volume(volume(),muted);reading.speed(project.speed);
                     if(silent)note(t("scene.apercuActif"),"info");if(isForeground)startPlaying();else playState();
                 }catch(Exception e){if(pcm!=null&&reading==null)pcm.close();sceneError(e);}});delivered=true;
@@ -222,6 +245,7 @@ public final class MainActivity extends Activity {
     void sceneError(Throwable error){if(stage==null)return;exports.abandon();log("scene",error);if(reading!=null){reading.close();reading=null;}sig="";preparing=false;stopped=true;playState();
         LinearLayout card=sceneOverlay(t("scene.err.titre"));TextView p=ui.p(error.getMessage()==null?error.toString():error.getMessage());p.setGravity(Gravity.CENTER);ui.add(card,p,8);
         ui.add(card,ui.button(t("commun.fermer"),null,this::clearOverlay),8);ui.add(card,ui.button(t("nav.reglages"),null,()->go("reglages")),6);
+        ui.add(card,ui.button(t("scene.voix.choisir"),"voice",this::chooseVoice),6);
         ui.add(card,ui.button(t("scene.apercuSansSon"),null,()->launch(true)),6);ui.add(card,ui.button(t("commun.reessayer"),null,true,false,()->launch(false)),6);
     }
     private void readingError(String code){sceneError(new IOException(code.equals("bloquee")?t("voix.err.bloquee"):code.equals("non-demarree")?t("voix.err.nonDemarree"):t("voix.err.lecture","code",code)));}
@@ -248,19 +272,35 @@ public final class MainActivity extends Activity {
                 default:break;}
         }return super.dispatchKeyEvent(e);
     }
+    String hdId(){return project.engine.equals("auto")?hd.autoVoice(db.locale()):Hd.hdEngine(project.engine)?project.voice:"";}
     String voiceName(){
         if(project.fileAudio)return project.fileName.isEmpty()?t("scene.voix.fichierAbsent"):project.fileName+" · "+Refs.time(project.duration);
-        if(project.engine.equals("piper")){JSONObject v=hd.voice(project.voice);return hd.installed(v)?"Lectura HD · "+v.optString("nom"):t("scene.voix.hdAbsente");}
-        Voice v=talk.choose(db.locale(),project.voice);if(v!=null){project.voice=v.getName();return v.getName();}return t("scene.voix.aucune");
+        String id=hdId();
+        if(!id.isEmpty()||Hd.hdEngine(project.engine)){
+            JSONObject v=hd.voice(id);return hd.installed(v)?"Lectura HD · "+v.optString("nom"):t("scene.voix.hdAbsente");
+        }
+        Voice v=talk.choose(db.locale(),project.engine.equals("auto")?"":project.voice);
+        if(v!=null)return v.getName();return t("scene.voix.aucune");
     }
-    void chooseVoice(){LinearLayout r=sheet(t("scene.voix.choisir"));ui.group(r,t("scene.voix.systeme"),true);List<Voice> voices=talk.voices(db.locale());
+    void chooseVoice(){
+        LinearLayout r=sheet(t("scene.voix.choisir"));ui.group(r,t("android.voice.sources"),true);
+        choice(r,t("android.voice.auto"),"sparkle",!project.fileAudio&&project.engine.equals("auto"),()->{dismiss();selectVoice("auto","");});
+        ui.add(r,ui.small(t("android.voice.autoHelp")),3);
+        for(JSONObject v:installedHd()){
+            String id=v.optString("id"),engine=Hd.engine(v);
+            choice(r,"Lectura HD · "+v.optString("nom"),"sparkle",!project.fileAudio&&project.engine.equals(engine)&&project.voice.equals(id),()->{dismiss();selectVoice(engine,id);});
+        }
+        choice(r,t("voix.hd.gerer"),"download",false,()->go("reglages"));
+        ui.group(r,t("scene.voix.systeme"),false);List<Voice> voices=talk.voices(db.locale());
         if(voices.isEmpty())ui.add(r,ui.small(t("voix.err.aucune")),0);
         for(Voice voice:voices)choice(r,voice.getName(),"voice",!project.fileAudio&&project.engine.equals("webspeech")&&project.voice.equals(voice.getName()),()->{dismiss();selectVoice("webspeech",voice.getName());});
-        ui.group(r,t("voix.hd.titre"),false);List<JSONObject> installed=installedHd();
-        if(installed.isEmpty())choice(r,t("voix.hd.gerer"),"download",false,()->go("reglages"));
-        for(JSONObject v:installed){String id=v.optString("id");choice(r,"Lectura HD · "+v.optString("nom"),"sparkle",!project.fileAudio&&project.engine.equals("piper")&&project.voice.equals(id),()->{dismiss();selectVoice("piper",id);});}
-        ui.group(r,t("scene.voix.fichierTitre"),false);choice(r,project.fileAudio?voiceName():t("scene.voix.fichier"),"upload",project.fileAudio,()->{dismiss();pickAudio();});}
-    void selectVoice(String engine,String id){project.fileAudio=false;project.engine=engine;project.voice=id;db.set("moteurVoix",engine);db.set("voixId",id);if(scene!=null)scene.voice();cancelPrewarm();if(engine.equals("piper"))prewarm=queue.submit(()->{try{hd.prewarm("Bonjour.",id);}catch(Exception ignored){}});}
+        ui.group(r,t("scene.voix.fichierTitre"),false);choice(r,project.fileAudio?voiceName():t("scene.voix.fichier"),"upload",project.fileAudio,()->{dismiss();pickAudio();});
+    }
+    void selectVoice(String engine,String id){
+        if(preparing||reading!=null&&reading.playing)stop();clearOverlay();
+        project.fileAudio=false;project.engine=engine;project.voice=id;db.set("moteurVoix",engine);db.set("voixId",id);
+        if(scene!=null){scene.voice();preloadVoice();}else if(screens!=null&&route.equals("reglages"))screens.refresh();
+    }
     void pick(String mime,Consumer<Uri> onResult){Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime);request(intent,onResult);}
     void createFile(String mime,String name,Consumer<Uri> writer){request(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime).putExtra(Intent.EXTRA_TITLE,name),writer);}
     private void request(Intent intent,Consumer<Uri> callback){if(result!=null)return;result=callback;try{startActivityForResult(intent,73);}catch(Exception e){result=null;report("fichier",e);}}
@@ -311,7 +351,22 @@ public final class MainActivity extends Activity {
         final Hd.Synthesis synthesis;HdResult(Hd.Synthesis s){synthesis=s;}
         @Override public void close(){synthesis.pcm.close();}
     }
-    void clearHd(){stopHdExample();if(hdDownload!=null)hdDownload.cancel(true);queue.submit(()->{hd.removeAll();handler.post(()->{
+    void downloadVoice(String id){
+        if(!hdDownloading.isEmpty())return;
+        int ticket=++downloadGen;hdDownloading=id;hdDownloaded=0;hdDownloadTotal=hd.size(hd.voice(id));
+        cancelPrewarm();stopHdExample();refreshVoicePanel();
+        hdDownload=queue.submit(()->{
+            try{
+                hd.download(id,(n,total)->handler.post(()->{if(ticket==downloadGen){hdDownloaded=n;hdDownloadTotal=total;if(downloadProgress!=null)downloadProgress.run();}}));
+                handler.post(()->{if(ticket==downloadGen){hdDownloading="";note(t("voix.hd.prete"),"ok");refreshVoicePanel();if(scene!=null)scene.voice();}});
+            }catch(Exception e){handler.post(()->{if(ticket==downloadGen){hdDownloading="";refreshVoicePanel();report("voix-hd",e);}});}
+        });
+    }
+    void cancelVoiceDownload(){
+        downloadGen++;if(hdDownload!=null)hdDownload.cancel(true);hdDownload=null;hdDownloading="";
+    }
+    void refreshVoicePanel(){if(screens!=null&&route.equals("reglages"))screens.refresh();}
+    void clearHd(){stopHdExample();cancelVoiceDownload();queue.submit(()->{hd.removeAll();handler.post(()->{
         note(t("reglages.stockage.libere"),"ok");if(screens!=null&&route.equals("reglages"))screens.refresh();});});}
     void menu(){
         LinearLayout r=sheet(t("scene.menu"));ui.menuGroup(r,t("menu.projet"),6);

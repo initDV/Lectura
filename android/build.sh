@@ -71,6 +71,24 @@ with zipfile.ZipFile(sys.argv[1]) as aar:
             (Path(sys.argv[2]) / ('ONNX-' + base)).write_bytes(aar.read(name))
 PYNOTICE
 fi
+if [[ -v LECTURA_VOICE_DEPS ]]; then
+  : "${LECTURA_ORT_AAR:?ONNX Runtime Android requis pour les voix supplémentaires.}"
+  unzip -p "$LECTURA_VOICE_DEPS/sherpa.aar" classes.jar > "$WORK/sherpa.jar"
+  # Do not copy Sherpa’s x86 ORT shared library over the Microsoft Java runtime.
+  unzip -qo "$LECTURA_VOICE_DEPS/sherpa.aar" 'jni/*/libsherpa-onnx-jni.so' -d "$WORK/sherpa"
+  cp android/licenses/SHERPA-APACHE-2.0.txt "$WORK/assets/SHERPA-APACHE-2.0.txt"
+  python3 - "$LECTURA_VOICE_DEPS" "$WORK/assets" <<'PYNOTICES'
+from pathlib import Path
+import sys, zipfile
+base, out = map(Path, sys.argv[1:])
+for name in ('kotlin', 'compress', 'io'):
+    with zipfile.ZipFile(base / (name + '.jar')) as jar:
+        for path in jar.namelist():
+            f = Path(path).name
+            if f.upper().startswith(('LICENSE', 'NOTICE')) and not path.endswith('/'):
+                (out / (name + '-' + f)).write_bytes(jar.read(path))
+PYNOTICES
+fi
 # Décompresse le même WOFF2 (pas de substitution par une police système).
 python3 - "$WORK/assets" <<'PY'
 import sys
@@ -108,6 +126,9 @@ with zipfile.ZipFile(w/'classes.jar', 'w', zipfile.ZIP_DEFLATED) as z:
 PY
 inputs=("$WORK/classes.jar")
 if [[ -f "$WORK/ort.jar" ]]; then inputs+=("$WORK/ort.jar"); fi
+if [[ -f "$WORK/sherpa.jar" ]]; then
+  inputs+=("$WORK/sherpa.jar" "$LECTURA_VOICE_DEPS/kotlin.jar" "$LECTURA_VOICE_DEPS/compress.jar" "$LECTURA_VOICE_DEPS/io.jar")
+fi
 "$D8" --release --min-api 31 --lib "$PLATFORM" --output "$WORK/dex" "${inputs[@]}"
 python3 - "$WORK" <<'PY'
 import sys, zipfile
@@ -116,8 +137,9 @@ w = Path(sys.argv[1])
 with zipfile.ZipFile(w/'resources.apk', 'a', zipfile.ZIP_DEFLATED) as z:
     for f in sorted((w/'dex').glob('*.dex')):
         z.write(f, f.name)
-    for f in sorted((w/'ort/jni').glob('*/*.so')):
-        z.write(f, 'lib/' + str(f.relative_to(w/'ort/jni')))
+    for root in (w/'ort/jni', w/'sherpa/jni'):
+        for f in sorted(root.glob('*/*.so')):
+            z.write(f, 'lib/' + str(f.relative_to(root)))
 PY
 "$ZIPALIGN" -f 4 "$WORK/resources.apk" "$WORK/aligned.apk"
 if ((check)) || [[ -n ${TEST_OUTPUT:-} ]]; then
