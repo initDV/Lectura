@@ -33,7 +33,8 @@ jobs:
               print(f'::notice title={title}::{text[:28000]}')
           with tarfile.open('kokoro.tar.bz2') as t:
               paths=t.getmembers()
-              note('Kokoro paths', [str(Counter(e.type for e in paths)),str(sum(e.size for e in paths)),*[f'{e.name} {e.size}' for e in paths if 'espeak-ng-data/' not in e.name][:60]])
+              tokens=next(e for e in paths if e.name.endswith('/tokens.txt'))
+              note('Kokoro tokens', [repr(t.extractfile(tokens).read().decode('utf8'))])
           with zipfile.ZipFile('sherpa.aar') as z:
               note('Sherpa AAR', [e.filename for e in z.infolist()][:90])
               Path('classes.jar').write_bytes(z.read('classes.jar'))
@@ -51,8 +52,14 @@ jobs:
                   elif name.endswith('.json'):
                       raw=z.read(n); data=json.loads(raw)
                       note(name,[raw[:9000].decode('utf8','replace') if len(raw)<24000 else str(list(data) if isinstance(data,dict) else data[:3])])
-                  elif name in ('README.md','MODEL_NOTICE.txt','README.txt'):
+                  elif name in ('README.md','MODEL_NOTICE.txt','README.txt','VOICE_ATTRIBUTION.md'):
                       note(name,[z.read(n)[:8000].decode('utf8','replace')])
-                  elif name.endswith(('.bin','.npy','.safetensors')):
-                      with z.open(n) as f: note(name,[repr(f.read(260))])
+                  elif name.endswith(('.bin','.npy','.safetensors','.preset','.model')):
+                      with z.open(n) as f: note(name,[repr(f.read(400))])
+                      if name.endswith('.preset'):
+                          raw=z.read(n)
+                          for i in [0,40,256,315392,315400,630784,630792,946176,946184,1024000]:
+                              print(i, raw[i:i+48].hex())
+                          from collections import Counter
+                          note('Preset format details', [str(Counter(raw[:400])), raw[:2048].hex(), raw[-2048:].hex(), 'PK magic ' + str(raw.find(b'PK\\x03\\x04')), 'state_0 ' + str(raw.find(b'state_0')), 'tensor ' + str(raw.find(b'cache'))])
           PY
