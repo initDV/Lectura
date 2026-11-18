@@ -18,6 +18,19 @@ Sur l’émulateur Android 12 : installation, tutoriel/lecture/commandes, WAV im
 
 ## Phase 1 — Parité et accès intégral Android
 
+**APK livré :** [Lectura.apk dans le ZIP Android 12+](https://github.com/initDV/Lectura/actions/runs/44339482883/artifacts/14444465087), `versionCode` 25, code `2939a5d`, [CI verte](https://github.com/initDV/Lectura/actions/runs/44339482883). [Rapport de comparaison et tests](https://github.com/initDV/Lectura/actions/runs/44339482883/artifacts/14442604396) · [sources correspondantes](https://github.com/initDV/Lectura/actions/runs/44339482883/artifacts/14442518306).
+
+| Contrôle du build 25 | Résultat |
+|---|---|
+| Mise à jour depuis le premier APK permanent | Même certificat et `versionCode` 21 → 25 via `adb install -r`, sans effacement. Brouillon, projet, audio, pose, terminal et réglages conservés ; anciens champs d’activation retirés. |
+| Installation vierge en mode avion | Aucun réseau actif. Tutoriel et navigation natifs, 43 personnages sélectionnés, 38 poses + Auto, interface FR/EN sans offre ni clé, réglages de terminal et lexiques. Voix système locale FR et lecture WAV contrôlées. |
+| Sous-titres et PNG | Parcours du menu avec résultat simulé du sélecteur Android ; import SRT et VTT, round-trip exact, timecodes sur WAV, PNG 1080×1920. |
+| Vidéo et partage | Formats 16:9 et 9:16 ; capsule MP4 portrait avec son dans le parcours natif, téléchargement et lecture dans « Mes vidéos ». Tests de fichiers MP4, WebM, MP3, MediaStore et partage entre deux UID. |
+| Voix HD | Modèle Gilles réellement téléchargé avec interruption et reprise ; deux locuteurs MLS synthétisés. Puis arrêt du processus, retour en avion sans réseau actif, sélection de Gilles et synthèse d’un **nouveau** texte. Son PCM non nul et lecture terminée avec animation. Démarrage en 9,8 s sur ce run, pas un benchmark de téléphone. |
+| Référence web inchangée | Pages HTTP 200, build `76713dcd32`, 10 voix, WAV commun et Web Speech FR à 1,25×. Comparaison des trois images : MAE RVB 1,77 (scène), 6,22 (menu), 2,98 (tutoriel), ni égalité stricte ni mesure de synchronisation audio. |
+
+Résultats d’émulateur Android 12, pas d’essai physique. Les formats vidéo restent liés aux codecs du téléphone ; la voix système directe ne fournit pas de piste à l’encodeur, contrairement à une voix HD ou à un fichier importé.
+
 Point de départ : [run API 31/Pages `44304526156`](https://github.com/initDV/Lectura/actions/runs/44304526156), avant la clé permanente. Le [rapport précédent](ANDROID_BOUCHE_PRO.md) distingue les rejeux déterministes des lectures réelles. La campagne ne vaut pas validation de tous les parcours : elle sert de référence pour les tests suivants.
 
 | Surface visible | Contrôles déjà documentés | À vérifier ou à comparer en phase 1 |
