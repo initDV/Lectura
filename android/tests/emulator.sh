@@ -18,6 +18,8 @@ instrument() {
     local phase="$1" class="$2" rc=0 check_log="$LECTURA_REPORT/android-$1.txt"
     shift 2
     adb shell am force-stop "$package"
+    adb shell input keyevent KEYCODE_WAKEUP
+    adb shell wm dismiss-keyguard
     timeout 330 adb shell am instrument -w -r "$@" "$package.tests/$package.$class" | tee "$check_log" || rc=$?
     cat "$check_log" >> "$LECTURA_REPORT/android-checks.txt"
     local result summary=''
@@ -82,6 +84,7 @@ for ((i=0;i<150;i++)); do
         adb shell settings put global animator_duration_scale 0
         # Do not let Android's one-time full-screen hint cover the Lectura controls.
         adb shell settings put secure immersive_mode_confirmations confirmed
+        adb shell svc power stayon true
         adb shell input keyevent KEYCODE_WAKEUP
         adb shell wm dismiss-keyguard
         tts=()

@@ -638,12 +638,25 @@ public final class DeviceChecks extends Instrumentation {
         airplane(ctx);
         MainActivity a=open(ctx);File dir=ctx.getExternalFilesDir("verification");
         try {
+            waitFor("Fenêtre de lecture hors ligne",()->a.isForeground&&a.hasWindowFocus(),15000);
             main(()->{
                 require(a.hd.installed(a.hd.voice("gilles")),"Modèle téléchargé absent après relance");
                 Project p=new Project(a.db.settings);p.text="Ce matin, la lumière traverse la fenêtre. Nous lisons ensemble.";a.open(p);
             });
             click(a,a.t("scene.voix.choisir"));click(a,"Lectura HD · "+a.hd.voice("gilles").optString("nom"));
+            long start=android.os.SystemClock.uptimeMillis();
             click(a,a.t("scene.lancer"));
+            // A cold ONNX session and two uncached phrases can take longer than the
+            // WAV/system-voice startup bound on a shared CI runner. Do not reuse cached PCM.
+            try{
+                waitFor("Démarrage de la lecture HD depuis le modèle local",()->a.reading!=null&&a.reading.playing,45000);
+            }catch(AssertionError e){
+                AtomicReference<String> detail=new AtomicReference<>();
+                main(()->detail.set("focus="+a.hasWindowFocus()+", premierPlan="+a.isForeground+", préparation="+a.preparing
+                    +", lecture="+(a.reading==null?"absente":a.reading.playing+"/"+a.reading.ended)+", journal="+a.journal.peekLast()));
+                throw new AssertionError(e.getMessage()+" ; "+detail.get(),e);
+            }
+            long startup=android.os.SystemClock.uptimeMillis()-start;
             int frames=sampleReading(a,dir,"piper-avion",20000).length();
             AtomicReference<Integer> signal=new AtomicReference<>(0);
             main(()->{
@@ -652,7 +665,8 @@ public final class DeviceChecks extends Instrumentation {
                 signal.set(pcmPeak(a.reading.pcm,0,Math.round(a.reading.duration)));
             });
             require(signal.get()>1000,"Piper muet en mode avion");
-            return "Nouvelle scène après arrêt du processus, Gilles sélectionné dans l’interface ; réseau absent, pic PCM "+signal.get()+", "+frames+" observations";
+            return "Nouvelle scène après arrêt du processus, Gilles sélectionné dans l’interface ; réseau absent, démarrage après "
+                +startup+" ms, pic PCM "+signal.get()+", "+frames+" observations";
         }finally{main(a::finish);}
     }
     private String hd(Refs refs)throws Exception {
