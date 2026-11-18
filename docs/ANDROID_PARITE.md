@@ -1,23 +1,49 @@
-# Lectura Android — référence et inventaire
+# Lectura Android — référence, vérifications et limites
 
-Référence unique : `initDV/Lectura` à `39e429522cc715aeda6ce0db9d3eb5690ba1f2fd` (dernier déploiement Pages réussi au moment de l’audit). Le comportement du code prime sur le README. Le projet web continue de fonctionner indépendamment du dossier `android/`.
+Référence de départ : le déploiement de `initDV/Lectura` à [`39e4295`](https://github.com/initDV/Lectura/commit/39e429522cc715aeda6ce0db9d3eb5690ba1f2fd), build Pages `2026-11-16 · 76713dcd32`. Les captures de CI interrogent [Pages](https://initdv.github.io/Lectura/) directement et consignent le build effectivement servi. Le code de référence prime sur le README. Le port natif ne modifie ni la PWA ni son déploiement.
 
-| Référence web | Équivalent Android prévu | État initial |
-|---|---|---|
-| Scène responsive 38/62, décor en perspective, FAB pulsant, filigrane Gratuit | Canvas et vues Android, gestes et mêmes constantes | À porter |
-| `characters/` : 43 couples SVG+JSON (32 gratuits, 11 Pro, 13 cadres 240×600 et 30 cadres 200×330) | Mêmes fichiers, chemins vectoriels et pivots natifs, grille dans le même ordre | À porter |
-| Respiration, clignements, regards, balancement, gestes ponctuels/scénarisés, ponctuation, lèvres et visèmes, force des mouvements | Animation par image à partir des équations et tables de `character.js`, `rig.js`, `mouth.js`, `expressions.js` | À porter |
-| 4 expressions gratuites, 34 Pro ; détection FR/EN, négations, émojis, intensité, mélanges, réglage par phrase | Mêmes poses et lexiques ; sélection manuelle et automatisme | À porter |
-| Terminal « rhak_override@sentinel: ~/cours », œil, curseur à 1 Hz, 40 lignes, mots-clés, `$ ` et `# `, nettoyage Markdown | Canvas/textes formatés et même minutage | À porter |
-| Capturer l’écran (toucher simple/double), vitesse 0,50–2,00 par 0,25, voix/import, texte, Lancer/Pause/Reprendre/Arrêter, muet/volume ; raccourcis | Vues natives et mode présentation ; veille inhibée pendant la lecture | À porter |
-| Web Speech : liste par langue, voix locale d’abord, estimation 14 caractères/s, événements mot, reprise au début du mot | Android TextToSpeech (catalogue/voix dépendant du moteur de l’appareil) | Adaptation d’API nécessaire |
-| Fichier MP3/WAV/Ogg/M4A/AAC/WebM, lecture synchronisée et lip-sync (4 niveaux / 3 bandes Pro) | Décodage et lecture Android ; mêmes règles d’analyse | À porter |
-| 10 voix Piper (Siwis, UPMC, Tom, Gilles, 6 MLS), téléchargement à la demande, mémoire/cache des phrases et synthèses, limite à 12 000 caractères | Mêmes modèles/configurations et phonétisation française, inférence ONNX Runtime Android | À porter |
-| PNG, vidéo Pro en 16:9/9:16 à 30 i/s, H.264/AAC ou VP9/VP8/Opus, MP3, contrôle de l’export, Mes vidéos | Encodeurs et stockage Android ; partage par le système | À porter ; compatibilité des apps receveuses non garantie |
-| Menu de scène, Projets, Personnages, Réglages, Pro, À propos, tutoriel 3 pages | Vues et dialogues Android ; ressources FR et EN reprises | À porter |
-| Projets récents, brouillon 5 s, exemple, imports .txt/.md/.lectura, exports .lectura, .srt/.vtt Pro | Stockage privé et sélecteur Android ; même JSON de projet | À porter |
-| 10 apparences, 4 thèmes du terminal, 2 polices, mots-clés et décor personnalisables, journal local | Même palette, mêmes valeurs et persistance privée | À porter |
-| Pro : clé ECDSA P-256/SHA-256 liée à l’identifiant d’installation | Même clé publique et format ; nouvel identifiant natif | À porter ; pas de transfert de données du navigateur |
-| Installer / recharger une mise à jour ; service worker réseau d’abord et cache hors ligne | Installateur/gestionnaire de paquets Android ; toutes les ressources de base dans l’APK | Équivalent OS, pas de boutons PWA ni mise à jour silencieuse |
+## Correspondances
 
-Les fichiers vidéo MP4 H.264/AAC sont la cible de compatibilité galerie et WhatsApp. WebM peut être partagé comme fichier mais une application tierce décide si elle l’ouvre comme vidéo. MP3 reste de l’audio. Un modèle HD n’est jamais incorporé à l’APK.
+| Référence web | Équivalent Android |
+|---|---|
+| Scène responsive 38/62, décor en perspective, FAB, filigrane Gratuit | Canvas et vues Android, à partir des mêmes ressources et constantes |
+| 43 couples SVG+JSON (32 gratuits, 11 Pro) ; pivots, poses, gestes, lèvres et clignements | Ressources originales ; rendu et animation natifs, sans WebView |
+| 4 expressions de base, 34 Pro, détection FR/EN et réglage par phrase | Tables de poses et lexiques partagés ; sélections, mélanges et réactions en lecture |
+| Terminal `rhak_override@sentinel: ~/cours`, œil, 40 lignes, curseur, mots-clés, Markdown, `$ ` et `# ` silencieux | Dessin natif, coloration et horloges de lecture |
+| Présentation simple/double toucher, vitesse par paliers, lecture, muet, volume et raccourcis | Commandes natives ; clavier, plein écran et insets gérés par Android |
+| Synthèse système Web Speech | `TextToSpeech` Android ; les voix dépendent de l’appareil. Ce flux n’est pas capturé dans la vidéo. |
+| Fichier audio ou 10 voix Lectura HD (5 modèles) | Sélecteur et décodage Android, lip-sync sur PCM ; Piper par ONNX Android et modèles Pages à la demande |
+| PNG, vidéo Pro 16:9/9:16, MP3 et Mes vidéos | PNG de la scène ; MP4 H.264/AAC ou WebM VPx/Opus selon les encodeurs, MP3 LAME ; MediaStore, bibliothèque privée et partage par URI |
+| Projets, Personnages, Réglages, Pro, À propos et tutoriel | Vues natives FR/EN ; stockage privé, import/export via le sélecteur système |
+| JSON `.lectura`, `.txt`/`.md`, `.srt`/`.vtt` Pro, brouillon, exemple | Format de projet v1 repris ; fichiers importés par Android. Pas de reprise automatique des données du navigateur. |
+| 10 apparences, 4 thèmes du terminal, 2 polices, décor, mots-clés et journal | Réglages et persistance natifs |
+| Licence Pro ECDSA P-256 liée à l’installation | Même format et clé publique ; nouvel identifiant pour l’installation Android |
+| Installation et mise à jour PWA | APK Android ; ressources de base embarquées, pas de service worker ni mise à jour silencieuse |
+
+L’inventaire des ressources et les dimensions de référence se trouvent dans [ANDROID_INVENTAIRE.md](ANDROID_INVENTAIRE.md).
+
+## Mesures sur l’émulateur Android 12
+
+Les tests installent un APK de test signé et un APK d’instrumentation séparé. Le rapport `Lectura-comparaison` rassemble les captures non retouchées, les écarts RVB et le journal des contrôles. Les trois surfaces de départ sont comparées à 390 × 780, DPR 1, FR. La présence des paires est exigée, pas l’égalité des pixels. Les polices rasterisées, les animations et les surfaces système peuvent différer.
+
+Campagne sur l’APK [`1aec807`](https://github.com/initDV/Lectura/commit/1aec807) : [exécution `44295570195`](https://github.com/initDV/Lectura/actions/runs/44295570195) réussie. Résultats API 31 :
+
+| Contrôle | Résultat observé |
+|---|---|
+| Démarrage et commandes | Tutoriel, scène et menu ; aperçu silencieux, pause/reprise/arrêt, vitesse, œil et cinq destinations |
+| Ressources et formats | 43 rigs dessinés, 34 expressions Pro, 8 fixtures G2P, 8 chronologies, SRT/VTT, JSON v1 et signatures P-256 de test |
+| Fichier audio | Import et lecture d’un WAV, pause, avance, vitesse et lip-sync en mode muet |
+| Piper | Gilles : téléchargement original interrompu et repris, inférence PCM non muette, cache et suppression. Le contrôle MLS exerce deux locuteurs (0 et 3) du modèle original partagé. |
+| Enregistrement depuis la scène | Actions Enregistrer/Arrêter, MP4 portrait 720 × 1280 avec du son alors que l’écoute était muette, téléchargement et lecture dans Mes vidéos. Le test vérifie aussi le refus en Gratuit ; pour exercer l’UI Pro il change l’état en mémoire dans l’instrumentation, pas la clé de l’application. |
+| Encodage contrôlé | MP4 paysage 1280 × 720 H.264/AAC, WebM portrait 720 × 1280 VPx/Opus et MP3 ; pistes relues, hauteur de la tonalité contrôlée à 1,25× ; enregistrement MediaStore et bibliothèque privée |
+| Partage | Lecture des URI MP4, WebM et MP3 par l’APK récepteur, sous un autre UID ; ce n’est pas un essai dans WhatsApp ou dans une galerie |
+| Voix Android | Test de lecture FR non exécuté : aucune voix française locale utilisable sur cette image |
+
+Mesures de cette campagne : scène **82,99 % / 1,60**, menu **92,27 % / 3,39**, tutoriel **82,93 % / 2,83** (pixels identiques / erreur RVB moyenne par canal, sur 255). Sur la [campagne précédente](https://github.com/initDV/Lectura/actions/runs/44294633406), l’erreur du menu était de 6,98 ; après ajustement des espacements, le décalage vertical des rangées échantillonnées est de 0,52 à 2,53 px. Ces chiffres ne démontrent pas une parité pixel à pixel, ni la parité de toutes les pages et de tous les thèmes.
+
+## Avant diffusion
+
+- Sur un téléphone réel, comparer le même projet à Pages en portrait et paysage, avec clavier et barres système. Tester également un appareil plus récent qu’Android 12.
+- Installer une voix Android locale FR et tester une lecture complète. Essayer les autres modèles HD, ainsi que plusieurs fichiers audio (MP3, WAV, Ogg, M4A/AAC, WebM) : le décodage dépend de l’appareil. Vérifier l’attribution de chaque modèle/corpus avant de publier de l’audio dérivé.
+- Avec une licence Pro réelle pour le nouvel identifiant, enregistrer en 16:9 et en 9:16, modifier la vitesse, couper le son d’écoute, puis rouvrir le MP4 et contrôler image, piste audio et synchronisation. Tester « Mes vidéos », la galerie du téléphone et le partage vers un compte WhatsApp de test. WebM est une alternative de fichiers, sans garantie d’ouverture par le destinataire. Le repli de l’encodage essaie d’autres codecs à l’initialisation ; une défaillance plus tard n’est pas une conversion automatique du même enregistrement.
+- L’APK de CI est signé pour essai, pas pour une release. Choisir une clé de distribution pérenne et valider les [composants et leurs licences](../android/licenses/COMPOSANTS.md), notamment le cœur MP3 LGPL ; les notices et sources correspondantes ne modifient pas la liste de licences autorisées du projet. Voir [installation et recompilation](../android/README.md).
