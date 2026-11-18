@@ -128,14 +128,23 @@ jobs:
           # Isolate the Linux speech setup from the APK build and the reference WAV check.
           sources="$RUNNER_TEMP/ubuntu.sources"
           sed -E 's#http://[^ ]+/ubuntu/?#https://archive.ubuntu.com/ubuntu/#g' /etc/apt/sources.list.d/ubuntu.sources > "$sources"
-          aptopts=(-o "Dir::Etc::SourceList=$sources" -o Dir::Etc::SourceParts=- -o Acquire::https::Timeout=10 -o Acquire::Retries=0)
-          if sudo timeout 45 apt-get "${aptopts[@]}" update -qq &&
-             sudo timeout 45 apt-get "${aptopts[@]}" install -y --no-install-recommends speech-dispatcher speech-dispatcher-espeak-ng pulseaudio &&
-             pulseaudio --start --exit-idle-time=-1 && pactl load-module module-null-sink sink_name=lectura_ci &&
-             pactl set-default-sink lectura_ci && speech-dispatcher -d; then
+          aptopts=(-o "Dir::Etc::SourceList=$sources" -o Dir::Etc::SourceParts=- -o Acquire::Languages=none -o Acquire::IndexTargets::deb::DEP-11::DefaultEnabled=false -o Acquire::https::Timeout=12 -o Acquire::Retries=0)
+          install_speech() {
+            sudo env DEBIAN_FRONTEND=noninteractive timeout 35 apt-get "${aptopts[@]}" install -y --no-install-recommends speech-dispatcher speech-dispatcher-espeak-ng pulseaudio
+          }
+          host_log="$LECTURA_REPORT/web-speech-setup.txt"
+          start_speech() {
+            export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$RUNNER_TEMP/lectura-audio}"
+            mkdir -p -m 700 "$XDG_RUNTIME_DIR"
+            { install_speech || { sudo timeout 50 apt-get "${aptopts[@]}" update -qq && install_speech; }; } &&
+              pulseaudio --start --exit-idle-time=-1 && pactl load-module module-null-sink sink_name=lectura_ci &&
+              pactl set-default-sink lectura_ci && speech-dispatcher -d
+          }
+          if start_speech >"$host_log" 2>&1; then
             LECTURA_TEST_SYSTEM_VOICE=1 xvfb-run -a node "$RUNNER_TEMP/lectura-web/web.mjs"
           else
-            echo '::warning title=Web Speech non testé::Moteur Linux indisponible ; vérifier uniquement le fichier WAV sur Pages.'
+            tail=$(tail -c 650 "$host_log" | tr '\r\n' ' ')
+            echo "::warning title=Web Speech non testé::Moteur Linux indisponible : ${tail//%/%25}"
             node "$RUNNER_TEMP/lectura-web/web.mjs"
           fi
       - name: Moteur TextToSpeech de l’émulateur (test seulement)

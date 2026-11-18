@@ -127,13 +127,9 @@ public final class DeviceChecks extends Instrumentation {
                 for(String label:new String[]{"Enregistrer","Projets","Importer .txt / .md","Aperçu sans son","Plein écran"})boxes.put(label,bounds(named(sheet,label)));
                 Library.writeJson(new File(dir,"android-menu-boxes.json"),boxes);
             });
-            click(a,"Aperçu sans son");
-            main(()->a.scene.edit.setText("Bonjour Lectura. Ceci est un essai natif. ".repeat(18)));
+            main(()->{a.dismiss();a.scene.edit.setText("Bonjour Lectura. Ceci est un essai natif. ".repeat(18));});
             click(a,"Menu");click(a,"Aperçu sans son");
-            for(int i=0;i<30;i++){
-                AtomicReference<Boolean> ready=new AtomicReference<>();main(()->ready.set(a.reading!=null&&a.reading.playing));
-                if(ready.get())break;Thread.sleep(100);
-            }
+            waitFor("Aperçu non démarré",()->a.isForeground&&a.reading!=null&&a.reading.silent&&a.reading.playing&&a.reading.terminal.shown>0,10000);
             screen(a,dir,"lecture");click(a,"Pause");click(a,"Reprendre");click(a,"Arrêter");click(a,"Accélérer");
             main(()->{require(a.stopped&&a.reading!=null&&!a.reading.playing&&a.reading.terminal.shown>0,"Arrêt de lecture");
                 require(a.project.speed==1.25f,"Vitesse 1.25x");});
