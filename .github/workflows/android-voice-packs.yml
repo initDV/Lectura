@@ -29,6 +29,23 @@ jobs:
           curl -fsSL --retry 2 'https://github.com/ByBrawe/Okuvia-models/releases/download/pocket-multilingual-preset-20261026/fr-pocket-tts-202610-preset.zip' -o "$d/estelle.zip"
           (cd "$d" && echo '6068d9e5fa2b91c92bda8a3d874c34a3f99799cd5bef45634644b4e37febf718  estelle.zip' | sha256sum -c && unzip -q estelle.zip)
           curl -fsSL --retry 2 'https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime/1.24.3/onnxruntime-1.24.3.jar' -o "$d/ort.jar"
+          # Inspect the deployed Mimi graph itself, not a different export of Pocket TTS.
+          if [[ $(uname -m) == x86_64 ]]; then
+            python3 -m pip install --user 'onnx==1.19.1'
+            python3 - "$d/models/mimi_decoder.onnx" <<'PY'
+          import collections
+          import sys
+          import onnx
+
+          graph = onnx.load(sys.argv[1]).graph
+          counts = collections.Counter(n.op_type for n in graph.node)
+          ops = ['ScatterElements', 'ScatterND', 'Mod', 'Range', 'Where']
+          print('::notice title=Attention Mimi::' + ', '.join(f'{op}={counts[op]}' for op in ops))
+          for node in graph.node:
+              if node.op_type in ('ScatterElements', 'ScatterND', 'Mod'):
+                  print(f'{node.name}: {node.op_type} {list(node.input)} -> {list(node.output)}')
+          PY
+          fi
           cat > "$d/Check.java" <<'JAVA'
           package io.github.initdv.lectura;
           class Pcm {static void interrupted(){}}
