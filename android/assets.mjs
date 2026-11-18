@@ -81,6 +81,7 @@ await Promise.all([
     'android.voice.sources': 'Voix locales Lectura',
     'android.voice.fallback': 'Voix prioritaire indisponible · secours : {nom}',
     'android.voice.noAudio': 'Télécharge Estelle ou choisis une voix déjà installée.',
+    'voix.hd.err.tropLong': 'Texte trop long pour la synthèse ({n} caractères sur {max} maximum). Coupe-le en plusieurs projets ou importe un audio.',
   })),
   put('en.json', androidStrings(en, {
     'persos.emotions.aide': en['persos.emotions.aidePro'],
@@ -98,6 +99,7 @@ await Promise.all([
     'android.voice.sources': 'Lectura local voices',
     'android.voice.fallback': 'Preferred voice unavailable · fallback: {nom}',
     'android.voice.noAudio': 'Download Estelle or choose an already installed voice.',
+    'voix.hd.err.tropLong': 'Text too long for synthesis ({n} characters; maximum {max}). Split it into projects or import audio.',
   })),
   put('defaults.json', defaults),
   put('themes.json', { app: themes, terminal: THEMES }), put('expressions.json', { neutral: NEUTRE, expressions }),

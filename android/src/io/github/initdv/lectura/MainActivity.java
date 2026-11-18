@@ -9,6 +9,7 @@ import android.graphics.Insets;
 import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.OpenableColumns;
@@ -202,7 +203,7 @@ public final class MainActivity extends Activity {
                     decoded=Pcm.decode(audio,cache);segments=cfg.subtitles?Script.locate(text,cfg.segments,true):null;
                     if(segments==null)segments=Script.timing(text,decoded.duration(),0);
                 }else {
-                    if(text.length()>SpeechPlan.MAX_TEXT)throw new IOException(t("voix.hd.err.tropLong","max",SpeechPlan.MAX_TEXT,"n",text.length()));
+                    if(!automatic&&!choices.isEmpty()&&text.length()>SpeechPlan.MAX_TEXT)throw new IOException(t("voix.hd.err.tropLong","max",SpeechPlan.MAX_TEXT,"n",text.length()));
                     Hd.Progress progress=(n,total)->handler.post(()->{
                         if(ticket!=generation)return;
                         loadingText.setText(t("voix.hd.synthesePhrase","i",Math.min(n+1,total),"n",total));bar.setProgress((int)(1000*n/Math.max(1,total)));
@@ -327,7 +328,8 @@ public final class MainActivity extends Activity {
     }
     void capturePng(){if(reading==null){note(t("scene.err.rienACapturer"),"info");return;}
         boolean portrait=viewportHeight()>content.getWidth()/ui.density;int w=portrait?1080:1280,h=portrait?1920:720;
-        android.graphics.Bitmap b=android.graphics.Bitmap.createBitmap(w,h,android.graphics.Bitmap.Config.ARGB_8888);stage.exportDraw(new android.graphics.Canvas(b),w,h,true,0);
+        android.graphics.Bitmap b=android.graphics.Bitmap.createBitmap(w,h,android.graphics.Bitmap.Config.ARGB_8888);
+        stage.updatePose(SystemClock.uptimeMillis()-stage.initial);stage.exportDraw(new android.graphics.Canvas(b),w,h,true,0);
         String name=project.base()+"-"+Instant.now().toString().substring(0,19).replaceAll("[:T]","-")+".png";
         createFile("image/png",name,uri->{try(java.io.OutputStream output=getContentResolver().openOutputStream(uri,"wt")){if(output==null||!b.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output))throw new IOException("Capture impossible.");note(t("scene.captureOk"),"ok");}catch(Exception e){report("capture",e);}finally{b.recycle();}});}
     void record(){exports.toggle();}

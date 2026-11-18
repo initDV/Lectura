@@ -57,7 +57,8 @@ final class Performance {
                     if(!a.sentiment&&punctuation.indexOf('!')>=0&&emotion.equals("pensif")){emotion="surpris";gesture="recule";force=.95;}
                 }else if(punctuation.indexOf('!')>=0) {
                     emotion=a.sentiment?a.expr:a.expr.equals("concentre")?"determine":"surpris";
-                    gesture=mood.motion(emotion,step);force=Math.min(1.2,a.sentiment?a.force+.07:1);
+                    gesture=!a.sentiment&&emotion.equals("surpris")&&punctuation.contains("!!")?"sursaut_double":mood.motion(emotion,step);
+                    force=Math.min(1.2,a.sentiment?a.force+.07:1);
                 }else if(punctuation.contains("...")||punctuation.contains("…")) {
                     emotion=a.sentiment?a.expr:"pensif";gesture="suspens";force=.66;
                 }else if(punctuation.contains(":")) {gesture="indique";force=.57;}
@@ -109,7 +110,8 @@ final class Performance {
         if(last==null)return new Mood.Pose(a.expr,a.sentiment?Math.min(.46,a.force):a.force,"",0,0,"");
         String mix=previous==null?a.second:previous.id;
         double elapsed=time-last.at;
-        double weight=previous==null?Math.min(a.weight,.26):Math.max(0,.44*(1-elapsed/240));
+        double transition=Math.max(0,1-elapsed/220);
+        double weight=previous==null?Math.min(a.weight,.26):.48*transition*transition;
         double breath=Math.max(0,time-(t.segment.speechEnd>=0?t.segment.speechEnd:t.segment.to));
         double force=last.force*(1-.24*Math.min(1,breath/530.));
         return new Mood.Pose(last.id,force,mix.equals(last.id)?"":mix,weight,0,"");

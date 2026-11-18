@@ -113,7 +113,7 @@ final class Script {
             Segment p=parts.get(k);long end=p.speechEnd<0?p.to:p.speechEnd;
             if(time>=end)return p.end;
             double ratio=(time-p.from)/Math.max(1,end-p.from);
-            if(p.cursor!=null&&p.cursor.length>0){int i=Math.min(p.cursor.length-1,(int)(ratio*p.cursor.length));return p.cursor[i];}
+            if(p.cursor!=null&&p.cursor.length>0){int i=Math.min(p.cursor.length-1,(int)(ratio*p.cursor.length));int offset=p.cursor[i],local=offset-p.start;return local>0&&local<p.text.length()&&Character.isLowSurrogate(p.text.charAt(local))?offset-1:offset;}
             int i=(int)Math.floor(p.start+(p.end-p.start)*ratio);return i>p.start&&Character.isLowSurrogate(p.text.charAt(i-p.start))?i-1:i;
         }
     }

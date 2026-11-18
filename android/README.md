@@ -2,17 +2,26 @@
 
 Application Android native (`io.github.initdv.lectura`), à partir d’Android 12 (API 31).
 L’APK n’embarque ni navigateur ni copie du site : vues et dessin Android, voix de
-l’appareil ou Piper/ONNX natif, codecs Android pour la vidéo.
+l’appareil ou Pocket TTS, Kokoro/Sherpa-ONNX et Piper en natif, codecs Android pour la vidéo.
 
 Tous les parcours sont accessibles dès l’installation, sans compte, achat ni clé
 produit : 43 personnages, 38 poses, personnalisation du terminal et des mots-clés,
 sous-titres SRT/VTT, capture PNG et export vidéo avec « Mes vidéos ».
 
-Internet sert uniquement à télécharger les modèles Lectura HD à la demande,
-depuis le catalogue Pages. Après téléchargement, choisis la voix HD dans la scène :
-la synthèse et la lecture fonctionnent en mode avion. Une voix Android locale déjà
-installée ou un fichier audio importé fonctionne également sans réseau. Lectura ne
-propose pas les voix système qui nécessitent Internet.
+## Voix locales et animation
+
+Dans **Réglages → Voix Lectura HD hors ligne**, télécharge **Estelle** ou **Siwis · Kokoro**. Aucun modèle n’est installé automatiquement. Les packs publics à empreinte fixe sont téléchargés par HTTPS ; le fichier partiel peut être repris, il n’apparait pas comme une voix disponible. Le Piper d’origine reste installable depuis le catalogue Pages en lecture seule.
+
+| Voix | Téléchargement | Stockage du modèle installé |
+|---|---:|---:|
+| Estelle (Pocket TTS français, appareil 64 bits) | 193,6 Mo | 403,1 Mo |
+| Siwis (Kokoro v1.0 INT8 via Sherpa-ONNX) | 132,4 Mo | 142,4 Mo |
+
+Tailles en millions d’octets, hors caches. Pendant l’installation, il faut en plus pouvoir garder l’archive (environ 622 Mo libres pour Estelle en comptant une réserve de sécurité). Pour le mode **Automatique**, en français, la priorité est Estelle, puis Siwis et Tom de Piper **s’ils sont déjà installés**, enfin une voix système locale. Kokoro se choisit explicitement. Une voix choisie auparavant dans un projet reste inchangée ; le bouton **Utiliser cette voix** permet d’y passer à Estelle. Aucun compte, téléchargement implicite ni voix système réseau.
+
+Le terminal garde le texte exact. Une préparation locale génère l’audio à 1×, y compris pour les voix système compatibles avec `synthesizeToFile`, puis ajoute les huit silences cibles et une légère montée sur la terminaison voisée des questions. La vitesse du lecteur change aussi la durée des silences. Un fichier audio importé n’est pas retouché.
+
+En **Auto**, les expressions prennent en compte le contexte (par ex. « Bravo ! » → enthousiasme), la ponctuation et les négations. Inclinaisons, gestes de bras et de regard, anticipation avant la fin d’une question, retours au calme : les gestes sont lus sur la même horloge que l’audio. Les limites de fragments sont mesurées ; les positions des mots sont estimées lorsque le moteur n’en fournit pas. Les poses manuelles, le réglage d’expressivité et le mode d’animations réduites gardent la priorité.
 
 ## Installer un APK de test
 
@@ -34,7 +43,7 @@ Les anciens APK de test ont des certificats différents. Si Android refuse un
 remplacement, **ne désinstalle pas l’application actuelle** pour contourner ce
 refus : tu perdrais son stockage privé. Teste le premier APK de la nouvelle série
 sur un émulateur ou un autre appareil. Les APK suivants de la série utilisent
-la même clé. Si tu as installé la version permanente 21, installe la mise à jour
+la même clé. Si tu as installé une version permanente (21 ou 25, par exemple), installe la mise à jour
 par-dessus, sans désinstaller. Les anciens champs d’activation sont supprimés à
 l’ouverture, sans modifier les projets ni les médias. La signature APK et les notices
 MIT/OFL/LGPL des composants sont conservées.
@@ -48,6 +57,9 @@ Runtime Android 1.24.3 peut être fourni localement :
 
 ```sh
 export LECTURA_ORT_AAR=/chemin/onnxruntime-android-1.24.3.aar
+# Runtimes supplémentaires du build complet. Garder le dossier hors du dépôt.
+export LECTURA_VOICE_DEPS=/chemin/voice-runtime
+bash android/fetch-voice-runtimes.sh "$LECTURA_VOICE_DEPS"
 # Facultatif : catalogue réel Pages, seul le JSON sera incorporé à l'APK.
 export LECTURA_HD_INDEX=/chemin/models-index.json
 bash android/build.sh --check
@@ -56,6 +68,7 @@ bash android/build.sh --check
 `--check` compile l’application et l’instrumentation sans signer ni laisser
 d’APK. Sans `LECTURA_ORT_AAR`, le moteur HD n’est pas compilé dans l’APK. Le
 catalogue de secours est interrogé à la demande ; aucun `.onnx` n’est incorporé.
+Sans `LECTURA_VOICE_DEPS`, Kokoro n’est pas disponible dans ce build local.
 Pour produire l’APK, retirer `--check` et configurer la clé locale comme décrit
 dans [la procédure de signature](../docs/ANDROID_SIGNATURE.md). Aucun repli sur
 une clé de débogage.
@@ -88,6 +101,4 @@ Sur un téléphone : télécharge une voix dans **Réglages → Lectura HD**, pu
 le Wi‑Fi et les données en activant le mode avion. Relance Lectura, sélectionne
 la voix HD dans la scène et lis un nouveau texte. Essaie aussi une voix système
 locale et un fichier audio. Dans **Menu**, après avoir lancé la scène, tu peux
-choisir le format 16:9 ou 9:16 et enregistrer la vidéo. La vidéo contient le son d’un
-fichier audio ou d’une voix HD ; le moteur système direct ne fournit pas sa piste
-à l’enregistreur. Le format vidéo dépend des encodeurs disponibles sur l’appareil.
+choisir le format 16:9 ou 9:16 et enregistrer la vidéo. La vidéo peut contenir le son d’un fichier importé ou de la voix synthétisée localement. Le format vidéo dépend des encodeurs disponibles sur l’appareil.

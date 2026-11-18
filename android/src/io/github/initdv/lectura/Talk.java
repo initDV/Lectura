@@ -61,7 +61,6 @@ final class Talk implements AutoCloseable {
     }
     Hd.Synthesis render(File cache,String source,String lang,org.json.JSONObject lexicon,Voice voice,int cps,
                         float pitch,Hd.Progress progress)throws Exception {
-        if(source.length()>SpeechPlan.MAX_TEXT)throw new IOException("Texte trop long pour la synthèse.");
         return VoiceRender.render(cache,null,null,SpeechPlan.plan(source,lang,lexicon),24000,cps,
             text->renderPhrase(cache,text,voice,pitch),progress);
     }

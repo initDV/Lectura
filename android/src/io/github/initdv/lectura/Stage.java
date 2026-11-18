@@ -64,7 +64,7 @@ final class Stage extends FrameLayout {
     void present(boolean yes){presenting=yes;removeCallbacks(singleClick);clickAt=0;menu.setVisibility(yes?GONE:VISIBLE);settings.setVisibility(yes?GONE:VISIBLE);}
     private void onSingle(){if(presenting)a.launch(false);}
     @Override protected void onDetachedFromWindow(){super.onDetachedFromWindow();removeCallbacks(singleClick);}
-    private void animate(double now){
+    void updatePose(double now){
         Reading r=a.reading;
         if(r!=lastReading){lastReading=r;expressionKey="";screenText.reset();}
         if(r!=null&&!a.preparing){
@@ -74,13 +74,18 @@ final class Stage extends FrameLayout {
             Performance directions=r.performance;
             Mood.Pose p=!a.forced.isEmpty()?new Mood.Pose(a.forced,1,"",0,0,""):
                 a.stopped||directions==null?new Mood.Pose("neutre",1,"",0,0,""):directions.face(ms);
-            String key=p.expr+"|"+Math.round(p.strength*40)+"|"+p.mix+"|"+Math.round(p.weight*30);
-            if(!expressionKey.equals(key)){sprite.expression(p.expr,p.strength,p.mix,p.weight);expressionKey=key;}
+            long strength=Math.round(p.strength*40),mix=Math.round(p.weight*30);
+            String key=p.expr+"|"+strength+"|"+p.mix+"|"+mix;
+            if(!expressionKey.equals(key)){sprite.expression(p.expr,strength/40.,p.mix,mix/30.);expressionKey=key;}
             sprite.direct(directions==null||a.stopped||!a.forced.isEmpty()?null:directions.gesture(ms),ms);
-            sprite.viseme=voicing?r.viseme(ms,now,cursor):0;sprite.shape=voicing?r.shape():48;
+            sprite.viseme=voicing?r.viseme(ms,ms,cursor):0;sprite.shape=voicing?r.shape():48;
             sprite.letter=voicing?Reading.letterAt(r.text,cursor):"";sprite.quietMouth=!voicing;
             sprite.talk=voicing?(sprite.viseme>0?1:.15):0;
-        }else{sprite.direct(null,0);sprite.quietMouth=false;sprite.viseme=0;sprite.letter="";sprite.talk=0;sprite.expression("neutre",1,"",0);expressionKey="";}
+        }else{
+            sprite.direct(null,-1);sprite.quietMouth=false;sprite.viseme=0;sprite.shape=48;sprite.letter="";sprite.talk=0;
+            String expr=a.forced.isEmpty()?"neutre":a.forced;
+            if(!expressionKey.equals(expr)){sprite.expression(expr,1,"",0);expressionKey=expr;}
+        }
         sprite.tick(now);
     }
     private final class Face extends View {
@@ -89,7 +94,7 @@ final class Stage extends FrameLayout {
         @Override public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(info);
             Reading r=a.reading;if(r!=null&&!masked)info.setText(r.text.substring(Math.max(0,r.terminal.shown-700),r.terminal.shown));}
         @Override protected void onDraw(Canvas c){
-            double now=SystemClock.uptimeMillis()-initial;Stage.this.animate(now);
+            double now=SystemClock.uptimeMillis()-initial;Stage.this.updatePose(now);
             float w=getWidth()/ui.density,h=getHeight()/ui.density,left=w*.38f;
             c.save();c.scale(ui.density,ui.density);round(c,0,0,w,h,radius,background);
             decor.screen(c,left,h);c.save();c.clipRect(0,0,left,h);sprite.svg.fit(c,2,0,left-4,h,true);c.restore();

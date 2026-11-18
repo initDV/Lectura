@@ -292,12 +292,26 @@ public final class DeviceChecks extends Instrumentation {
         require(directions.gesture(2775)!=null&&directions.gesture(2775).motion.equals("indique"),"Geste vers le terminal");
         var question=directions.gesture(1070);directions.gesture(3500);
         require(question!=null&&question==directions.gesture(1070),"La reprise/recherche doit retrouver exactement le même geste");
+        for(String rig:List.of("robot_lectura","wend")){
+            var sprite=new Sprite(refs,refs.character(rig));
+            Bitmap first=performanceFrame(sprite,directions,1070,1070);
+            Bitmap later=performanceFrame(sprite,directions,1070,37880); // paused
+            Bitmap other=performanceFrame(sprite,directions,2320,37923); // forward seek
+            Bitmap seek=performanceFrame(sprite,directions,1070,37955); // backward seek
+            try{require(first.sameAs(later)&&first.sameAs(seek)&&!first.sameAs(other),"Dessin guidé par l’audio : "+rig);}
+            finally{first.recycle();later.recycle();other.recycle();seek.recycle();}
+        }
         require(directions.gesture(parts.get(parts.size()-1).from+200)==null,"Geste vocal dans la commande silencieuse");
         parts.get(0).expression="fier";Performance manual=new Performance(parts,new Mood(refs,"fr",words,true));
         require(manual.face(910).expr.equals("fier")&&manual.gesture(910)==null,"Priorité d'une pose manuelle");
         Performance disabled=new Performance(parts,new Mood(refs,"fr",words,false));
         require(disabled.gesture(2775)==null&&disabled.face(2310).expr.equals("neutre"),"Désactivation de la mise en scène auto");
-        return poses+" poses détectées par le contexte + neutre, "+gestures.size()+" mouvements dans la palette, positions audio, pause/recherche, priorité manuelle";
+        return poses+" poses détectées par le contexte + neutre, "+gestures.size()+" mouvements dans la palette, mêmes pixels à repère audio égal après pause/saut (robot, Wend), priorité manuelle";
+    }
+    private static Bitmap performanceFrame(Sprite sprite,Performance directions,long audio,long wall) {
+        var p=directions.face(audio);sprite.expression(p.expr,p.strength,p.mix,p.weight);
+        sprite.direct(directions.gesture(audio),audio);sprite.quietMouth=true;sprite.tick(wall);
+        Bitmap bitmap=Bitmap.createBitmap(240,380,Bitmap.Config.ARGB_8888);sprite.svg.fit(new Canvas(bitmap),0,0,240,380,true);return bitmap;
     }
     private JSONObject fixtures()throws Exception{
         try(InputStream in=getContext().getAssets().open("fixtures.json")){
@@ -753,10 +767,12 @@ public final class DeviceChecks extends Instrumentation {
             VoicePacks.Spec estelle=VoicePacks.ESTELLE,kokoro=VoicePacks.KOKORO;
             require(estelle.supported()&&kokoro.supported(),"Runtimes Estelle/Sherpa absents de l’APK");
             File partial=store.partial(estelle);
-            try{downloadWithRetry(h,estelle.id,(n,total)->{if(n<total)throw new java.util.concurrent.CancellationException();});
+            try{downloadWithRetry(h,estelle.id,(n,total)->{if(n>0&&n<total)throw new java.util.concurrent.CancellationException();});
                 throw new AssertionError("Arrêt du téléchargement Estelle non testé");
             }catch(java.util.concurrent.CancellationException expected){require(partial.length()>0&&!store.installed(estelle),"Pack partiel visible en lecture");}
-            long resumed=partial.length();downloadWithRetry(h,estelle.id,(n,total)->{});
+            long resumed=partial.length();java.util.concurrent.atomic.AtomicLong requested=new java.util.concurrent.atomic.AtomicLong(-1);
+            downloadWithRetry(h,estelle.id,(n,total)->requested.compareAndSet(-1,n));
+            require(requested.get()==resumed,"Le serveur n’a pas honoré la reprise Estelle : "+requested.get());
             require(!partial.exists()&&store.installed(estelle)&&h.autoVoice("fr").equals(estelle.id),"Reprise et Estelle prioritaire");
             downloadWithRetry(h,kokoro.id,(n,total)->{});
             require(store.installed(kokoro)&&h.autoVoice("fr").equals(estelle.id)&&h.autoVoice("en").isEmpty(),"Installation Kokoro sans changer la priorité FR");
@@ -769,13 +785,16 @@ public final class DeviceChecks extends Instrumentation {
         MainActivity a=open(ctx);File dir=ctx.getExternalFilesDir("verification");
         try {
             waitFor("Fenêtre voix native au premier plan",()->a.isForeground&&a.hasWindowFocus(),15000);
-            String text=id.equals("estelle")?"Tu veux venir ce soir ?\nBravo !":"Tu as aimé cette lecture ?\nMerci !";
+            boolean automatic=id.equals("estelle");String text=automatic?"Tu veux venir ce soir ?\nBravo !":"Tu as aimé cette lecture ?\nMerci !";
+            int cps=28;String label="Lectura HD · "+a.hd.voice(id).getString("nom");
             main(()->{
                 require(a.hd.installed(a.hd.voice(id)),"Pack absent après relance : "+id);
-                a.dismiss();Project p=new Project(a.db.settings);p.text=text;p.speed=1.25f;
-                p.engine=id.equals("estelle")?"auto":"kokoro";p.voice=id.equals("estelle")?"":id;
-                a.open(p);a.launch(false);
+                a.dismiss();Project p=new Project(a.db.settings);p.text=text;p.speed=1.25f;p.cps=cps;p.engine="auto";p.voice="";
+                a.open(p);
+                if(!automatic)a.chooseVoice();
             });
+            if(!automatic)click(a,label);
+            main(()->{require(a.voiceName().equals(label),"Voix du sélecteur "+a.voiceName());a.launch(false);});
             long started=android.os.SystemClock.elapsedRealtime();
             try{waitFor("Démarrage "+id,()->a.reading!=null&&a.reading.playing||!a.preparing&&a.reading==null,150000);}
             catch(AssertionError e){throw new AssertionError("Préparation "+id+" trop lente",e);}
@@ -788,8 +807,30 @@ public final class DeviceChecks extends Instrumentation {
                 List<Script.Segment> parts=r.timeline.parts;
                 require(parts.size()==2&&parts.get(0).to-parts.get(0).speechEnd==560&&parts.get(1).to-parts.get(1).speechEnd==400,"Pauses du vrai PCM");
             });
-            return id+" à froid en avion, lecture à 1,25× (PCM 24 kHz), démarrage "+startup+" ms, "+observed.length()+" observations";
+            String cached=checkNewVoiceCache(ctx,id,text,cps);
+            return id+" à froid en avion, lecture à 1,25× (PCM 24 kHz), démarrage "+startup+" ms, "+observed.length()+" observations ; "+cached;
         }finally{main(a::finish);}
+    }
+    private String checkNewVoiceCache(Context ctx,String id,String text,int cps)throws Exception {
+        File phraseDir=new File(ctx.getCacheDir(),"phrases");
+        String[] before=phraseDir.list((d,n)->n.endsWith(".f32"));require(before!=null&&before.length>=2,"Cache de phrases absent");
+        try(Hd cached=new Hd(new Refs(ctx))) {
+            long start=android.os.SystemClock.elapsedRealtime();
+            Hd.Synthesis whole=cached.synth(text,id,cps,(n,total)->require(n==1&&total==1,"WAV complet pas repris"));
+            long full=android.os.SystemClock.elapsedRealtime()-start;
+            // Only the final paragraph break changes. The WAV must change but neither spoken phrase should be resynthesized.
+            Hd.Synthesis phr=cached.synth(text+"\n",id,cps,(n,total)->require(total==2,"Le texte édité ne doit pas réutiliser le WAV complet"));
+            long end=android.os.SystemClock.elapsedRealtime()-start;
+            try(Pcm a=whole.pcm;Pcm b=phr.pcm){
+                require(!a.file.equals(b.file)&&b.frames-a.frames==3840,"Le WAV édité doit ajouter 160 ms au silence final");
+                short[] rawA=new short[(int)a.frames],rawB=new short[(int)a.frames];
+                a.read(0,rawA,(int)a.frames);b.read(0,rawB,(int)a.frames);
+                require(Arrays.equals(rawA,rawB),"PCM des phrases différent après édition des seules pauses");
+            }
+            String[] after=phraseDir.list((d,n)->n.endsWith(".f32"));require(after!=null,"Cache de phrases absent");
+            Arrays.sort(before);Arrays.sort(after);require(Arrays.equals(before,after),"Phrases recalculées malgré le cache");
+            return "cache WAV "+full+" ms, édition avec cache de phrases "+(end-full)+" ms";
+        }
     }
     private String hd(Refs refs)throws Exception {
         try(Hd h=new Hd(refs)){

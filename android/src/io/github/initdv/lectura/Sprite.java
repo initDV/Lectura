@@ -42,7 +42,8 @@ final class Sprite {
     private String micro="",script="";
     private double microAt,microDuration,microAmplitude,scriptAt,nextMicro=4000+random()*3000;
     private Performance.Cue beat;
-    private double sceneTime;
+    private double sceneTime=-1;
+    private boolean onClock;
 
     Sprite(Refs refs,JSONObject def) {
         this.refs=refs;
@@ -114,16 +115,29 @@ final class Sprite {
     private double step(double a){return step==0?a:round(a/step)*step;}
     void tick(double t){
         double dt=last<0?0:clamp(t-last,0,100);
-        if(last<0)pose.putAll(target);
+        boolean clock=sceneTime>=0;
+        if(clock||last<0||onClock)pose.putAll(target);
         else for(String n:target.keySet()){double a=1-exp(-dt/(LIMBS.contains(n)?190:110));pose.put(n,v(n)+(target.get(n)-v(n))*a);}
-        last=t;
+        onClock=clock;last=t;
         double k=(reduced?.25:1)*gain,sk=human?.55:1;
         double rb=0,rd=0,rgx=0,rgy=0,rhr=0,rhy=0,tilt=0,lidDrop=0;
-        phase+=dt/1000*speed*v("tempo");double s=phase;
-        talkSmooth+=(talk-talkSmooth)*(1-exp(-dt/250));
-        if(t>nextBlink){blinkUntil=t+120;nextBlink=t+120+(random()<.12?170:2500+random()*3000);}
-        if(t>nextLook&&!reduced){lookToX=talk>.5?4.5:(random()-.5)*6;lookToY=talk>.5?1:(random()-.5)*3;lookEnd=t+450+random()*700;nextLook=lookEnd+2200+random()*3500;}
-        double ar=1-exp(-dt/70);lookX+=((t<lookEnd?lookToX:0)-lookX)*ar;lookY+=((t<lookEnd?lookToY:0)-lookY)*ar;
+        double s,gazeX,gazeY;boolean blink;
+        if(clock){
+            // Sample breathing, gaze and blinking at the requested audio time as well as the cue.
+            // Dropped frames, waiting in Pause and backward seeks cannot shift the performance.
+            t=sceneTime;s=t/1000*speed;talkSmooth=talk;
+            long slot=(long)(t/4300);double since=t-slot*4300;
+            double at=1800+variation(slot)*1450,glance=(since-at+1150)/850;
+            double e=reduced||glance<0||glance>1?0:sin(glance*PI);
+            gazeX=(variation(slot+19)-.5)*6*e;gazeY=(variation(slot+43)-.5)*3*e;
+            blink=!reduced&&since>=at&&since<at+112;
+        }else {
+            phase+=dt/1000*speed*v("tempo");s=phase;talkSmooth+=(talk-talkSmooth)*(1-exp(-dt/250));
+            if(t>nextBlink){blinkUntil=t+120;nextBlink=t+120+(random()<.12?170:2500+random()*3000);}
+            if(t>nextLook&&!reduced){lookToX=talk>.5?4.5:(random()-.5)*6;lookToY=talk>.5?1:(random()-.5)*3;lookEnd=t+450+random()*700;nextLook=lookEnd+2200+random()*3500;}
+            double ar=1-exp(-dt/70);lookX+=((t<lookEnd?lookToX:0)-lookX)*ar;lookY+=((t<lookEnd?lookToY:0)-lookY)*ar;
+            gazeX=lookX;gazeY=lookY;blink=t<blinkUntil;
+        }
         double gx=0,gy=0,jump=0,waveHand=0,shakeHand=0,armL=0,armR=0,elbowLeft=0,elbowRight=0;
         double u=beat==null?1:(sceneTime-beat.at)/beat.length;
         if(beat!=null&&u>=0&&u<1){
@@ -175,21 +189,21 @@ final class Sprite {
         double hy=v("headY")+gy+breath*.55+sin(s*4.2)*.9*talk*k+rhy,hx=v("headX")+gx;
         moveRotate(head,hx,hy,hr,neck);
         double scriptedArm=0,scriptedFore=0,scriptedLook=0;
-        if(!script.isEmpty()){
+        if(!clock&&!script.isEmpty()){
             double p=(t-scriptAt)/(script.equals("scratch")?2000:1500);
             if(p>=0&&p<1){double[][] a=script.equals("scratch")?SCRATCH:GLASSES;int i=1;while(p>a[i][0])i++;
                 double[] a0=a[i-1],a1=a[i];double z=(p-a0[0])/(a1[0]-a0[0]);z*=z*(3-2*z);
                 scriptedArm=a0[1]+(a1[1]-a0[1])*z;scriptedFore=a0[2]+(a1[2]-a0[2])*z;scriptedLook=a0[4]+(a1[4]-a0[4])*z;
             }else script="";
         }
-        if(!reduced&&u>=1&&script.isEmpty()&&t>nextMicro&&talkSmooth<.4){
+        if(!clock&&!reduced&&u>=1&&script.isEmpty()&&t>nextMicro&&talkSmooth<.4){
             if(random()<.35){script=random()<.5?"scratch":"glasses";scriptAt=t;nextMicro=t+9000+random()*6000;}
             else {String[] types={"arms","shoulderL","shoulderR","elbowL","elbowR"};micro=types[(int)(random()*types.length)];
                 microAt=t;microDuration=400+random()*500;microAmplitude=((micro.startsWith("elbow")?5:3)+random()*5)*sk;
                 nextMicro=t+(talk>.3?12000+random()*6000:5500+random()*3500);}
         }
         double ml=0,mr=0,mfl=0,mfr=0;
-        if(!micro.isEmpty()) {double m=(t-microAt)/microDuration,a=microAmplitude*sin(m*PI)*k;
+        if(!clock&&!micro.isEmpty()) {double m=(t-microAt)/microDuration,a=microAmplitude*sin(m*PI)*k;
             if(m>=0&&m<1)switch(micro){case "arms":ml=a;mr=-a;break;case "shoulderL":ml=a;break;case "shoulderR":mr=-a;break;case "elbowL":mfl=a;break;case "elbowR":mfr=-a;break;default:break;}}
         double amount=(human?12:7)*talkSmooth*k*amp*v("swing"),el=v("armL"),fl=v("foreL");
         double al=el+(24-el)*waveHand+step(sin(s*(human?.85:1.3))*amount)+ml+armL;
@@ -206,8 +220,8 @@ final class Sprite {
             float xm=fixed2(xBase+wBase/2-width/2),ym=fixed2(yBase+hBase/2+v("my")-height/2),r=fixed2(min(6,min(width,height)/2));
             mouth.path().addRoundRect(xm,ym,xm+fixed2(width),ym+fixed2(height),r,r,Path.Direction.CW);
         }
-        double sy=t<blinkUntil?.15:clamp(v("lid")-lidDrop,.15,1),eyex=v("gx")+lookX+sin(s*.55)*1.3*k+sin(s*1.5)*.6*k+rgx+scriptedLook;
-        double eyey=v("gy")+lookY+cos(s*.45)*.8*k+rgy;
+        double sy=blink?.15:clamp(v("lid")-lidDrop,.15,1),eyex=v("gx")+gazeX+sin(s*.55)*1.3*k+sin(s*1.5)*.6*k+rgx+scriptedLook;
+        double eyey=v("gy")+gazeY+cos(s*.45)*.8*k+rgy;
         for(Svg.Node eye:new Svg.Node[]{eyeL,eyeR}){
             eye.reset().preTranslate(f(eyex),f(eyey)); if(sy<=.995)eye.transform.preScale(1,f(sy),0,(float)eyeY);
             if(eye.kind.equals("circle"))eye.path().addCircle(eye.f("cx"),eye.f("cy"),f(v("r")*rBase/11),Path.Direction.CW);
@@ -215,6 +229,7 @@ final class Sprite {
         for(Svg.Node n:reflections){n.reset().preTranslate(f(eyex),f(eyey));n.alpha=sy>.6?1:0;}
         moveRotate(browL,0,v("browL")+rb,-v("rot")*sk,browPivotL);moveRotate(browR,0,v("browR")+rb,v("rot")*sk,browPivotR);
     }
+    private static double variation(long index){long n=(index+1)*0x9e3779b97f4a7c15L;n^=n>>>30;n*=0xbf58476d1ce4e5b9L;return (n>>>48)/65536.;}
     private static void rotate(Matrix m,double a,float[] p){m.preRotate(f(a),p[0],p[1]);}
     private static void moveRotate(Svg.Node n,double x,double y,double a,float[] p){n.reset().preTranslate(f(x),f(y));rotate(n.transform,a,p);}
     private static void path(Svg.Node n,boolean show,double x,double y,double... data){

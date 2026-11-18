@@ -80,7 +80,7 @@ final class VoicePacks {
             if(status==200)start=0;
             else if(status!=206||!String.valueOf(c.getHeaderField("Content-Range")).equals("bytes "+start+"-"+(s.bytes-1)+"/"+s.bytes))
                 throw new IOException("Téléchargement de la voix : réponse HTTP "+status+" ou reprise invalide.");
-            byte[] bytes=new byte[65536];long pos=start,last=start;
+            byte[] bytes=new byte[65536];long pos=start,last=start;progress.update(start,s.bytes);
             try(InputStream in=new BufferedInputStream(c.getInputStream());FileOutputStream out=new FileOutputStream(to,start>0)) {
                 for(int n;(n=in.read(bytes))>=0;) {
                     Pcm.interrupted();if(pos+n>s.bytes)throw new IOException("Taille de l’archive vocale incorrecte.");

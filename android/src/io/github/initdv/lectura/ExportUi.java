@@ -57,7 +57,8 @@ final class ExportUi implements AutoCloseable {
                     if(closed||recording!=session||a.stage!=stage)return;
                     stage.recording=true;origin=System.nanoTime();
                     a.note(t(session.sound!=null?"scene.videoDebut":"scene.videoSansSon"),session.sound!=null?"info":"warn",7000);
-                    a.startPlaying();mark(true);frame(0);
+                    a.startPlaying();mark(true); // The first frame comes from the next stage draw, with its sampled pose.
+                    stage.refresh();
                 }));
                 a.handler.post(()->{
                     if(recording!=session){file.delete();return;}

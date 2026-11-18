@@ -41,7 +41,7 @@ final class ScenePage {
         pick.addView(u.icon("voice",20,u.mutedText),u.lp(20,20));u.gap(pick,10);voice=u.p("• …");u.one(voice);u.grow(pick,voice);u.gap(pick,10);pick.addView(u.icon("chevron",20,u.text),u.lp(20,20));
         pick.setContentDescription(a.t("scene.voix.choisir"));u.click(pick,a::chooseVoice);u.gap(line,12);
         line.addView(u.iconButton("upload",a.t("scene.voix.fichier"),u.mutedText,20,a::pickAudio),u.lp(44,44));
-        u.gap(panel,6);edit=u.field(a.project.text,a.t("scene.texte.placeholder"),true,0,s->{a.project.text=s.replaceAll("\\r\\n?","\n");a.changedText();});
+        u.gap(panel,6);edit=u.field(a.project.text,a.t("scene.texte.placeholder"),true,0,s->{a.project.text=s;a.changedText();});
         edit.setContentDescription(a.t("scene.texte.label"));edit.setBackground(u.shape(0,u.radius,0xff5a5a68,1));u.pad(edit,15,10);u.line(edit,21.75f);
         panel.addView(edit,u.lp(Ui.MATCH,64));
         u.gap(panel,6);actions=u.row();panel.addView(actions,u.lp(Ui.MATCH,48));
