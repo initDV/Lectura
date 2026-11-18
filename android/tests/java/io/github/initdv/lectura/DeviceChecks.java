@@ -3,6 +3,7 @@ package io.github.initdv.lectura;
 import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Context;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -11,6 +12,8 @@ import android.media.MediaFormat;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
+import android.os.Process;
+import android.os.ResultReceiver;
 import android.view.PixelCopy;
 import android.view.View;
 import android.view.ViewGroup;
@@ -42,6 +45,8 @@ public final class DeviceChecks extends Instrumentation {
         Context ctx=getTargetContext(); Refs refs=new Refs(ctx);
         check("surfaces",()->surfaces(ctx));
         check("fixtures",()->refsAndModels(refs));
+        check("audio-importe",()->imported(ctx));
+        check("tts",()->tts(ctx));
         for(String format:new String[]{"mp4","webm"})check(format,()->media(ctx,format));
         if("true".equals(args.getString("hd")))check("piper",()->hd(refs));
         Bundle out=new Bundle();out.putString("stream",report.toString());
@@ -49,7 +54,7 @@ public final class DeviceChecks extends Instrumentation {
     }
     private interface Check { String run() throws Exception; }
     private void check(String name,Check c){
-        try{String result=c.run();report.append("LECTURA_OK ").append(name).append(" : ").append(result).append('\n');}
+        try{String result=c.run();report.append(result.startsWith("hors test")?"LECTURA_SKIP ":"LECTURA_OK ").append(name).append(" : ").append(result).append('\n');}
         catch(Throwable e){
             failed=true;
             report.append("LECTURA_ERROR ").append(name).append(" : ").append(e).append('\n')
@@ -69,6 +74,10 @@ public final class DeviceChecks extends Instrumentation {
         if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){
             View match=named(group.getChildAt(i),label);if(match!=null)return match;
         }}return null;
+    }
+    private static JSONArray bounds(View v){
+        JSONArray box=new JSONArray();if(v==null)return box;int[] xy=new int[2];v.getLocationOnScreen(xy);
+        return box.put(xy[0]).put(xy[1]).put(v.getWidth()).put(v.getHeight());
     }
     private void click(MainActivity a,String label)throws Exception{
         main(()->{View v=named(a.modal==null?a.content:a.modal,label);
@@ -97,6 +106,13 @@ public final class DeviceChecks extends Instrumentation {
             File dir=ctx.getExternalFilesDir("verification");require(dir!=null,"Stockage de test");
             main(()->{require(a.modal!=null,"Tutoriel au premier démarrage");a.fullscreen();});screen(a,dir,"tuto");
             click(a,"Passer");screen(a,dir,"scene");click(a,"Menu");screen(a,dir,"menu");
+            main(()->{
+                JSONObject boxes=new JSONObject();View sheet=((ViewGroup)a.modal).getChildAt(0);
+                boxes.put("dialog",bounds(sheet));boxes.put("title",bounds(named(sheet,"Menu")));
+                boxes.put("name",bounds(named(sheet,a.t("editeur.titreProjet"))));
+                for(String label:new String[]{"Enregistrer","Projets","Importer .txt / .md","Aperçu sans son","Plein écran"})boxes.put(label,bounds(named(sheet,label)));
+                Library.writeJson(new File(dir,"android-menu-boxes.json"),boxes);
+            });
             click(a,"Aperçu sans son");
             main(()->a.scene.edit.setText("Bonjour Lectura. Ceci est un essai natif. ".repeat(18)));
             click(a,"Menu");click(a,"Aperçu sans son");
@@ -116,6 +132,11 @@ public final class DeviceChecks extends Instrumentation {
             return "API 31, installation, tutoriel, scène, menu, aperçu, pause/reprise/arrêt, vitesse, œil, cinq destinations";
         }finally{main(a::finish);}
     }
+    private void waitFor(String message,java.util.function.BooleanSupplier condition,long millis)throws Exception {
+        long deadline=android.os.SystemClock.uptimeMillis()+millis;AtomicReference<Boolean> ready=new AtomicReference<>();
+        while(android.os.SystemClock.uptimeMillis()<deadline){main(()->ready.set(condition.getAsBoolean()));if(ready.get())return;Thread.sleep(80);}
+        throw new AssertionError(message);
+    }
     private static void require(boolean b,String msg) {if(!b)throw new AssertionError(msg);}
     private String refsAndModels(Refs refs)throws Exception {
         require(refs.characters.size()==43,"Catalogue personnages");
@@ -134,28 +155,91 @@ public final class DeviceChecks extends Instrumentation {
             List<Script.Segment> parts=Script.timing(clean,ms,.5);Script.Timeline timeline=new Script.Timeline(clean,parts);JSONArray values=t.getJSONArray("positions");
             for(int k=0;k<values.length();k++){JSONArray row=values.getJSONArray(k);require(timeline.charAt(row.getLong(0))==row.getInt(1),"Positions des caractères");}
         }
-        return "43 rigs, 8 cas G2P et 8 chronologies conformes aux fixtures";
+        JSONObject subtitles=fixture.getJSONObject("subtitles");Project p=new Project(refs.defaults);
+        Script.importSubtitles(subtitles.getString("vtt"),p);require(p.text.equals(subtitles.getString("text")),"Texte VTT");
+        List<Script.Segment> parts=p.recalc();require(p.subtitles&&Script.subtitles(parts,false).equals(subtitles.getString("srt")),"Export SRT");
+        require(Script.subtitles(parts,true).equals(subtitles.getString("exported")),"Export VTT");
+        require(Project.fromJson(p.json()).text.equals(p.text),"Projet version 1");
+        int pro=0;for(var i=refs.expressions.keys();i.hasNext();)if(refs.expressions.getJSONObject(i.next()).optBoolean("pro"))pro++;
+        require(pro==fixture.getInt("proExpressions"),"Expressions Pro");
+        JSONObject licence=fixture.getJSONObject("licence");String key=licence.getString("key");JSONObject pub=licence.getJSONObject("public");
+        require(Library.verify(key,"lectura-ci",pub).isEmpty(),"Licence Web Crypto/Android");
+        require(Library.verify(key,"autre-appareil",pub).equals("installation"),"Licence liée à l'installation");
+        require(!Library.verify(key.replaceFirst("^.","_"),"lectura-ci",pub).isEmpty(),"Licence altérée");
+        return "43 rigs, "+pro+" expressions Pro, 8 cas G2P, 8 chronologies, SRT/VTT, projet v1 et licence P-256";
     }
-    private String media(Context ctx,String ext)throws Exception {
+    private File tone(Context ctx,int seconds)throws Exception {
         File dir=ctx.getExternalFilesDir("verification");require(dir!=null,"Stockage de test");
-        File wav=File.createTempFile("tone-",".wav",dir);int rate=48000;long frames=rate*2;
+        File wav=File.createTempFile("tone-",".wav",dir);int rate=48000,frames=rate*seconds;
         try(RandomAccessFile out=new RandomAccessFile(wav,"rw")){Pcm.header(out,1,rate,frames*2);
             for(int i=0;i<frames;i++){short x=(short)(11000*Math.sin(2*Math.PI*440*i/rate));out.writeByte(x&255);out.writeByte(x>>8);}}
+        return wav;
+    }
+    private MainActivity open(Context ctx){return (MainActivity)startActivitySync(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
+    private String imported(Context ctx)throws Exception{
+        MainActivity a=open(ctx);File input=tone(ctx,6);
+        try{
+            main(()->{a.dismiss();a.open(new Project(a.db.settings));a.scene.edit.setText("Bonjour, ceci est une leçon.");a.importAudio(Uri.fromFile(input),"tonalité.wav");});
+            waitFor("Import audio non terminé",()->a.project.fileAudio&&a.db.audio(a.project).isFile(),10000);
+            main(()->{a.muted=true;a.launch(false);});
+            waitFor("Lecture synchronisée du WAV",()->a.reading!=null&&a.reading.playing&&a.reading.time()>350&&a.reading.terminal.shown>0,10000);
+            main(()->{
+                require(a.reading.pcm!=null&&a.reading.duration>=5900,"Piste fichier perdue");
+                require(a.reading.viseme(a.reading.time(),700,true)>0,"Lip-sync audio importé");
+                a.reading.pause();a.playState();require(!a.reading.playing,"Pause WAV");
+                a.seek(1500);a.project.speed=1.25f;a.adjustRate();a.startPlaying();
+            });
+            waitFor("Reprise du fichier",()->a.reading!=null&&a.reading.playing&&a.reading.time()>1700,10000);
+            main(a::stop);return "WAV copié et décodé via le chemin d'import, lecture, pause, avance, vitesse et lip-sync sous muet";
+        }finally{input.delete();main(()->{a.db.audio(a.project).delete();a.finish();});}
+    }
+    private String tts(Context ctx)throws Exception{
+        MainActivity a=open(ctx);
+        try{
+            waitFor("Initialisation TextToSpeech",()->a.talk.ready||a.talk.failure,7000);
+            AtomicReference<String> voice=new AtomicReference<>();
+            main(()->{var v=a.talk.choose("fr","");if(v!=null&&!v.isNetworkConnectionRequired())voice.set(v.getName());});
+            if(voice.get()==null)return "hors test de lecture : aucune voix française locale exploitable sur cette image";
+            main(()->{a.dismiss();a.open(new Project(a.db.settings));a.selectVoice("webspeech",voice.get());a.scene.edit.setText("Bonjour.\n$ echo test\nLectura lit un texte.");a.launch(false);});
+            waitFor("TextToSpeech n'a pas terminé la phrase et la commande",()->a.reading!=null&&a.reading.ended,17000);
+            return "voix française locale, lecture jusqu'au bout avec une commande non prononcée";
+        }finally{main(a::finish);}
+    }
+    private void shareGrant(MainActivity a,File media)throws Exception {
+        String name=media.getName();Uri uri=SharedMedia.reserveShare(a,media,name);
+        AtomicReference<Bundle> result=new AtomicReference<>();CountDownLatch done=new CountDownLatch(1);
+        main(()->{
+            Intent intent=SharedMedia.shareIntent(a,uri,name).setComponent(new ComponentName(getContext().getPackageName(),ShareReceiver.class.getName()));
+            intent.putExtra("lectura.test.result",new ResultReceiver(a.handler){
+                @Override protected void onReceiveResult(int code,Bundle data){data.putInt("status",code);result.set(data);done.countDown();}
+            });a.startActivity(intent);
+        });
+        require(done.await(8,TimeUnit.SECONDS),"Récepteur de partage absent : "+name);
+        Bundle received=result.get();
+        require(received.getInt("status")==Activity.RESULT_OK&&received.getInt("uid")==getContext().getApplicationInfo().uid
+            &&received.getInt("uid")!=Process.myUid()&&SharedMedia.mime(SharedMedia.extension(name)).equals(received.getString("mime")),
+            "Partage interapplications : "+name+" ; "+received);
+        waitFor("Retour depuis le récepteur",()->a.isForeground,6000);
+    }
+    private String media(Context ctx,String ext)throws Exception {
+        File wav=tone(ctx,2),dir=wav.getParentFile();
         MainActivity a=(MainActivity)startActivitySync(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         AtomicReference<Throwable> setup=new AtomicReference<>();
         runOnMainSync(()->{try{
             a.dismiss();a.project.text=a.t("voix.exemple");a.render("scene");
             var kw=new Script.Keywords(a.refs,"fr",false,new JSONObject());List<Script.Segment> p=Script.timing(a.project.text,2000,1);
             a.reading=new Reading(a.project.text,p,kw,true,null,a.talk,null,a.project,1,()->{},code->{});
-            a.mood=new Mood(a.refs,"fr",kw,false,true);a.reading.terminal.shown=a.project.text.length();
+            a.mood=new Mood(a.refs,"fr",kw,false,true);a.muted=true;a.reading.volume(0,true);a.reading.terminal.shown=a.project.text.length();
         }catch(Throwable e){setup.set(e);}});if(setup.get()!=null)throw new AssertionError(setup.get());
         try(Pcm pcm=Pcm.decode(wav,dir)){
             require(pcm.duration()>=1999,"Durée décodée WAV");
             {
                 int w=ext.equals("mp4")?1280:720,h=ext.equals("mp4")?720:1280;
                 File encoded=encode(a,pcm,dir,ext,w,h);File named=new File(dir,"lectura-test."+ext);Files.move(encoded.toPath(),named.toPath(),StandardCopyOption.REPLACE_EXISTING);
-                Uri shared=SharedMedia.reserveShare(ctx,named,named.getName());try(InputStream in=ctx.getContentResolver().openInputStream(shared)){require(in!=null&&in.read()>=0,"Flux URI " + ext);}
-                try(Pcm decoded=Pcm.decode(named,dir)){require(decoded.duration()>1200,"Audio réel " + ext);short[] b=new short[4096];int n=decoded.read(decoded.rate/2,b,4096);int peak=0;for(int i=0;i<n;i++)peak=Math.max(peak,Math.abs((int)b[i]));require(peak>5000,"Audio audible "+ext);}
+                shareGrant(a,named);
+                try(Pcm decoded=Pcm.decode(named,dir)){require(decoded.duration()>1200,"Audio réel " + ext);short[] b=new short[4096];int n=decoded.read(decoded.rate/2,b,4096);int peak=0;for(int i=0;i<n;i++)peak=Math.max(peak,Math.abs((int)b[i]));require(peak>5000,"Audio audible "+ext);
+                    int crossings=0;for(int i=1;i<n;i++)if(b[i-1]<0&&b[i]>=0)crossings++;
+                    double hz=crossings*(double)decoded.rate/n;require(hz>400&&hz<490,"Fréquence après accélération "+hz+" Hz");}
                 if(ext.equals("mp4")){
                     File mp3=new File(dir,"lectura-test.mp3");Mp3.transcode(named,mp3,dir);
                     MediaExtractor x=new MediaExtractor();try{x.setDataSource(mp3.getPath());require(x.getTrackCount()==1&&MediaFormat.MIMETYPE_AUDIO_MPEG.equals(x.getTrackFormat(0).getString(MediaFormat.KEY_MIME)),"Vrai MP3");}finally{x.release();}
@@ -164,7 +248,11 @@ public final class DeviceChecks extends Instrumentation {
                     finally{ctx.getContentResolver().delete(saved,null,null);}
                     Movies lib=new Movies(ctx);lib.save(named,named.getName());Movies.Entry entry=new Movies(ctx).list().get(0);
                     require(entry.file.length()==named.length()&&entry.format.equals(ext),"Mes vidéos persistant");lib.delete(entry);
-                    Uri shareAudio=SharedMedia.reserveShare(ctx,mp3,mp3.getName());try(InputStream in=ctx.getContentResolver().openInputStream(shareAudio)){require(in!=null&&in.read()>=0,"Flux URI MP3");}
+                    try(Pcm decoded=Pcm.decode(mp3,dir)){
+                        require(decoded.duration()>1200,"Durée MP3");short[] probe=new short[4096];int n=decoded.read(decoded.rate/2,probe,probe.length),peak=0;
+                        for(int i=0;i<n;i++)peak=Math.max(peak,Math.abs((int)probe[i]));require(peak>4000,"MP3 muet");
+                    }
+                    shareGrant(a,mp3);
                 }
             }
         }finally{wav.delete();runOnMainSync(a::finish);}
@@ -177,7 +265,7 @@ public final class DeviceChecks extends Instrumentation {
             long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(20);
             while(!start.await(200,TimeUnit.MILLISECONDS)){if(done.isDone())return done.get();require(System.nanoTime()<deadline,"Démarrage de l'encodeur " +ext);}
             deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(35);
-            r.mark(new MediaExport.Mark(0,0,1,true));
+            r.mark(new MediaExport.Mark(0,0,1.25,true));
             for(int i=0;i<48;i++){
                 while(!r.room()){if(done.isDone())return done.get();require(System.nanoTime()<deadline,"Encodage bloqué : "+ext);Thread.sleep(3);}
                 final int frame=i;Bitmap bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);

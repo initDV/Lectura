@@ -58,11 +58,14 @@ public final class SharedMedia extends ContentProvider {
             size+=files[i].length();if(!files[i].equals(dest)&&(i>=20||size>150L*1024*1024))files[i].delete();}}
         return new Uri.Builder().scheme("content").authority(AUTH).appendPath(dest.getName()).appendPath(name).build();
     }
-    static void share(Context a,Uri uri,String name){
+    static Intent shareIntent(Context a,Uri uri,String name){
         Intent send=new Intent(Intent.ACTION_SEND).setType(mime(extension(name))).putExtra(Intent.EXTRA_STREAM,uri).putExtra(Intent.EXTRA_TITLE,name)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         send.setClipData(ClipData.newUri(a.getContentResolver(),name,uri));
-        a.startActivity(Intent.createChooser(send,null).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));
+        return send;
+    }
+    static void share(Context a,Uri uri,String name){
+        a.startActivity(Intent.createChooser(shareIntent(a,uri,name),null).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));
     }
     static Uri publish(Context a,File file,String name)throws IOException {
         String ext=extension(name);boolean audio=ext.equals("mp3"),png=ext.equals("png");

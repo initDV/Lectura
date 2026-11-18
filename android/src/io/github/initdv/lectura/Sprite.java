@@ -196,14 +196,21 @@ final class Sprite {
         double round=0,stretch=0;
         if(!letter.isEmpty()){
             char c=Character.toLowerCase(letter.charAt(0));
-            if("o".indexOf(c)>=0)round=.85;else if(c=='u')round=.95;else if("eéèê".indexOf(c)>=0)stretch=.55;
-            else if(c=='i'||c=='y')stretch=.85;else if(c=='f'||c=='v')stretch=.35;else if("rjg".indexOf(c)>=0){round=.35;stretch=.15;}
+            // scene.js passes one UTF-16 character. Match visemeDe()'s single-letter table and 'a' fallback.
+            if(c=='o')round=.85;
+            else if(c=='u')round=.95;
+            else if("eéèê".indexOf(c)>=0)stretch=.55;
+            else if(c=='i'||c=='y')stretch=.85;
+            else if(c=='f'||c=='v')stretch=.35;
+            else if("rjg".indexOf(c)>=0){round=.35;stretch=.15;}
             else if("mbp".indexOf(c)<0){round=.1;stretch=.1;}
         }
-        double g=max(0,q(gap)),w=q(hw)*(1-round*.28+stretch*.12),hi=g*.35,lo=g*.65,xl=q(x)-w,xr=q(x)+w,yc=q(y),bow=2.6*(1-stretch*.5);
-        path(lips[0],g>=.4,xl,yc,x,y+hi*1.1,xr,yc,x,(yc+lo)*1.02+lo*.28,xl,yc);
-        path(lips[1],true,xl,yc,x-w*.42,yc-bow,x,yc-bow+bow*.22,x+w*.42,yc-bow,xr,yc,x,y+hi*1.1,xl,yc);
-        path(lips[2],true,xl,yc,x,y+lo*1.5+2,xr,yc,x,y+lo*1.1,xl,yc);
+        round=clamp(max(round,pose.getOrDefault("rond",0d)),0,1);
+        double g=max(0,q(gap)),w=q(hw)*(1-round*.28+stretch*.12),hi=g*.35,lo=g*.65,xl=q(x)-w,xr=q(x)+w;
+        double yc=q(y),corner=yc+q(clamp(pose.getOrDefault("sourire",0d),-1,1)*min(5,w*.28)),bow=2.6*(1-stretch*.5);
+        path(lips[0],g>=.4,xl,corner,x,y+hi*1.1,xr,corner,x,(yc+lo)*1.02+lo*.28,xl,corner);
+        path(lips[1],true,xl,corner,x-w*.42,yc-bow,x,yc-bow+bow*.22,x+w*.42,yc-bow,xr,corner,x,y+hi*1.1,xl,corner);
+        path(lips[2],true,xl,corner,x,y+lo*1.5+2,xr,corner,x,y+lo*1.1,xl,corner);
         path(lips[3],g>=1.6,x-w*.62,y+hi*.30,x,y+hi*.95,x+w*.62,y+hi*.30,x,y+hi*.52,x-w*.62,y+hi*.30);
         path(lips[4],g>=2.6,x-w*.40,y+lo*.72,x,y+lo*1.30,x+w*.40,y+lo*.72,x,y+lo*1.02,x-w*.40,y+lo*.72);
     }

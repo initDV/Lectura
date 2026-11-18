@@ -36,7 +36,7 @@ final class Talk implements AutoCloseable {
         });
     }
     List<Voice> voices(String lang){
-        List<Voice> out=new ArrayList<>();if(ready&&tts.getVoices()!=null)for(Voice v:tts.getVoices())if(v.getLocale().getLanguage().equals(lang))out.add(v);
+        List<Voice> out=new ArrayList<>();if(ready&&tts.getVoices()!=null)for(Voice v:tts.getVoices())if(v.getLocale().getLanguage().equals(lang)&&!v.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED))out.add(v);
         out.sort(Comparator.comparing(Voice::isNetworkConnectionRequired).thenComparing(Voice::getName));return out;
     }
     Voice choose(String lang,String id){

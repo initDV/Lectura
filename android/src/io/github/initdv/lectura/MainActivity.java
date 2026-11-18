@@ -247,7 +247,7 @@ public final class MainActivity extends Activity {
     }
     void chooseVoice(){LinearLayout r=sheet(t("scene.voix.choisir"));ui.group(r,t("scene.voix.systeme"),true);List<Voice> voices=talk.voices(db.locale());
         if(voices.isEmpty())ui.add(r,ui.small(t("voix.err.aucune")),0);
-        for(Voice voice:voices)choice(r,voice.getName()+(voice.isNetworkConnectionRequired()?" · "+t("voix.enLigne"):""),"voice",!project.fileAudio&&project.voice.equals(voice.getName()),false,()->{dismiss();selectVoice("webspeech",voice.getName());});
+        for(Voice voice:voices)choice(r,voice.getName()+(voice.isNetworkConnectionRequired()?" · "+t("voix.enLigne"):""),"voice",!project.fileAudio&&project.engine.equals("webspeech")&&project.voice.equals(voice.getName()),false,()->{dismiss();selectVoice("webspeech",voice.getName());});
         ui.group(r,t("voix.hd.titre"),false);List<JSONObject> installed=installedHd();
         if(installed.isEmpty())choice(r,t("voix.hd.gerer"),"download",false,false,()->go("reglages"));
         for(JSONObject v:installed){String id=v.optString("id");choice(r,"Lectura HD · "+v.optString("nom"),"sparkle",!project.fileAudio&&project.engine.equals("piper")&&project.voice.equals(id),false,()->{dismiss();selectVoice("piper",id);});}
@@ -260,8 +260,12 @@ public final class MainActivity extends Activity {
     String fileName(Uri uri){try(android.database.Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())return c.getString(0);}catch(Exception ignored){}return "audio";}
     String fileText(Uri uri,int max)throws IOException {try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IOException("Fichier illisible.");return new String(Refs.read(in,max),StandardCharsets.UTF_8).replaceFirst("^\ufeff","");}}
     void writeDoc(String mime,String file,String text){createFile(mime,file,uri->{try(java.io.OutputStream o=getContentResolver().openOutputStream(uri,"wt")){if(o==null)throw new IOException("Fichier indisponible.");o.write(text.getBytes(StandardCharsets.UTF_8));}catch(Exception e){report("fichier",e);}});}
-    void pickAudio(){pick("audio/*",uri->{
-        Project target=project;File dest=db.audio(target);String name=fileName(uri);queue.submit(()->{
+    void pickAudio(){
+        request(new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+            .putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"audio/*","video/webm","application/ogg"}),uri->importAudio(uri,fileName(uri)));
+    }
+    void importAudio(Uri uri,String name){
+        Project target=project;File dest=db.audio(target);queue.submit(()->{
             File temp=null;try{temp=File.createTempFile("import-",".audio",dest.getParentFile());
                 try(InputStream in=getContentResolver().openInputStream(uri);FileOutputStream out=new FileOutputStream(temp)){
                     if(in==null)throw new IOException("Fichier illisible.");byte[] bytes=new byte[65536];long total=0;for(int n;(n=in.read(bytes))>=0;){Pcm.interrupted();if((total+=n)>Pcm.MAX_BYTES)throw new IOException("Fichier audio trop volumineux.");out.write(bytes,0,n);}}
@@ -272,7 +276,7 @@ public final class MainActivity extends Activity {
                 handler.post(()->{target.fileAudio=true;target.fileName=name;target.duration=ms;sig="";if(scene!=null)scene.voice();});
             }catch(Exception e){handler.post(()->report("audio",e));}finally{if(temp!=null)temp.delete();}
         });
-    });}
+    }
     void capturePng(){if(reading==null){note(t("scene.err.rienACapturer"),"info");return;}
         boolean portrait=viewportHeight()>content.getWidth()/ui.density;int w=portrait?1080:1280,h=portrait?1920:720;
         android.graphics.Bitmap b=android.graphics.Bitmap.createBitmap(w,h,android.graphics.Bitmap.Config.ARGB_8888);stage.exportDraw(new android.graphics.Canvas(b),w,h,true,0);
