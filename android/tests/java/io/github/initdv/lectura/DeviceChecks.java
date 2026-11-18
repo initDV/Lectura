@@ -459,6 +459,17 @@ public final class DeviceChecks extends Instrumentation {
         }
     }
     private static int peak(short[] samples,int n){int p=0;for(int i=0;i<n;i++)p=Math.max(p,Math.abs((int)samples[i]));return p;}
+    private static int pcmPeak(Pcm pcm,long fromMs,long toMs)throws Exception {
+        long pos=Math.max(0,Math.round(fromMs*pcm.rate/1000.));
+        long end=Math.min(pcm.frames,Math.round(toMs*pcm.rate/1000.));
+        require(pos<end,"Plage PCM vide : "+fromMs+"–"+toMs+" ms");
+        short[] samples=new short[4096*pcm.channels];int max=0;
+        while(pos<end){
+            int n=pcm.read(pos,samples,(int)Math.min(4096,end-pos));require(n>0,"Fin de PCM prématurée");
+            max=Math.max(max,peak(samples,n*pcm.channels));pos+=n;
+        }
+        return max;
+    }
     private String hd(Refs refs)throws Exception {
         try(Hd h=new Hd(refs)){
             require(Hd.supported(),"AAR ONNX absent");
@@ -470,14 +481,24 @@ public final class DeviceChecks extends Instrumentation {
             h.download("gilles",(a,b)->{});require(!partial.exists()&&h.installed(h.voice("gilles")),"Reprise du téléchargement Piper");
             String text="Bonjour Lectura.\n$ echo\nTrès bien !";
             File synthesis;
-            try(Pcm f=h.synth(text,"gilles",1,28,(a,b)->{}).pcm){
+            int head,first,last,command;
+            Hd.Synthesis reading=h.synth(text,"gilles",1,28,(a,b)->{});
+            try(Pcm f=reading.pcm){
                 require(f.frames>f.rate,"Synthèse ONNX vide");synthesis=f.file;
-                short[] samples=new short[f.rate];int n=f.read(0,samples,samples.length),peak=0;
-                for(int i=0;i<n;i++)peak=Math.max(peak,Math.abs((int)samples[i]));require(peak>1000,"Synthèse ONNX muette");
+                List<Script.Segment> parts=reading.segments;
+                require(parts.size()==3&&parts.get(0).type==Script.SPOKEN&&parts.get(1).type==Script.COMMAND
+                    &&parts.get(2).type==Script.SPOKEN,"Découpage attendu : phrase, commande, phrase");
+                Script.Segment a=parts.get(0),b=parts.get(1),c=parts.get(2);
+                // Piper can vary its timing. Use each entire spoken interval, not just the first second.
+                head=pcmPeak(f,0,1000);first=pcmPeak(f,a.from,a.to);last=pcmPeak(f,c.from,c.to);
+                require(first>1000&&last>1000,"Phrase Gilles muette : pics "+first+"/"+last+" (première seconde "+head+")");
+                command=pcmPeak(f,b.from+1,b.to-1); // Skip boundaries rounded to milliseconds.
+                require(command==0,"Commande Gilles non muette : pic "+command);
             }
             try(Pcm cached=h.synth(text,"gilles",1,28,(a,b)->require(b==1,"Cache non réutilisé")).pcm){require(synthesis.equals(cached.file),"Cache Piper");}
             h.remove("gilles");require(!h.installed(h.voice("gilles")),"Suppression modèle Piper");
-            return "Voix Piper Gilles d’origine : téléchargement interrompu/repris, inférence avec PCM audible, cache, suppression";
+            return "Gilles : téléchargement interrompu/repris, pics PCM des phrases "+first+"/"+last
+                +" (première seconde "+head+", commande "+command+"), cache, suppression";
         }
     }
 }
