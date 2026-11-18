@@ -16,50 +16,11 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP"
           curl -fsSL --retry 2 'https://github.com/ByBrawe/Okuvia-models/releases/download/pocket-multilingual-preset-20261026/fr-pocket-tts-202610-preset.zip' -o estelle.zip
-          curl -fsSL --retry 2 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_0.tar.bz2' -o kokoro.tar.bz2
-          curl -fsSL --retry 2 'https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-static-link-onnxruntime-2.0.1.aar' -o sherpa.aar
-          sha256sum -c <<'SHA'
-          6068d9e5fa2b91c92bda8a3d874c34a3f99799cd5bef45634644b4e37febf718  estelle.zip
-          72c347230107ef8a31098ec4d468a605244beef5f1ed00db97efa13518800653  kokoro.tar.bz2
-          07e042d97f3a6bd5b7fe74d4eef0513dc01a714b16c15a903250095aba43a575  sherpa.aar
-          SHA
-          python3 -m pip install --user onnx==1.20.1
+          echo '6068d9e5fa2b91c92bda8a3d874c34a3f99799cd5bef45634644b4e37febf718  estelle.zip' | sha256sum -c
           python3 - <<'PY'
-          import json, zipfile, tarfile, onnx
-          from collections import Counter
-          from pathlib import Path
-          def note(title, lines):
-              text='\n'.join(lines).replace('%','%25').replace('\n','%0A').replace('\r','%0D')
-              print(f'::notice title={title}::{text[:28000]}')
-          with tarfile.open('kokoro.tar.bz2') as t:
-              paths=t.getmembers()
-              tokens=next(e for e in paths if e.name.endswith('/tokens.txt'))
-              note('Kokoro tokens', [repr(t.extractfile(tokens).read().decode('utf8'))])
-          with zipfile.ZipFile('sherpa.aar') as z:
-              note('Sherpa AAR', [e.filename for e in z.infolist()][:90])
-              Path('classes.jar').write_bytes(z.read('classes.jar'))
-          with zipfile.ZipFile('classes.jar') as z:
-              note('Sherpa classes', [p for p in z.namelist() if 'OfflineTts' in p or p.startswith('kotlin/')][:60])
+          import zipfile, struct
           with zipfile.ZipFile('estelle.zip') as z:
-              note('Estelle paths', [f'{e.filename} {e.file_size}' for e in z.infolist()])
-              for n in z.namelist():
-                  name=Path(n).name
-                  if name.endswith('.onnx'):
-                      model=onnx.load_model_from_string(z.read(n))
-                      def io(xs):
-                          return [x.name+' '+onnx.TensorProto.DataType.Name(x.type.tensor_type.elem_type)+' '+str([d.dim_param or d.dim_value for d in x.type.tensor_type.shape.dim]) for x in xs]
-                      note(name, ['inputs',*io(model.graph.input),'outputs',*io(model.graph.output),*[f'{p.key}={p.value[:400]}' for p in model.metadata_props]])
-                  elif name.endswith('.json'):
-                      raw=z.read(n); data=json.loads(raw)
-                      note(name,[raw[:9000].decode('utf8','replace') if len(raw)<24000 else str(list(data) if isinstance(data,dict) else data[:3])])
-                  elif name in ('README.md','MODEL_NOTICE.txt','README.txt','VOICE_ATTRIBUTION.md'):
-                      note(name,[z.read(n)[:8000].decode('utf8','replace')])
-                  elif name.endswith(('.bin','.npy','.safetensors','.preset','.model')):
-                      with z.open(n) as f: note(name,[repr(f.read(400))])
-                      if name.endswith('.preset'):
-                          raw=z.read(n)
-                          for i in [0,40,256,315392,315400,630784,630792,946176,946184,1024000]:
-                              print(i, raw[i:i+48].hex())
-                          from collections import Counter
-                          note('Preset format details', [str(Counter(raw[:400])), raw[:2048].hex(), raw[-2048:].hex(), 'PK magic ' + str(raw.find(b'PK\\x03\\x04')), 'state_0 ' + str(raw.find(b'state_0')), 'tensor ' + str(raw.find(b'cache'))])
+              raw=z.read('voices/estelle.preset')
+              print('::notice title=Preset Estelle::'+repr(raw[:288])+'%0A'+repr(raw[-88:])+'%0A'+repr([(i,raw[i:i+24].hex()) for i in [0,8,16,24,32,40,48,56,64,315392,315404,315456,630784,630832,946176,3785472]]))
+              print('::notice title=Tokenizer Estelle::'+repr(z.read('models/tokenizer.model')[:180]))
           PY
