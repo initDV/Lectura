@@ -38,6 +38,7 @@ final class MediaExport {
     static final class Format {
         final String video,audio,ext,mime;
         final int container;
+        String videoCodec,audioCodec;
         Format(String video,boolean webm){this.video=video;audio=webm?OPUS:AAC;ext=webm?"webm":"mp4";mime="video/"+ext;
             container=webm?MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM:MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4;}
     }
@@ -45,7 +46,8 @@ final class MediaExport {
         List<Format> out=new ArrayList<>();MediaCodecList codecs=new MediaCodecList(MediaCodecList.REGULAR_CODECS);
         for(String id:new String[]{AVC,VP9,VP8}){
             Format f=new Format(id,!id.equals(AVC));try{
-                if(codecs.findEncoderForFormat(video(f,w,h,true))!=null&&(!audio||codecs.findEncoderForFormat(audio(f,channels,rate))!=null))out.add(f);
+                f.videoCodec=codecs.findEncoderForFormat(video(f,w,h,true));if(audio)f.audioCodec=codecs.findEncoderForFormat(audio(f,channels,rate));
+                if(f.videoCodec!=null&&(!audio||f.audioCodec!=null))out.add(f);
             }catch(IllegalArgumentException ignored){}
         }
         return out;
@@ -78,7 +80,7 @@ final class MediaExport {
     static final class Recording {
         final int w,h;final File dir;final Pcm sound;
         private Frame next;
-        private boolean writing,stopped,cancelled;
+        private boolean writing,stopped,cancelled,begun;
         private long stopAt;
         private final ArrayList<Mark> marks=new ArrayList<>();
         Recording(int w,int h,File dir,Pcm sound)throws IOException{
@@ -88,11 +90,15 @@ final class MediaExport {
         synchronized void offer(Bitmap b,long us){if(!room()){b.recycle();return;}next=new Frame(b,us);notifyAll();}
         synchronized void mark(Mark mark){if(!stopped&&!cancelled&&sound!=null)marks.add(mark);}
         synchronized void end(long us){stopped=true;stopAt=us;notifyAll();}
-        synchronized void cancel(){cancelled=true;if(next!=null){next.image.recycle();next=null;}notifyAll();}
+        synchronized void cancel(){
+            if(cancelled)return;cancelled=true;if(next!=null){next.image.recycle();next=null;}
+            if(!begun&&sound!=null)sound.close();notifyAll();
+        }
         synchronized void check(){if(cancelled||Thread.currentThread().isInterrupted())throw new CancellationException();}
         private synchronized Frame take()throws InterruptedException {while(!stopped&&!cancelled&&next==null)wait(100);check();Frame f=next;next=null;writing=f!=null;return f;}
         private synchronized void taken(){writing=false;}
         File run(String forcedExt,Runnable started)throws Exception {
+            synchronized(this){check();begun=true;}
             File video=null,audio=null,merged=null,finalFile=null;
             try{
                 List<Format> choices=available(w,h,sound!=null,sound==null?1:sound.channels,sound==null?48000:sound.rate);
@@ -129,7 +135,7 @@ final class MediaExport {
         Track output;
         VideoEncoder(Format f,int w,int h,File file)throws Exception {
             try {
-                codec=MediaCodec.createEncoderByType(f.video);codec.configure(video(f,w,h,true),null,null,MediaCodec.CONFIGURE_FLAG_ENCODE);
+                codec=MediaCodec.createByCodecName(f.videoCodec);codec.configure(video(f,w,h,true),null,null,MediaCodec.CONFIGURE_FLAG_ENCODE);
                 window=codec.createInputSurface();egl=new Egl(window,w,h);codec.start();output=new Track(file,f.container);
             }catch(Exception e){close();throw e;}
         }
@@ -168,7 +174,7 @@ final class MediaExport {
     }
     private static void encodeAudio(Format f,Pcm sound,long us,List<Mark> marks,File out)throws IOException {
         int rate=sampleRate(f,sound.rate);long total=Math.max(1,Math.round(us*rate/1_000_000.));
-        MediaCodec codec=MediaCodec.createEncoderByType(f.audio);
+        MediaCodec codec=MediaCodec.createByCodecName(f.audioCodec);
         try(Track track=new Track(out,f.container)){
             codec.configure(audio(f,sound.channels,sound.rate),null,null,MediaCodec.CONFIGURE_FLAG_ENCODE);codec.start();
             AudioMix mix=new AudioMix(sound,rate,marks);long clock=SystemClock.elapsedRealtime();long at=0;
@@ -284,6 +290,7 @@ final class MediaExport {
         a.seek(offset);byte[] bytes=new byte[65536];while(size>0){Pcm.interrupted();int n=(int)Math.min(size,bytes.length);a.readFully(bytes,0,n);b.write(bytes,0,n);size-=n;}
     }
     private static final class Egl implements AutoCloseable {
+        private static final int EGL_RECORDABLE_ANDROID=0x3142;
         EGLDisplay display=EGL14.EGL_NO_DISPLAY;EGLContext context=EGL14.EGL_NO_CONTEXT;EGLSurface surface=EGL14.EGL_NO_SURFACE;
         final int width,height;
         final FloatBuffer vertex=ByteBuffer.allocateDirect(64).order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -292,7 +299,7 @@ final class MediaExport {
             width=w;height=h;
             try{
                 display=EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);int[] ver=new int[2];req(EGL14.eglInitialize(display,ver,0,ver,1));
-                int[] spec={EGL14.EGL_RED_SIZE,8,EGL14.EGL_GREEN_SIZE,8,EGL14.EGL_BLUE_SIZE,8,EGL14.EGL_RENDERABLE_TYPE,EGL14.EGL_OPENGL_ES2_BIT,0x3142,1,EGL14.EGL_NONE};
+                int[] spec={EGL14.EGL_RED_SIZE,8,EGL14.EGL_GREEN_SIZE,8,EGL14.EGL_BLUE_SIZE,8,EGL14.EGL_RENDERABLE_TYPE,EGL14.EGL_OPENGL_ES2_BIT,EGL_RECORDABLE_ANDROID,1,EGL14.EGL_NONE};
                 EGLConfig[] cfg=new EGLConfig[1];int[] n=new int[1];req(EGL14.eglChooseConfig(display,spec,0,cfg,0,1,n,0)&&n[0]==1);
                 context=EGL14.eglCreateContext(display,cfg[0],EGL14.EGL_NO_CONTEXT,new int[]{EGL14.EGL_CONTEXT_CLIENT_VERSION,2,EGL14.EGL_NONE},0);
                 surface=EGL14.eglCreateWindowSurface(display,cfg[0],target,new int[]{EGL14.EGL_NONE},0);

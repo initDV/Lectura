@@ -10,9 +10,15 @@ import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
+import android.view.PixelCopy;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
@@ -30,13 +36,85 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class DeviceChecks extends Instrumentation {
     private Bundle args;
     @Override public void onCreate(Bundle options){args=options;start();}
+    private final StringBuilder report=new StringBuilder("\n");
+    private boolean failed;
     @Override public void onStart(){
-        Bundle out=new Bundle();try{
-            Context ctx=getTargetContext(); Refs refs=new Refs(ctx);String note=refsAndModels(refs);
-            note+=" | "+media(ctx);
-            if("true".equals(args.getString("hd")))note+=" | "+hd(refs);
-            out.putString("stream","\nLECTURA_OK "+note+"\n");finish(Activity.RESULT_OK,out);
-        }catch(Throwable e){out.putString("stream","\nLECTURA_ERROR "+android.util.Log.getStackTraceString(e)+"\n");finish(Activity.RESULT_CANCELED,out);}
+        Context ctx=getTargetContext(); Refs refs=new Refs(ctx);
+        check("surfaces",()->surfaces(ctx));
+        check("fixtures",()->refsAndModels(refs));
+        for(String format:new String[]{"mp4","webm"})check(format,()->media(ctx,format));
+        if("true".equals(args.getString("hd")))check("piper",()->hd(refs));
+        Bundle out=new Bundle();out.putString("stream",report.toString());
+        finish(failed?Activity.RESULT_CANCELED:Activity.RESULT_OK,out);
+    }
+    private interface Check { String run() throws Exception; }
+    private void check(String name,Check c){
+        try{String result=c.run();report.append("LECTURA_OK ").append(name).append(" : ").append(result).append('\n');}
+        catch(Throwable e){
+            failed=true;
+            report.append("LECTURA_ERROR ").append(name).append(" : ").append(e).append('\n')
+                .append(android.util.Log.getStackTraceString(e)).append('\n');
+        }
+    }
+    private interface MainAction { void run() throws Exception; }
+    private void main(MainAction fn)throws Exception{
+        AtomicReference<Throwable> error=new AtomicReference<>();
+        runOnMainSync(()->{try{fn.run();}catch(Throwable e){error.set(e);}});
+        Throwable e=error.get();if(e instanceof Exception)throw (Exception)e;if(e instanceof Error)throw (Error)e;
+    }
+    private static View named(View view,String label){
+        if(view.getVisibility()!=View.VISIBLE)return null;
+        if(label.contentEquals(view.getContentDescription()==null?"":view.getContentDescription())
+            ||view instanceof TextView&&label.contentEquals(((TextView)view).getText()))return view;
+        if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){
+            View match=named(group.getChildAt(i),label);if(match!=null)return match;
+        }}return null;
+    }
+    private void click(MainActivity a,String label)throws Exception{
+        main(()->{View v=named(a.modal==null?a.content:a.modal,label);
+            while(v!=null&&!v.isClickable())v=v.getParent() instanceof View?(View)v.getParent():null;
+            require(v!=null&&v.isEnabled()&&v.performClick(),"Contrôle absent ou inactif : "+label);
+        });
+    }
+    private void screen(MainActivity a,File dir,String name)throws Exception{
+        Thread.sleep(250);
+        CountDownLatch done=new CountDownLatch(1);AtomicReference<Integer> status=new AtomicReference<>();
+        Bitmap b=Bitmap.createBitmap(390,780,Bitmap.Config.ARGB_8888);
+        try{
+            main(()->{
+                require(a.root.getWidth()==390&&a.root.getHeight()==780&&a.viewportHeight()==780,
+                    "Surface Android "+a.root.getWidth()+"×"+a.root.getHeight()+", hauteur utile "+a.viewportHeight());
+                PixelCopy.request(a.getWindow(),b,code->{status.set(code);done.countDown();},a.handler);
+            });
+            require(done.await(8,TimeUnit.SECONDS)&&status.get()==PixelCopy.SUCCESS,"PixelCopy "+name+" : "+status.get());
+            try(FileOutputStream out=new FileOutputStream(new File(dir,"android-"+name+".png"))){require(b.compress(Bitmap.CompressFormat.PNG,100,out),"Capture de "+name);}
+        }finally{b.recycle();}
+    }
+    private String surfaces(Context ctx)throws Exception {
+        require(Build.VERSION.SDK_INT==31,"API Android "+Build.VERSION.SDK_INT);
+        MainActivity a=(MainActivity)startActivitySync(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try{
+            File dir=ctx.getExternalFilesDir("verification");require(dir!=null,"Stockage de test");
+            main(()->{require(a.modal!=null,"Tutoriel au premier démarrage");a.fullscreen();});screen(a,dir,"tuto");
+            click(a,"Passer");screen(a,dir,"scene");click(a,"Menu");screen(a,dir,"menu");
+            click(a,"Aperçu sans son");
+            main(()->a.scene.edit.setText("Bonjour Lectura. Ceci est un essai natif. ".repeat(18)));
+            click(a,"Menu");click(a,"Aperçu sans son");
+            for(int i=0;i<30;i++){
+                AtomicReference<Boolean> ready=new AtomicReference<>();main(()->ready.set(a.reading!=null&&a.reading.playing));
+                if(ready.get())break;Thread.sleep(100);
+            }
+            screen(a,dir,"lecture");click(a,"Pause");click(a,"Reprendre");click(a,"Arrêter");click(a,"Accélérer");
+            main(()->{require(a.stopped&&a.reading!=null&&!a.reading.playing&&a.reading.terminal.shown>0,"Arrêt de lecture");
+                require(a.project.speed==1.25f,"Vitesse 1.25x");});
+            click(a,"Masquer le texte du terminal");main(()->require(a.stage.masked,"Masquage du terminal"));
+            click(a,"Afficher le texte du terminal");main(()->require(!a.stage.masked,"Réaffichage du terminal"));
+            for(String[] route:new String[][]{{"Projets","projets"},{"Personnages","personnages"},{"Réglages","reglages"},{"Pro","pro"},{"À propos","apropos"}}){
+                click(a,"Menu");click(a,route[0]);main(()->require(a.route.equals(route[1]),route[0]));
+                click(a,"Retour à la scène");
+            }
+            return "API 31, installation, tutoriel, scène, menu, aperçu, pause/reprise/arrêt, vitesse, œil, cinq destinations";
+        }finally{main(a::finish);}
     }
     private static void require(boolean b,String msg) {if(!b)throw new AssertionError(msg);}
     private String refsAndModels(Refs refs)throws Exception {
@@ -58,9 +136,9 @@ public final class DeviceChecks extends Instrumentation {
         }
         return "43 rigs, 8 cas G2P et 8 chronologies conformes aux fixtures";
     }
-    private String media(Context ctx)throws Exception {
+    private String media(Context ctx,String ext)throws Exception {
         File dir=ctx.getExternalFilesDir("verification");require(dir!=null,"Stockage de test");
-        File wav=new File(dir,"tone.wav");int rate=48000;long frames=rate*2;
+        File wav=File.createTempFile("tone-",".wav",dir);int rate=48000;long frames=rate*2;
         try(RandomAccessFile out=new RandomAccessFile(wav,"rw")){Pcm.header(out,1,rate,frames*2);
             for(int i=0;i<frames;i++){short x=(short)(11000*Math.sin(2*Math.PI*440*i/rate));out.writeByte(x&255);out.writeByte(x>>8);}}
         MainActivity a=(MainActivity)startActivitySync(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -73,7 +151,7 @@ public final class DeviceChecks extends Instrumentation {
         }catch(Throwable e){setup.set(e);}});if(setup.get()!=null)throw new AssertionError(setup.get());
         try(Pcm pcm=Pcm.decode(wav,dir)){
             require(pcm.duration()>=1999,"Durée décodée WAV");
-            for(String ext:new String[]{"mp4","webm"}){
+            {
                 int w=ext.equals("mp4")?1280:720,h=ext.equals("mp4")?720:1280;
                 File encoded=encode(a,pcm,dir,ext,w,h);File named=new File(dir,"lectura-test."+ext);Files.move(encoded.toPath(),named.toPath(),StandardCopyOption.REPLACE_EXISTING);
                 Uri shared=SharedMedia.reserveShare(ctx,named,named.getName());try(InputStream in=ctx.getContentResolver().openInputStream(shared)){require(in!=null&&in.read()>=0,"Flux URI " + ext);}
@@ -81,17 +159,23 @@ public final class DeviceChecks extends Instrumentation {
                 if(ext.equals("mp4")){
                     File mp3=new File(dir,"lectura-test.mp3");Mp3.transcode(named,mp3,dir);
                     MediaExtractor x=new MediaExtractor();try{x.setDataSource(mp3.getPath());require(x.getTrackCount()==1&&MediaFormat.MIMETYPE_AUDIO_MPEG.equals(x.getTrackFormat(0).getString(MediaFormat.KEY_MIME)),"Vrai MP3");}finally{x.release();}
-                    Uri saved=SharedMedia.publish(ctx,named,named.getName());require(saved!=null,"MediaStore");ctx.getContentResolver().delete(saved,null,null);
+                    Uri saved=SharedMedia.publish(ctx,named,named.getName());
+                    try(InputStream in=ctx.getContentResolver().openInputStream(saved)){require(in!=null&&in.read()>=0,"MediaStore");}
+                    finally{ctx.getContentResolver().delete(saved,null,null);}
+                    Movies lib=new Movies(ctx);lib.save(named,named.getName());Movies.Entry entry=new Movies(ctx).list().get(0);
+                    require(entry.file.length()==named.length()&&entry.format.equals(ext),"Mes vidéos persistant");lib.delete(entry);
                     Uri shareAudio=SharedMedia.reserveShare(ctx,mp3,mp3.getName());try(InputStream in=ctx.getContentResolver().openInputStream(shareAudio)){require(in!=null&&in.read()>=0,"Flux URI MP3");}
                 }
             }
         }finally{wav.delete();runOnMainSync(a::finish);}
-        return "MP4 H.264/AAC, WebM VPx/Opus, MP3, décodage des pistes, MediaStore et flux de partage";
+        return ext.equals("mp4")?"1280×720 H.264/AAC, MP3, MediaStore, Mes vidéos et flux de partage":
+            "720×1280 VPx/Opus, décodage des pistes et flux de partage";
     }
     private File encode(MainActivity a,Pcm pcm,File dir,String ext,int w,int h)throws Exception {
         MediaExport.Recording r=new MediaExport.Recording(w,h,dir,pcm);ExecutorService worker=Executors.newSingleThreadExecutor();CountDownLatch start=new CountDownLatch(1);
         Future<File> done=worker.submit(()->r.run(ext,start::countDown));try{
-            while(!start.await(200,TimeUnit.MILLISECONDS)){if(done.isDone())return done.get();}
+            long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(20);
+            while(!start.await(200,TimeUnit.MILLISECONDS)){if(done.isDone())return done.get();require(System.nanoTime()<deadline,"Démarrage de l'encodeur " +ext);}
             r.mark(new MediaExport.Mark(0,0,1,true));
             for(int i=0;i<48;i++){
                 while(!r.room()){if(done.isDone())return done.get();Thread.sleep(3);}
@@ -104,11 +188,23 @@ public final class DeviceChecks extends Instrumentation {
     }
     private String hd(Refs refs)throws Exception {
         try(Hd h=new Hd(refs)){
-            require(Hd.supported(),"AAR ONNX absent");h.download("gilles",(a,b)->{});
+            require(Hd.supported(),"AAR ONNX absent");
+            require(h.voices.size()==10,"Catalogue des voix HD");
+            File partial=new File(refs.context.getFilesDir(),"models/gilles.onnx.part");
+            h.remove("gilles");
+            try{h.download("gilles",(a,b)->{if(a<b)throw new java.util.concurrent.CancellationException();});throw new AssertionError("Téléchargement Piper non interrompu");}
+            catch(java.util.concurrent.CancellationException expected){require(partial.length()>0,"Reprise Piper sans segment partiel");}
+            h.download("gilles",(a,b)->{});require(!partial.exists()&&h.installed(h.voice("gilles")),"Reprise du téléchargement Piper");
             String text="Bonjour Lectura.\n$ echo\nTrès bien !";
-            try(Pcm f=h.synth(text,"gilles",1,28,(a,b)->{}).pcm){require(f.frames>f.rate,"Synthèse ONNX vide");}
-            try(Pcm cached=h.synth(text,"gilles",1,28,(a,b)->{}).pcm){require(cached.frames>cached.rate,"Cache Piper");}
-            h.remove("gilles");require(!h.installed(h.voice("gilles")),"Suppression modèle Piper");return "Voix Piper Gilles originale, synthèse, cache et suppression";
+            File synthesis;
+            try(Pcm f=h.synth(text,"gilles",1,28,(a,b)->{}).pcm){
+                require(f.frames>f.rate,"Synthèse ONNX vide");synthesis=f.file;
+                short[] samples=new short[f.rate];int n=f.read(0,samples,samples.length),peak=0;
+                for(int i=0;i<n;i++)peak=Math.max(peak,Math.abs((int)samples[i]));require(peak>1000,"Synthèse ONNX muette");
+            }
+            try(Pcm cached=h.synth(text,"gilles",1,28,(a,b)->require(b==1,"Cache non réutilisé")).pcm){require(synthesis.equals(cached.file),"Cache Piper");}
+            h.remove("gilles");require(!h.installed(h.voice("gilles")),"Suppression modèle Piper");
+            return "Voix Piper Gilles d’origine : téléchargement interrompu/repris, inférence avec PCM audible, cache, suppression";
         }
     }
 }

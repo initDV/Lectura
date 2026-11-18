@@ -3,8 +3,6 @@ package io.github.initdv.lectura;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.net.Uri;
-import android.os.SystemClock;
-import android.view.Gravity;
 import android.view.View;
 import android.widget.CheckBox;
 import android.widget.LinearLayout;
@@ -29,7 +27,7 @@ final class ExportUi implements AutoCloseable {
     MediaExport.Recording recording;
     Future<?> task;
     private long origin,lastFrame=-1;
-    private boolean finishing,markedPlaying;
+    private boolean finishing,markedPlaying,closed;
     private double markedRate;
     private File mediaToOffer;
     private boolean offerAudio;
@@ -37,10 +35,12 @@ final class ExportUi implements AutoCloseable {
     private VideoView showing;
     ExportUi(MainActivity a){
         this.a=a;u=a.ui;movies=new Movies(a);temp=Library.dir(a.getCacheDir(),"exports");
-        File[] stale=temp.listFiles();if(stale!=null)for(File old:stale)old.delete();
+        File[] stale=temp.listFiles();if(stale!=null)for(File old:stale)if(old.lastModified()<System.currentTimeMillis()-86400000L)old.delete();
     }
     private String t(String key,Object... args){return a.t(key,args);}
     boolean active(){return recording!=null&&!finishing;}
+    boolean capturing(){return active()&&origin>0;}
+    boolean busy(){return recording!=null;}
     void toggle(){
         if(finishing)return;
         if(recording!=null){stop();return;}
@@ -55,7 +55,7 @@ final class ExportUi implements AutoCloseable {
             recording=session;origin=0;lastFrame=-1;markedRate=0;markedPlaying=false;
             task=executor.submit(()->{try{
                 File file=session.run(null,()->a.handler.post(()->{
-                    if(recording!=session||a.stage!=stage)return;
+                    if(closed||recording!=session||a.stage!=stage)return;
                     stage.recording=true;origin=System.nanoTime();
                     a.note(t(session.sound!=null?"scene.videoDebut":"scene.videoSansSon"),session.sound!=null?"info":"warn",7000);
                     a.startPlaying();mark(true);frame(0);
@@ -65,7 +65,7 @@ final class ExportUi implements AutoCloseable {
                     recording=null;finishing=false;stage.recording=false;
                     if(mediaToOffer!=null)mediaToOffer.delete();mediaToOffer=file;offerName=title;offerAudio=session.sound!=null;
                     a.note(t("scene.video.verifOk","detail",session.w+" × "+session.h+" · "+SharedMedia.extension(file.getName()).toUpperCase(Locale.ROOT)),"ok",8000);
-                    if(a.isForeground)offer();
+                    foreground();
                 });
             }catch(Exception e){a.handler.post(()->{if(recording==session){recording=null;finishing=false;stage.recording=false;if(!(e instanceof CancellationException))a.report("video",e);}});}});
         }catch(Exception e){a.report("video",e);}
@@ -96,7 +96,7 @@ final class ExportUi implements AutoCloseable {
         if(recording!=null){recording.cancel();recording=null;if(task!=null)task.cancel(true);}
         finishing=false;origin=0;if(a.stage!=null)a.stage.recording=false;
     }
-    void foreground(){if(mediaToOffer!=null&&a.modal==null&&a.stage!=null)offer();}
+    void foreground(){if(a.isForeground&&!closed&&mediaToOffer!=null&&a.modal==null&&a.stage!=null)offer();}
     void offer(){
         File file=mediaToOffer;if(file==null)return;String base=offerName,ext=SharedMedia.extension(file.getName());boolean sound=offerAudio;
         LinearLayout body=a.sheet(t("dl.titre"));
@@ -104,21 +104,24 @@ final class ExportUi implements AutoCloseable {
         u.add(body,u.text(a.db.locale().equals("en")?"Videos are saved to Movies/Lectura. Use Share to send the file.":"Les vidéos sont enregistrées dans Movies/Lectura. Utilise Partager pour envoyer le fichier.",13.6f,0xff7fdfff,400),8);
         CheckBox keep=new CheckBox(a);u.style(keep,15,u.text,500);keep.setChecked(true);keep.setText(t("dl.garder"));keep.setButtonTintList(android.content.res.ColorStateList.valueOf(u.accent));u.add(body,keep,8);
         for(String option:new String[]{"mp4","webm","mp3"}){
-            boolean audio=option.equals("mp3"),active=audio||option.equals(ext);
+            boolean audio=option.equals("mp3"),active=audio?sound:option.equals(ext);
             LinearLayout row=u.col();row.setBackground(u.shape(0,6,0xff333333,1));u.pad(row,8,8);u.add(body,row,8);
             u.add(row,u.text(option.toUpperCase(Locale.ROOT),15,u.text,700),0);
-            String help=audio?t("dl.mp3.genere"):active?sound?t("dl.formatVideo"):t("scene.videoSansSon"):
+            String help=audio?t(sound?"dl.mp3.genere":"scene.videoSansSon"):active?sound?t("dl.formatVideo"):t("scene.videoSansSon"):
                 (a.db.locale().equals("en")?"Recorded as ":"Enregistré en ")+ext.toUpperCase(Locale.ROOT)+".";
             u.add(row,u.small(help),4);
             if(!active){row.setAlpha(.5f);continue;}
             if(!audio)u.add(row,u.small(Refs.size(file.length())),4);
             LinearLayout r=u.row();u.add(row,r,6);
-            addAction(r,t("dl.bouton.telecharger"),()->{a.dismiss();output(file,base,option,keep.isChecked(),false,sound);});u.gap(r,6);
-            addAction(r,t("dl.bouton.partager"),()->{a.dismiss();output(file,base,option,keep.isChecked(),true,sound);});
+            addAction(r,t("dl.bouton.telecharger"),()->take(file,base,option,keep.isChecked(),false,sound));u.gap(r,6);
+            addAction(r,t("dl.bouton.partager"),()->take(file,base,option,keep.isChecked(),true,sound));
         }
-        a.modalCleanup=()->{mediaToOffer=null;};
+        a.modalCleanup=()->{if(mediaToOffer==file){mediaToOffer=null;file.delete();}};
     }
     private void addAction(LinearLayout row,String s,Runnable r){TextView b=u.button(s,null,r);u.pad(b,8,0);u.grow(row,b);}
+    private void take(File file,String base,String ext,boolean keep,boolean share,boolean sound){
+        if(mediaToOffer!=file)return;mediaToOffer=null;a.dismiss();output(file,base,ext,keep,share,sound);
+    }
     private void output(File original,String base,String ext,boolean keep,boolean share,boolean sound){
         boolean mp3=ext.equals("mp3");if(mp3&&!sound){a.note(t("dl.mp3.echec"),"error");original.delete();return;}
         if(mp3)a.note(t("dl.mp3.encours"),"info");
@@ -130,12 +133,13 @@ final class ExportUi implements AutoCloseable {
                 if(keep){try{movies.save(encoded,name);}catch(IOException e){a.handler.post(()->a.report("mes-videos",e));}}
                 long size=encoded.length();
                 if(share){Uri uri=SharedMedia.reserveShare(a,encoded,name);a.handler.post(()->share(uri,name));}
-                else {SharedMedia.publish(a,encoded,name);a.handler.post(()->a.note(mp3?t("dl.mp3.ok","taille",Refs.size(size)):ext.equals("mp4")?t("dl.mp4.ok","taille",Refs.size(size)):t("scene.videoPrete"),"ok"));}
+                else {SharedMedia.publish(a,encoded,name);a.handler.post(()->{
+                    if(!closed)a.note(mp3?t("dl.mp3.ok","taille",Refs.size(size)):t("scene.videoPrete","format",ext.toUpperCase(Locale.ROOT),"taille",Refs.size(size)),"ok");});}
             }catch(Exception e){a.handler.post(()->a.report(mp3?"audio-export":"video-export",e));}
             finally{if(encoded!=original)encoded.delete();original.delete();}
         });
     }
-    private void share(Uri uri,String name){try{SharedMedia.share(a,uri,name);}catch(Exception e){a.report("partage",e);}}
+    private void share(Uri uri,String name){if(closed||!a.isForeground)return;try{SharedMedia.share(a,uri,name);}catch(Exception e){a.report("partage",e);}}
     void library(){
         LinearLayout r=a.sheet(t("mv.titre"));try{
             var files=movies.list();if(files.isEmpty()){u.add(r,u.small(t("mv.vide")),0);return;}
@@ -160,5 +164,5 @@ final class ExportUi implements AutoCloseable {
         u.add(r,u.button(t("commun.fermer"),null,a::dismiss),8);a.modalCleanup=()->{controller.hide();video.stopPlayback();if(showing==video)showing=null;};
     }
     void background(){if(active())stop();if(showing!=null&&showing.isPlaying())showing.pause();}
-    @Override public void close(){abandon();executor.shutdownNow();if(mediaToOffer!=null)mediaToOffer.delete();}
+    @Override public void close(){closed=true;abandon();executor.shutdown();if(mediaToOffer!=null){mediaToOffer.delete();mediaToOffer=null;}}
 }
