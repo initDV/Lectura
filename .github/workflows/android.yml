@@ -1,0 +1,41 @@
+name: Lectura Android
+
+on:
+  push:
+    branches: ['arena/**', main]
+    paths: ['android/**', '.github/workflows/android.yml', 'characters/**', 'data/**', 'fonts/**', 'icons/**', 'src/**', 'tools/fetch_voice.mjs']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Outils SDK
+        run: |
+          if [[ ! -f "$ANDROID_HOME/platforms/android-37.0/android.jar" && ! -f "$ANDROID_HOME/platforms/android-37/android.jar" ]]; then
+            sdkmanager 'platforms;android-37.0'
+          fi
+          [[ -x "$ANDROID_HOME/build-tools/37.0.0/aapt2" ]] || sdkmanager 'build-tools;37.0.0'
+          python3 -m pip install --user fonttools brotli
+      - name: Compiler l’APK, vérifier sa signature
+        run: android/build.sh "$RUNNER_TEMP/Lectura.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lectura-Android-API31+
+          path: ${{ runner.temp }}/Lectura.apk
+          if-no-files-found: error
