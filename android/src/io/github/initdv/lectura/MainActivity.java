@@ -45,7 +45,7 @@ public final class MainActivity extends Activity {
     Refs refs;Ui ui;Library db;Project project;
     FrameLayout root,content,modal;
     LinearLayout toasts;
-    ScenePage scene;Stage stage;Screens screens;Reading reading;Mood mood;Talk talk;Hd hd;ExportUi exports;
+    ScenePage scene;Stage stage;Screens screens;Reading reading;Talk talk;Hd hd;ExportUi exports;
     String route="scene",forced="",sig="",lastDraft="";
     boolean muted,preparing,stopped=true,isForeground,fullscreen;
     final Handler handler=new Handler(Looper.getMainLooper());
@@ -221,14 +221,14 @@ public final class MainActivity extends Activity {
                     decoded=syn.pcm;segments=syn.segments;
                 }
                 Script.reportExpressions(text,segments,cfg.segments);if(segments.isEmpty())throw new IOException(t("scene.err.texteVide"));
-                Mood m=new Mood(refs,lang,words,cfg.emotions);Pcm pcm=decoded;String voiceUsed=spokenBy;List<Script.Segment> parts=segments;
+                Performance performance=new Performance(segments,new Mood(refs,lang,words,cfg.emotions));Pcm pcm=decoded;String voiceUsed=spokenBy;List<Script.Segment> parts=segments;
                 handler.post(()->{if(generation!=ticket||scene==null){if(pcm!=null)pcm.close();return;}try{
                     reading=new Reading(text,parts,words,silent,pcm,talk,v,cfg,1,this::readingFinished,this::readingError);
                     synthesisVoice=voiceUsed;
                     if(!silent&&!cfg.fileAudio&&!choices.isEmpty()&&!choices.get(0).equals(voiceUsed)){
                         JSONObject fallback=hd.voice(voiceUsed);note(t("android.voice.fallback","nom",fallback==null?voiceUsed:fallback.optString("nom")),"warn",5000);
                     }
-                    mood=m;preparing=false;sig=signature;clearOverlay();reading.volume(volume(),muted);reading.speed(project.speed);
+                    reading.performance=performance;preparing=false;sig=signature;clearOverlay();reading.volume(volume(),muted);reading.speed(project.speed);
                     if(silent)note(t("scene.apercuActif"),"info");if(isForeground)startPlaying();else playState();
                 }catch(Exception e){if(pcm!=null&&reading==null)pcm.close();sceneError(e);}});delivered=true;
             }catch(Exception e){handler.post(()->{if(ticket==generation)sceneError(e);});}finally{if(!delivered&&decoded!=null)decoded.close();}
@@ -368,6 +368,16 @@ public final class MainActivity extends Activity {
     void refreshVoicePanel(){if(screens!=null&&route.equals("reglages"))screens.refresh();}
     void clearHd(){stopHdExample();cancelVoiceDownload();queue.submit(()->{hd.removeAll();handler.post(()->{
         note(t("reglages.stockage.libere"),"ok");if(screens!=null&&route.equals("reglages"))screens.refresh();});});}
+    private List<Script.Segment> subtitleTimings(){
+        if(project.fileAudio||reading==null||reading.silent||!reading.text.equals(project.text)||!sig.equals(signature(false)))return project.recalc();
+        List<Script.Segment> cues=new ArrayList<>();double speed=reading.rate;
+        for(Script.Segment p:reading.timeline.parts){
+            if(p.type!=Script.SPOKEN)continue;
+            Script.Segment q=new Script.Segment(p.text,p.start,p.end,p.type);q.expression=p.expression;
+            q.from=Math.round(p.from/speed);q.to=Math.max(q.from+1,Math.round((p.speechEnd>p.from?p.speechEnd:p.to)/speed));cues.add(q);
+        }
+        return cues;
+    }
     void menu(){
         LinearLayout r=sheet(t("scene.menu"));ui.menuGroup(r,t("menu.projet"),6);
         EditText title=ui.field(project.title,t("editeur.sansTitre"),false,200,s->project.title=s);title.setContentDescription(t("editeur.titreProjet"));
@@ -386,7 +396,7 @@ public final class MainActivity extends Activity {
         });
         for(String format:new String[]{"srt","vtt"})choice(r,t(format.equals("srt")?"menu.exporterSrt":"menu.exporterVtt"),"download",false,()->{
             dismiss();if(project.text.trim().isEmpty()){note(t("scene.err.texteVide"),"warn");return;}
-            writeDoc(format.equals("srt")?"application/x-subrip":"text/vtt",project.base()+"."+format,Script.subtitles(project.recalc(),format.equals("vtt")));
+            writeDoc(format.equals("srt")?"application/x-subrip":"text/vtt",project.base()+"."+format,Script.subtitles(subtitleTimings(),format.equals("vtt")));
         });
         ui.menuGroup(r,t("menu.scene"),2);choice(r,t("scene.apercuSansSon"),"eye",false,()->{dismiss();launch(true);});
         choice(r,t("scene.capture"),"camera",false,()->{dismiss();capturePng();});

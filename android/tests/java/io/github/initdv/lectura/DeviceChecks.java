@@ -34,6 +34,7 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -75,6 +76,7 @@ public final class DeviceChecks extends Instrumentation {
                 check("surfaces",()->surfaces(ctx));
                 check("fixtures",()->refsAndModels(refs));
                 check("prosodie-pcm",()->prosody(refs));
+                check("jeu-du-personnage",()->performance(refs));
                 check("catalogue-et-reglages",()->fullAccess(ctx));
                 check("lips-reference",()->lipsReference(ctx,refs));
                 check("audio-importe",()->imported(ctx));
@@ -269,6 +271,34 @@ public final class DeviceChecks extends Instrumentation {
         return "8 durées exactes dans le PCM, règle du maximum et 320 → 256 ms à 1,25× ; question à durée constante ; offsets, abréviations, nombres et source intacte";
     }
     private static int crossings(float[] w,int a,int b){int n=0;for(int i=a+1;i<b;i++)if(w[i-1]<0&&w[i]>=0)n++;return n;}
+    private String performance(Refs refs)throws Exception {
+        var words=new Script.Keywords(refs,"fr",new JSONObject());Mood mood=new Mood(refs,"fr",words,true);
+        var contexts=refs.json("direction.json").getJSONObject("fr").getJSONObject("contexts");
+        java.util.Set<String> gestures=new java.util.HashSet<>();int poses=0;
+        for(var ids=contexts.keys();ids.hasNext();){
+            String id=ids.next(),sample=contexts.getJSONArray(id).getString(0);
+            Script.Segment p=new Script.Segment(sample,0,sample.length(),Script.SPOKEN);p.to=p.speechEnd=1500;
+            Performance track=new Performance(List.of(p),mood);
+            require(track.face(730).expr.equals(id),"Pose contextuelle "+id+" pour "+sample);
+            gestures.add(mood.motion(id,0));gestures.add(mood.motion(id,1));poses++;
+        }
+        require(poses==37&&gestures.size()>=25&&gestures.stream().allMatch(Performance.DURATIONS::containsKey),"Couverture du jeu Android");
+        String text="Tu viens ce soir ? Bravo ! Regarde ici : c’est tout.\n$ echo jamais";
+        var plan=SpeechPlan.plan(text,"fr",new JSONObject());var parts=new ArrayList<Script.Segment>();long at=0;
+        for(var f:plan){var p=f.original;p.from=at;p.speechEnd=at+1000;at+=1000+f.pauseMs;p.to=at;parts.add(p);}
+        Performance directions=new Performance(parts,mood);
+        require(directions.face(200).expr.equals("neutre")&&directions.face(910).expr.equals("pensif")
+            &&directions.face(2310).expr.equals("enthousiaste"),"Question finale ou bravo hors de leur repère audio");
+        require(directions.gesture(2775)!=null&&directions.gesture(2775).motion.equals("indique"),"Geste vers le terminal");
+        var question=directions.gesture(1070);directions.gesture(3500);
+        require(question!=null&&question==directions.gesture(1070),"La reprise/recherche doit retrouver exactement le même geste");
+        require(directions.gesture(parts.get(parts.size()-1).from+200)==null,"Geste vocal dans la commande silencieuse");
+        parts.get(0).expression="fier";Performance manual=new Performance(parts,new Mood(refs,"fr",words,true));
+        require(manual.face(910).expr.equals("fier")&&manual.gesture(910)==null,"Priorité d'une pose manuelle");
+        Performance disabled=new Performance(parts,new Mood(refs,"fr",words,false));
+        require(disabled.gesture(2775)==null&&disabled.face(2310).expr.equals("neutre"),"Désactivation de la mise en scène auto");
+        return poses+" poses détectées par le contexte + neutre, "+gestures.size()+" mouvements dans la palette, positions audio, pause/recherche, priorité manuelle";
+    }
     private JSONObject fixtures()throws Exception{
         try(InputStream in=getContext().getAssets().open("fixtures.json")){
             return Refs.parse(new String(Refs.read(in,1000000),StandardCharsets.UTF_8));
@@ -595,7 +625,7 @@ public final class DeviceChecks extends Instrumentation {
             a.dismiss();a.project.text=a.t("voix.exemple");a.render("scene");
             var kw=new Script.Keywords(a.refs,"fr",new JSONObject());List<Script.Segment> p=Script.timing(a.project.text,2000,1);
             a.reading=new Reading(a.project.text,p,kw,true,null,a.talk,null,a.project,1,()->{},code->{});
-            a.mood=new Mood(a.refs,"fr",kw,true);a.muted=true;a.reading.volume(0,true);a.reading.terminal.shown=a.project.text.length();
+            a.reading.performance=new Performance(p,new Mood(a.refs,"fr",kw,true));a.muted=true;a.reading.volume(0,true);a.reading.terminal.shown=a.project.text.length();
         }catch(Throwable e){setup.set(e);}});if(setup.get()!=null)throw new AssertionError(setup.get());
         try(Pcm pcm=Pcm.decode(wav,dir)){
             require(pcm.duration()>=1999,"Durée décodée WAV");

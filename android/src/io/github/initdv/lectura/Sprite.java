@@ -18,9 +18,6 @@ import static io.github.initdv.lectura.Refs.object;
 final class Sprite {
     private static final int[] VIS={5,9,14,19};
     private static final Set<String> LIMBS=Set.of("armL","armR","foreL","foreR");
-    private static final Map<String,Integer> GESTURES=Map.of("hoche",650,"secoue",750,"sursaut",380,"coucou",1400,
-        "sursaut_fort",500,"sursaut_double",700,"hoche_lent",1100,"dodeline",800,"tremble",500);
-    private static final Map<String,Integer> PUNCTUATION=Map.of("?",550,"!",260,"…",700,",",220);
     private static final Map<String,double[]> STYLES=Map.of("fluide",new double[]{1,1,0,0,0},"saccade",new double[]{1,1,5,0,0},
         "sec",new double[]{1.5,.8,0,0,0},"frappe",new double[]{2.4,.5,0,0,0},"flottant",new double[]{.5,.8,0,5,0},
         "ondulant",new double[]{.6,1,0,0,3},"calme",new double[]{.7,1.2,0,0,0},"expressif",new double[]{1.2,1.5,0,0,0});
@@ -35,16 +32,17 @@ final class Sprite {
     private final float[] shoulderL,shoulderR,elbowL,elbowR,neck,hip,browPivotL,browPivotR;
     private final double eyeY,rBase,wBase,hBase,xBase,yBase,cx,cy,halfWidth,maxOpening;
     private final boolean human;
-    boolean reduced;
+    boolean reduced,quietMouth;
     double gain=1,talk,phase,talkSmooth;
     int viseme; float shape=48;
     String letter="";
     private final double speed,amp,step,floatAmplitude,wave;
     private final Map<String,Double> pose=new HashMap<>(), target=new HashMap<>();
     private double last=-1,blinkUntil,nextBlink=2000,nextLook=1500,lookEnd,lookToX,lookToY,lookX,lookY;
-    private String gesture="",reaction="",micro="",script="";
-    private double gestureAt,armEnd,reactionAt,microAt,microDuration,microAmplitude,scriptAt,nextMicro=4000+random()*3000;
-    private int gestureArm=1;
+    private String micro="",script="";
+    private double microAt,microDuration,microAmplitude,scriptAt,nextMicro=4000+random()*3000;
+    private Performance.Cue beat;
+    private double sceneTime;
 
     Sprite(Refs refs,JSONObject def) {
         this.refs=refs;
@@ -108,12 +106,10 @@ final class Sprite {
             target.put(k,value);
         }
     }
-    void punct(String text,double t){if(PUNCTUATION.containsKey(text)){reaction=text;reactionAt=t;}}
-    void gesture(String name,double t){
-        if(!gesture.isEmpty()&&t-gestureAt<GESTURES.get(gesture)*.8||armEnd!=0&&t<armEnd-140)return;
-        micro="";script="";
-        if(GESTURES.containsKey(name)){gesture=name;gestureAt=t;}
-        else {armEnd=t+700;gestureArm=-gestureArm;}
+    void direct(Performance.Cue cue,double sourceTime) {
+        if(reduced)cue=null;
+        if(cue!=null&&beat!=cue){micro="";script="";}
+        beat=cue;sceneTime=sourceTime;
     }
     private double step(double a){return step==0?a:round(a/step)*step;}
     void tick(double t){
@@ -121,33 +117,58 @@ final class Sprite {
         if(last<0)pose.putAll(target);
         else for(String n:target.keySet()){double a=1-exp(-dt/(LIMBS.contains(n)?190:110));pose.put(n,v(n)+(target.get(n)-v(n))*a);}
         last=t;
-        double k=(reduced?.25:1)*gain,sk=human?.55:1, rb=0,rd=0,rgx=0,rgy=0,rhr=0,rhy=0;
-        if(!reaction.isEmpty()){
-            double u=(t-reactionAt)/PUNCTUATION.get(reaction),e=sin(u*PI)*k;
-            if(u>=0&&u<1)switch(reaction){case "?": rb=-16*e;rhy=-3*e;break;case "!":rd=-4*e;break;case "…":rgx=-2.5*e;rgy=-2*e;break;case ",":rhr=2.5*e;break;default:break;}
-        }
+        double k=(reduced?.25:1)*gain,sk=human?.55:1;
+        double rb=0,rd=0,rgx=0,rgy=0,rhr=0,rhy=0,tilt=0,lidDrop=0;
         phase+=dt/1000*speed*v("tempo");double s=phase;
         talkSmooth+=(talk-talkSmooth)*(1-exp(-dt/250));
         if(t>nextBlink){blinkUntil=t+120;nextBlink=t+120+(random()<.12?170:2500+random()*3000);}
         if(t>nextLook&&!reduced){lookToX=talk>.5?4.5:(random()-.5)*6;lookToY=talk>.5?1:(random()-.5)*3;lookEnd=t+450+random()*700;nextLook=lookEnd+2200+random()*3500;}
         double ar=1-exp(-dt/70);lookX+=((t<lookEnd?lookToX:0)-lookX)*ar;lookY+=((t<lookEnd?lookToY:0)-lookY)*ar;
-        double gx=0,gy=0,jump=0,waveHand=0,shakeHand=0,u=gesture.isEmpty()?1:(t-gestureAt)/GESTURES.get(gesture),env=(1-u)*k*sk;
-        if(u>=0&&u<1)switch(gesture){
-            case "hoche":gy=sin(u*4*PI)*5*env;break;
-            case "hoche_lent":gy=sin(u*2*PI)*7*env;break;
-            case "secoue":gx=sin(u*6*PI)*5*env;break;
-            case "dodeline":gx=sin(u*3*PI)*7*env;gy=sin(u*2*PI)*2*env;break;
-            case "tremble":gx=sin(u*15*PI)*3*env;break;
-            case "coucou":waveHand=min(1,sin(u*PI)*1.8);shakeHand=sin(u*10*PI)*22*sk;break;
-            case "sursaut_fort":jump=-sin(u*PI)*18*k*sk;break;
-            case "sursaut_double":jump=-abs(sin(u*2*PI))*12*k*sk;break;
-            default:jump=-sin(u*PI)*9*k*sk;
+        double gx=0,gy=0,jump=0,waveHand=0,shakeHand=0,armL=0,armR=0,elbowLeft=0,elbowRight=0;
+        double u=beat==null?1:(sceneTime-beat.at)/beat.length;
+        if(beat!=null&&u>=0&&u<1){
+            double e=Math.sin(u*PI)*k*sk*beat.strength,tail=(1-u)*k*sk*beat.strength,side=beat.side;
+            switch(beat.motion){
+                case "hoche": gy=sin(u*3*PI)*5*tail;break;
+                case "hoche_lent": rhr=sin(u*2*PI)*9*tail;gy=sin(u*2*PI)*6*tail;break;
+                case "secoue": gx=sin(u*6*PI)*5*tail;break;
+                case "dodeline": rhr=sin(u*3*PI)*9*tail;gy=sin(u*2*PI)*2*tail;break;
+                case "tremble": gx=sin(u*14*PI)*3*tail;break;
+                case "coucou": waveHand=min(1,sin(u*PI)*1.65)*min(1,beat.strength+.2);shakeHand=sin(u*9*PI)*21*sk;break;
+                case "sursaut_fort": jump=-sin(u*PI)*15*k*sk;break;
+                case "sursaut_double": jump=-abs(sin(u*2*PI))*10*k*sk;break;
+                case "sursaut": jump=-9*e;rb=-7*e;break;
+                case "indique": rgx=5*e;rhr=4*e;armR=-55*e;elbowRight=-39*e;tilt=5*e;break;
+                case "observe": rgx=4.7*e;rgy=2*e;rhr=4*e;rhy=2*e; break;
+                case "reflechit": rgx=-side*3*e;rgy=-2.5*e;rhr=-side*8*e;armR=-68*e;elbowRight=-67*e;break;
+                case "questionne": rhr=side*9*e;rb=-9*e;rhy=-3*e;armL=19*e;elbowLeft=30*e;break;
+                case "recule": tilt=-11*e;rhr=-13*e;rhy=-4*e;armR=-25*e;armL=24*e;rb=-10*e;break;
+                case "celebre": jump=-14*abs(sin(u*2*PI))*e;armL=62*e;armR=-68*e;elbowLeft=49*e;elbowRight=-48*e;rb=-8*e;break;
+                case "applaudit": double claps=(.52+.48*abs(sin(u*4*PI)))*e;
+                    armL=-16*claps;armR=16*claps;elbowLeft=61*e;elbowRight=-61*e;rhy=-3*claps;break;
+                case "rigole": rd=-4*abs(sin(u*5*PI))*e;rhr=5*e;lidDrop=.48*e;armL=13*e;armR=-14*e;break;
+                case "ouvre": armL=34*e;armR=-38*e;elbowLeft=24*e;elbowRight=-27*e;rb=-3*e;break;
+                case "redresse": rhy=-6*e;rd=-3*e;tilt=-5*e;armL=17*e;armR=-19*e;break;
+                case "incline": tilt=7*e;rhy=5*e;rhr=9*e;rgy=2*e;break;
+                case "hausse": rd=-4*e;rhy=3*e;rhr=5*side*e;rb=-8*e;armL=25*e;armR=-25*e;elbowLeft=20*e;elbowRight=-20*e;break;
+                case "detourne": rhr=-side*8*e;rgx=-side*5*e;rgy=2.5*e;lidDrop=.3*e;tilt=-4*side*e;break;
+                case "soupire": rd=4*e;rhy=5*e;rhr=4*e;rgy=3*e;lidDrop=.34*e;break;
+                case "paupiere": lidDrop=.56*e;rhy=4*e;rgy=3*e;break;
+                case "insiste": tilt=8*e;gy=4*e;gx=2*e;armR=-24*e;elbowRight=-27*e;rb=4*e;break;
+                case "suspens": rhr=side*5*e;rgx=-side*4*e;rgy=-3*e;armL=12*e;elbowLeft=15*e;break;
+                case "ciel": rgy=-6*e;rb=-6*e;rhy=-4.5*e;rhr=-6*e;elbowRight=-20*e;break;
+                case "relache": rd=4*e;rhy=2*e;armL=14*e;armR=-14*e;lidDrop=.2*e;break;
+                case "apaise": rd=3*e;armL=29*e;armR=-29*e;elbowLeft=17*e;elbowRight=-17*e;lidDrop=.19*e;break;
+                case "clin": rhr=7*side*e;rgx=4*side*e;rb=-4*e;lidDrop=.31*e;break;
+                case "tapote": double tap=abs(sin(u*3*PI))*e;armR=-24*e;elbowRight=-30*tap;gy=2.5*tap;break;
+                default: break;
+            }
         }
         double breath=sin(s*1.6)*4*k*sk,tr=v("tremble")*k,sway=sin(s*.55)*1.8*k*sk;
         double dx=sin(s*1.1)*wave*k+sin(t*.055)*tr;
         double dy=-(sin(s*.9)+1)*floatAmplitude*k-abs(sin(s*3.2))*v("bounce")*k+jump+cos(t*.047)*tr*.4+rd;
         if(abs(dx)+abs(dy)<=.004){dx=0;dy=0;}
-        double lean=abs(v("lean"))>.02?v("lean")*sk:0;
+        double lean=(abs(v("lean"))>.02?v("lean")*sk:0)+tilt;
         body.reset().preTranslate(f(dx),f(dy));body.transform.preTranslate(f(sway),f(v("bodyY")-breath*1.3));rotate(body.transform,lean,hip);
         if(legs!=null){legs.reset().preTranslate(f(dx),f(dy));legs.transform.preRotate(f(sway*.8),120,354);}
         double hr=v("headR")+rhr+sin(s*1.1)*max(v("sway"),2.5*sk)*k+sin(s*2.1)*1.3*talk*k*sk;
@@ -161,7 +182,7 @@ final class Sprite {
                 scriptedArm=a0[1]+(a1[1]-a0[1])*z;scriptedFore=a0[2]+(a1[2]-a0[2])*z;scriptedLook=a0[4]+(a1[4]-a0[4])*z;
             }else script="";
         }
-        if(!reduced&&u>=1&&t>=armEnd&&script.isEmpty()&&t>nextMicro&&talkSmooth<.4){
+        if(!reduced&&u>=1&&script.isEmpty()&&t>nextMicro&&talkSmooth<.4){
             if(random()<.35){script=random()<.5?"scratch":"glasses";scriptAt=t;nextMicro=t+9000+random()*6000;}
             else {String[] types={"arms","shoulderL","shoulderR","elbowL","elbowR"};micro=types[(int)(random()*types.length)];
                 microAt=t;microDuration=400+random()*500;microAmplitude=((micro.startsWith("elbow")?5:3)+random()*5)*sk;
@@ -170,15 +191,14 @@ final class Sprite {
         double ml=0,mr=0,mfl=0,mfr=0;
         if(!micro.isEmpty()) {double m=(t-microAt)/microDuration,a=microAmplitude*sin(m*PI)*k;
             if(m>=0&&m<1)switch(micro){case "arms":ml=a;mr=-a;break;case "shoulderL":ml=a;break;case "shoulderR":mr=-a;break;case "elbowL":mfl=a;break;case "elbowR":mfr=-a;break;default:break;}}
-        double g=t<armEnd?sin(PI*(1-(armEnd-t)/700))*42*k:0;
         double amount=(human?12:7)*talkSmooth*k*amp*v("swing"),el=v("armL"),fl=v("foreL");
-        double al=el+(24-el)*waveHand+step(sin(s*(human?.85:1.3))*amount+(gestureArm<0?g:0))+ml;
-        double aa=-v("armR")+step(-sin(s*(human?.7:1.1)+1)*amount-(gestureArm>0?g:0))+mr+scriptedArm;
-        double aFl=fl+(shakeHand-204-fl)*waveHand+step(sin(s*1.4+2)*amount*.8+(gestureArm<0?g*.9:0))+mfl;
-        double aFr=-v("foreR")+step(-sin(s*1.2)*amount*.8-(gestureArm>0?g*.9:0))+mfr+scriptedFore;
+        double al=el+(24-el)*waveHand+step(sin(s*(human?.85:1.3))*amount)+ml+armL;
+        double aa=-v("armR")+step(-sin(s*(human?.7:1.1)+1)*amount)+mr+scriptedArm+armR;
+        double aFl=fl+(shakeHand-204-fl)*waveHand+step(sin(s*1.4+2)*amount*.8)+mfl+elbowLeft;
+        double aFr=-v("foreR")+step(-sin(s*1.2)*amount*.8)+mfr+scriptedFore+elbowRight;
         for(Svg.Node n:new Svg.Node[]{left,right}){n.reset().preTranslate(f(dx),f(dy));n.transform.preTranslate(0,f(v("bodyY")));rotate(n.transform,lean,hip);}
         rotate(left.transform,al,shoulderL);rotate(right.transform,aa,shoulderR);rotate(foreL.reset(),aFl,elbowL);rotate(foreR.reset(),aFr,elbowR);
-        double h=max(VIS[max(0,min(3,viseme))],v("h")),w=v("w")*(shape/48);
+        double h=quietMouth?0:max(VIS[max(0,min(3,viseme))],v("h")),w=v("w")*(shape/48);
         if(human)drawLips(cx+v("gx")*.2,cy+v("my"),halfWidth*(w/48),h*(maxOpening/19));
         else if(mouth.kind.equals("rect")){
             // character.js rounds each SVG attribute, after computing the centre and corner radius.
@@ -186,7 +206,7 @@ final class Sprite {
             float xm=fixed2(xBase+wBase/2-width/2),ym=fixed2(yBase+hBase/2+v("my")-height/2),r=fixed2(min(6,min(width,height)/2));
             mouth.path().addRoundRect(xm,ym,xm+fixed2(width),ym+fixed2(height),r,r,Path.Direction.CW);
         }
-        double sy=t<blinkUntil?.15:v("lid"),eyex=v("gx")+lookX+sin(s*.55)*1.3*k+sin(s*1.5)*.6*k+rgx+scriptedLook;
+        double sy=t<blinkUntil?.15:clamp(v("lid")-lidDrop,.15,1),eyex=v("gx")+lookX+sin(s*.55)*1.3*k+sin(s*1.5)*.6*k+rgx+scriptedLook;
         double eyey=v("gy")+lookY+cos(s*.45)*.8*k+rgy;
         for(Svg.Node eye:new Svg.Node[]{eyeL,eyeR}){
             eye.reset().preTranslate(f(eyex),f(eyey)); if(sy<=.995)eye.transform.preScale(1,f(sy),0,(float)eyeY);

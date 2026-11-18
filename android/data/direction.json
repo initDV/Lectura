@@ -1,0 +1,630 @@
+{
+  "poses": {
+    "neutre": [],
+    "content": [
+      "hoche",
+      "ouvre"
+    ],
+    "concentre": [
+      "observe",
+      "indique"
+    ],
+    "surpris": [
+      "recule",
+      "sursaut"
+    ],
+    "enthousiaste": [
+      "celebre",
+      "applaudit"
+    ],
+    "rire": [
+      "rigole",
+      "hoche"
+    ],
+    "fier": [
+      "redresse",
+      "hoche"
+    ],
+    "tendre": [
+      "incline",
+      "ouvre"
+    ],
+    "sceptique": [
+      "questionne",
+      "hausse"
+    ],
+    "gene": [
+      "detourne",
+      "hausse"
+    ],
+    "triste": [
+      "soupire",
+      "incline"
+    ],
+    "fatigue": [
+      "soupire",
+      "paupiere"
+    ],
+    "colere": [
+      "insiste",
+      "secoue"
+    ],
+    "peur": [
+      "recule",
+      "tremble"
+    ],
+    "curieux": [
+      "questionne",
+      "observe"
+    ],
+    "inquiet": [
+      "suspens",
+      "reflechit"
+    ],
+    "emerveille": [
+      "ciel",
+      "ouvre"
+    ],
+    "ennuye": [
+      "soupire",
+      "detourne"
+    ],
+    "degoute": [
+      "recule",
+      "detourne"
+    ],
+    "soulage": [
+      "relache",
+      "apaise"
+    ],
+    "determine": [
+      "insiste",
+      "redresse"
+    ],
+    "malicieu": [
+      "clin",
+      "dodeline"
+    ],
+    "reconnaissant": [
+      "incline",
+      "ouvre"
+    ],
+    "nostalgique": [
+      "ciel",
+      "soupire"
+    ],
+    "jaloux": [
+      "detourne",
+      "secoue"
+    ],
+    "amuse": [
+      "rigole",
+      "clin"
+    ],
+    "intimide": [
+      "detourne",
+      "suspens"
+    ],
+    "rassurant": [
+      "apaise",
+      "hoche_lent"
+    ],
+    "impatient": [
+      "tapote",
+      "insiste"
+    ],
+    "compatissant": [
+      "incline",
+      "apaise"
+    ],
+    "pensif": [
+      "reflechit",
+      "observe"
+    ],
+    "confus": [
+      "hausse",
+      "reflechit"
+    ],
+    "resigne": [
+      "soupire",
+      "relache"
+    ],
+    "excite": [
+      "celebre",
+      "applaudit"
+    ],
+    "apaise": [
+      "apaise",
+      "relache"
+    ],
+    "honteux": [
+      "detourne",
+      "incline"
+    ],
+    "provocateur": [
+      "clin",
+      "insiste"
+    ],
+    "contemplatif": [
+      "ciel",
+      "observe"
+    ]
+  },
+  "fr": {
+    "contexts": {
+      "content": [
+        "bonne nouvelle",
+        "ça fait plaisir",
+        "tout fonctionne"
+      ],
+      "concentre": [
+        "vérifions ensemble",
+        "on se concentre",
+        "lis attentivement"
+      ],
+      "surpris": [
+        "je ne m’y attendais pas",
+        "quel choc",
+        "tout à coup",
+        "sans prévenir"
+      ],
+      "enthousiaste": [
+        "ça mérite des applaudissements",
+        "un grand bravo",
+        "on a réussi",
+        "les tests passent",
+        "quelle réussite",
+        "bravo"
+      ],
+      "rire": [
+        "j’en ris encore",
+        "à mourir de rire",
+        "ça me fait rire"
+      ],
+      "fier": [
+        "on peut être fiers",
+        "je suis fier de toi",
+        "mission accomplie"
+      ],
+      "tendre": [
+        "tout mon amour",
+        "prends soin de toi",
+        "avec tendresse"
+      ],
+      "sceptique": [
+        "j’ai du mal à y croire",
+        "je n’en suis pas si sûr",
+        "permettez-moi d’en douter"
+      ],
+      "gene": [
+        "je ne sais plus où me mettre",
+        "petit malaise",
+        "oups pardon"
+      ],
+      "triste": [
+        "ça me fend le cœur",
+        "tu vas me manquer",
+        "quel chagrin"
+      ],
+      "fatigue": [
+        "j’ai besoin de dormir",
+        "je tombe de sommeil",
+        "plus aucune énergie"
+      ],
+      "colere": [
+        "ça suffit maintenant",
+        "je suis furieux",
+        "c’est inacceptable"
+      ],
+      "peur": [
+        "j’en ai des frissons",
+        "ça me terrifie",
+        "je n’ose pas regarder"
+      ],
+      "curieux": [
+        "j’aimerais en savoir plus",
+        "montre-moi la suite",
+        "j’ai une question"
+      ],
+      "inquiet": [
+        "je m’en fais",
+        "pourvu que ça aille",
+        "ça me préoccupe"
+      ],
+      "emerveille": [
+        "quelle merveille",
+        "regarde comme c’est beau",
+        "j’en ai le souffle coupé"
+      ],
+      "ennuye": [
+        "on tourne en rond",
+        "que le temps est long",
+        "ça n’en finit pas"
+      ],
+      "degoute": [
+        "rien que d’y penser",
+        "ça me répugne",
+        "quelle horreur"
+      ],
+      "soulage": [
+        "on l’a échappé belle",
+        "enfin c’est fini",
+        "un poids en moins",
+        "ouf ça va"
+      ],
+      "determine": [
+        "nous irons jusqu’au bout",
+        "je ne lâcherai rien",
+        "on avance coûte que coûte"
+      ],
+      "malicieu": [
+        "j’ai un petit secret",
+        "entre nous deux",
+        "ni vu ni connu"
+      ],
+      "reconnaissant": [
+        "je te dois beaucoup",
+        "mille mercis",
+        "merci pour ton aide"
+      ],
+      "nostalgique": [
+        "je repense à cette époque",
+        "comme au bon vieux temps",
+        "que de souvenirs"
+      ],
+      "jaloux": [
+        "pourquoi toujours lui",
+        "j’aimerais être à sa place",
+        "elle a toute la chance"
+      ],
+      "amuse": [
+        "c’est bien trouvé",
+        "petite blague",
+        "tu m’as fait sourire"
+      ],
+      "intimide": [
+        "je n’ose pas parler",
+        "l’idée me fait rougir",
+        "je suis tout petit devant"
+      ],
+      "rassurant": [
+        "tu n’es pas seul",
+        "ça va bien se passer",
+        "on va trouver une solution"
+      ],
+      "impatient": [
+        "qu’est-ce qu’on attend",
+        "dépêchons-nous",
+        "j’ai hâte que ça commence"
+      ],
+      "compatissant": [
+        "je comprends ta peine",
+        "je suis là pour toi",
+        "je partage ton chagrin"
+      ],
+      "pensif": [
+        "il faut y réfléchir",
+        "laisse-moi réfléchir",
+        "je me demande si",
+        "à bien y penser"
+      ],
+      "confus": [
+        "je ne sais plus du tout",
+        "je me suis emmêlé",
+        "ça n’a plus de sens"
+      ],
+      "resigne": [
+        "il faut s’y faire",
+        "qu’il en soit ainsi",
+        "je n’y peux rien"
+      ],
+      "excite": [
+        "je trépigne",
+        "vivement le départ",
+        "ça y est enfin"
+      ],
+      "apaise": [
+        "on peut souffler",
+        "respire doucement",
+        "tout est calme"
+      ],
+      "honteux": [
+        "j’en rougis encore",
+        "je ne suis pas fier de moi",
+        "je regrette profondément"
+      ],
+      "provocateur": [
+        "je te mets au défi",
+        "cap ou pas cap",
+        "alors relève le défi"
+      ],
+      "contemplatif": [
+        "contemple l’horizon",
+        "regardons le ciel",
+        "prendre le temps d’observer"
+      ]
+    },
+    "gestures": {
+      "indique": [
+        "comme tu le vois",
+        "regarde ici",
+        "regarde",
+        "voici",
+        "à droite",
+        "passons à",
+        "prends note"
+      ],
+      "observe": [
+        "lis ceci",
+        "examinons",
+        "vérifions"
+      ],
+      "hoche": [
+        "tout à fait"
+      ],
+      "ouvre": [
+        "je t’en prie",
+        "avec plaisir",
+        "approche"
+      ],
+      "apaise": [
+        "pas à pas",
+        "tout doucement"
+      ],
+      "applaudit": [
+        "félicitations",
+        "on applaudit"
+      ],
+      "insiste": [
+        "attention",
+        "surtout",
+        "attention à"
+      ],
+      "tapote": [
+        "et maintenant",
+        "c’est parti"
+      ],
+      "coucou": [
+        "à très bientôt"
+      ]
+    },
+    "questions": {
+      "inquiet": [
+        "et si",
+        "pourvu que",
+        "tu ne risques pas"
+      ],
+      "sceptique": [
+        "vraiment",
+        "tu es sûr",
+        "vous êtes sûr",
+        "tu y crois",
+        "n’est-ce pas",
+        "sérieusement"
+      ],
+      "curieux": [
+        "pourquoi",
+        "comment",
+        "combien",
+        "quel",
+        "quelle",
+        "où",
+        "quand",
+        "qui",
+        "peux-tu",
+        "dis-moi"
+      ]
+    }
+  },
+  "en": {
+    "contexts": {
+      "content": [
+        "good news",
+        "it works now"
+      ],
+      "concentre": [
+        "let us focus",
+        "check it carefully"
+      ],
+      "surpris": [
+        "did not see that coming",
+        "all of a sudden"
+      ],
+      "enthousiaste": [
+        "a round of applause",
+        "we did it",
+        "well done"
+      ],
+      "rire": [
+        "made me laugh",
+        "cannot stop laughing"
+      ],
+      "fier": [
+        "mission accomplished",
+        "proud of you"
+      ],
+      "tendre": [
+        "take care of yourself",
+        "with all my love"
+      ],
+      "sceptique": [
+        "hard to believe",
+        "have my doubts"
+      ],
+      "gene": [
+        "awkward silence",
+        "so embarrassing"
+      ],
+      "triste": [
+        "my heart is broken",
+        "going to miss you"
+      ],
+      "fatigue": [
+        "need some sleep",
+        "completely worn out"
+      ],
+      "colere": [
+        "this is unacceptable",
+        "enough is enough"
+      ],
+      "peur": [
+        "makes me shiver",
+        "too scared to look"
+      ],
+      "curieux": [
+        "tell me more",
+        "want to know more"
+      ],
+      "inquiet": [
+        "i am concerned",
+        "what if it fails"
+      ],
+      "emerveille": [
+        "takes my breath away",
+        "what a beautiful sight"
+      ],
+      "ennuye": [
+        "going in circles",
+        "never seems to end"
+      ],
+      "degoute": [
+        "makes me sick",
+        "that is revolting"
+      ],
+      "soulage": [
+        "a weight off my shoulders",
+        "that was a close call"
+      ],
+      "determine": [
+        "will not give up",
+        "see it through"
+      ],
+      "malicieu": [
+        "our little secret",
+        "between you and me"
+      ],
+      "reconnaissant": [
+        "thanks for your help",
+        "owe you one"
+      ],
+      "nostalgique": [
+        "the good old days",
+        "brings back memories"
+      ],
+      "jaloux": [
+        "wish i were them",
+        "all the luck"
+      ],
+      "amuse": [
+        "made me smile",
+        "a funny little joke"
+      ],
+      "intimide": [
+        "too shy to speak",
+        "feel so small"
+      ],
+      "rassurant": [
+        "you are not alone",
+        "it will be all right"
+      ],
+      "impatient": [
+        "what are we waiting for",
+        "can hardly wait"
+      ],
+      "compatissant": [
+        "i am here for you",
+        "i feel your pain"
+      ],
+      "pensif": [
+        "let me think",
+        "i wonder if"
+      ],
+      "confus": [
+        "i lost track",
+        "does not make sense"
+      ],
+      "resigne": [
+        "so be it",
+        "nothing i can do"
+      ],
+      "excite": [
+        "full of excitement",
+        "can barely sit still"
+      ],
+      "apaise": [
+        "take a deep breath",
+        "everything is peaceful"
+      ],
+      "honteux": [
+        "i am not proud of myself",
+        "i am ashamed"
+      ],
+      "provocateur": [
+        "i dare you",
+        "take the challenge"
+      ],
+      "contemplatif": [
+        "look at the horizon",
+        "watch the clouds"
+      ]
+    },
+    "gestures": {
+      "indique": [
+        "look here",
+        "look at this",
+        "here is",
+        "as you can see",
+        "moving on"
+      ],
+      "observe": [
+        "read this",
+        "let us check"
+      ],
+      "ouvre": [
+        "you are welcome",
+        "come closer"
+      ],
+      "apaise": [
+        "step by step",
+        "take it slowly"
+      ],
+      "applaudit": [
+        "congratulations",
+        "give them a hand"
+      ],
+      "insiste": [
+        "watch out",
+        "above all"
+      ],
+      "tapote": [
+        "and now",
+        "here we go"
+      ],
+      "coucou": [
+        "see you soon"
+      ]
+    },
+    "questions": {
+      "inquiet": [
+        "what if",
+        "are you worried"
+      ],
+      "sceptique": [
+        "really",
+        "are you sure",
+        "seriously",
+        "is that so"
+      ],
+      "curieux": [
+        "why",
+        "how",
+        "which",
+        "where",
+        "when",
+        "who",
+        "could you",
+        "tell me"
+      ]
+    }
+  }
+}

@@ -59,6 +59,7 @@ await Promise.all([
   cp(new URL('data/', root), resolve(output, 'data'), { recursive: true, filter: (path) => !path.endsWith('/keywords_fr_pro.json') })
     .then(() => cp(new URL('data/keywords_fr_pro.json', root), resolve(output, 'data/keywords_fr_extended.json'))),
   cp(new URL('android/data/prononciation.json', root), resolve(output, 'prononciation.json')),
+  cp(new URL('android/data/direction.json', root), resolve(output, 'direction.json')),
   cp(new URL('icons/favicon.svg', root), resolve(output, 'favicon.svg')),
   cp(new URL('icons/192.png', root), resolve(res, 'mipmap-xxxhdpi/lectura.png')),
   cp(new URL('fonts/OFL-JetBrainsMono.txt', root), resolve(output, 'OFL-JetBrainsMono.txt')),

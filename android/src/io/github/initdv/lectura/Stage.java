@@ -42,8 +42,6 @@ final class Stage extends FrameLayout {
     final Path clip=new Path();
     final ScreenText screenText;
     private final int radius;
-    private Script.Segment current,punctuation;
-    private int rank,prev=-1;
     private String expressionKey="";
     private Reading lastReading;
 
@@ -68,22 +66,21 @@ final class Stage extends FrameLayout {
     @Override protected void onDetachedFromWindow(){super.onDetachedFromWindow();removeCallbacks(singleClick);}
     private void animate(double now){
         Reading r=a.reading;
-        if(r!=lastReading){current=punctuation=null;rank=0;prev=-1;lastReading=r;expressionKey="";screenText.reset();}
+        if(r!=lastReading){lastReading=r;expressionKey="";screenText.reset();}
         if(r!=null&&!a.preparing){
-            double ms=r.time(),cursor=r.chars(ms);int chars=(int)cursor;
-            r.terminal.shown=chars;Script.Segment seg=r.timeline.segment(chars);
-            boolean speak=r.playing&&seg!=null&&Script.type(seg.text)==Script.SPOKEN;
-            if(speak){if(seg!=punctuation){punctuation=seg;prev=-1;}int pos=Math.min(seg.text.length()-1,chars-seg.start);
-                for(int i=prev+1;i<=pos;i++)sprite.punct(seg.text.substring(i,i+1),now);prev=pos;}
-            Mood.Pose p=a.stopped||seg==null?new Mood.Pose("neutre",1,"",0,0,""):
-                a.forced.isEmpty()?a.mood.pose(seg,chars-seg.start):new Mood.Pose(a.forced,1,"",0,0,"");
-            String key=p.expr+"|"+Math.round(p.strength*100)+"|"+p.mix;
+            double ms=r.time(),cursor=r.chars(ms);r.terminal.shown=(int)cursor;
+            Script.Segment seg=r.timeline.at(ms);boolean speak=r.playing&&seg!=null&&seg.type==Script.SPOKEN;
+            boolean voicing=speak&&(seg.speechEnd<0||ms<seg.speechEnd);
+            Performance directions=r.performance;
+            Mood.Pose p=!a.forced.isEmpty()?new Mood.Pose(a.forced,1,"",0,0,""):
+                a.stopped||directions==null?new Mood.Pose("neutre",1,"",0,0,""):directions.face(ms);
+            String key=p.expr+"|"+Math.round(p.strength*40)+"|"+p.mix+"|"+Math.round(p.weight*30);
             if(!expressionKey.equals(key)){sprite.expression(p.expr,p.strength,p.mix,p.weight);expressionKey=key;}
-            if(seg!=current){current=seg;rank=0;if(speak&&!r.terminal.keywords.find(seg.text).isEmpty())sprite.gesture("",now);}
-            if(r.playing&&rank!=p.rank){if(p.rank>rank&&!p.gesture.isEmpty())sprite.gesture(p.gesture,now);rank=p.rank;}
-            sprite.viseme=speak?r.viseme(ms,now,cursor):0;sprite.shape=speak?r.shape():48;sprite.letter=Reading.letterAt(r.text,cursor);
-            sprite.talk=speak?(sprite.viseme>0?1:.15):0;
-        }else{sprite.viseme=0;sprite.letter="";sprite.talk=0;sprite.expression("neutre",1,"",0);}
+            sprite.direct(directions==null||a.stopped||!a.forced.isEmpty()?null:directions.gesture(ms),ms);
+            sprite.viseme=voicing?r.viseme(ms,now,cursor):0;sprite.shape=voicing?r.shape():48;
+            sprite.letter=voicing?Reading.letterAt(r.text,cursor):"";sprite.quietMouth=!voicing;
+            sprite.talk=voicing?(sprite.viseme>0?1:.15):0;
+        }else{sprite.direct(null,0);sprite.quietMouth=false;sprite.viseme=0;sprite.letter="";sprite.talk=0;sprite.expression("neutre",1,"",0);expressionKey="";}
         sprite.tick(now);
     }
     private final class Face extends View {

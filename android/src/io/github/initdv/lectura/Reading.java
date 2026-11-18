@@ -15,6 +15,7 @@ final class Reading implements AutoCloseable {
     final Script.Timeline timeline;
     final Script.Terminal terminal;
     final Pcm pcm;
+    Performance performance;
     final boolean silent;
     final double duration;
     final float baseRate;
