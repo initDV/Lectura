@@ -45,19 +45,22 @@ public final class MainActivity extends Activity {
     Refs refs;Ui ui;Library db;Project project;
     FrameLayout root,content,modal;
     LinearLayout toasts;
-    ScenePage scene;Stage stage;Screens screens;Reading reading;Mood mood;Talk talk;
+    ScenePage scene;Stage stage;Screens screens;Reading reading;Mood mood;Talk talk;Hd hd;
     String route="scene",forced="",sig="",lastDraft="";
     boolean pro,muted,preparing,stopped=true,isForeground,fullscreen;
     final Handler handler=new Handler(Looper.getMainLooper());
     final ExecutorService queue=Executors.newSingleThreadExecutor();
     final ArrayDeque<String> journal=new ArrayDeque<>();
     final Runnable draftTimer=new Runnable(){@Override public void run(){draft();handler.postDelayed(this,5000);}};
-    Future<?> preparation;int generation;
+    Future<?> preparation,prewarm,hdDownload,hdListening;
+    Runnable prewarmTimer;
+    android.media.MediaPlayer hdPlayer;
+    String hdChoice="";int generation,hdDemoGen;
     Consumer<Uri> result;
     Runnable backModal;
 
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);refs=new Refs(this);db=new Library(refs);refreshLicense();project=db.draft();ui=new Ui(this,refs);
+        super.onCreate(state);refs=new Refs(this);db=new Library(refs);hd=new Hd(refs);refreshLicense();project=db.draft();ui=new Ui(this,refs);
         getWindow().setDecorFitsSystemWindows(false);getWindow().setStatusBarColor(0);getWindow().setNavigationBarColor(0);
         getWindow().setNavigationBarContrastEnforced(false);getWindow().setStatusBarContrastEnforced(false);
         getWindow().getInsetsController().setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
@@ -67,12 +70,12 @@ public final class MainActivity extends Activity {
         });
         content=new FrameLayout(this);content.setFocusableInTouchMode(true);root.addView(content,new FrameLayout.LayoutParams(-1,-1));
         toasts=ui.col();FrameLayout.LayoutParams tp=ui.fp(Ui.MATCH,Ui.WRAP,Gravity.TOP|Gravity.CENTER_HORIZONTAL);tp.topMargin=ui.d(10);tp.leftMargin=tp.rightMargin=ui.d(12);root.addView(toasts,tp);
-        toasts.setElevation(ui.f(16));setContentView(root);talk=new Talk(this,()->{if(scene!=null)scene.voice();});
+        toasts.setElevation(ui.f(16));setContentView(root);talk=new Talk(this,()->{if(scene!=null)scene.voice();else if(screens!=null&&route.equals("reglages"))screens.refresh();});
         render("scene");if(!db.settings.optBoolean("tutorielVu"))tutorial(1);handler.postDelayed(draftTimer,5000);
     }
     @Override protected void onResume(){super.onResume();isForeground=true;if(stage!=null)stage.refresh();}
     @Override protected void onPause(){isForeground=false;if(reading!=null&&reading.playing){reading.pause();playState();}draft();super.onPause();}
-    @Override protected void onDestroy(){disposeScene();handler.removeCallbacksAndMessages(null);queue.shutdownNow();if(talk!=null)talk.close();super.onDestroy();}
+    @Override protected void onDestroy(){disposeScene();handler.removeCallbacksAndMessages(null);if(hdDownload!=null)hdDownload.cancel(true);queue.submit(hd::close);queue.shutdown();if(talk!=null)talk.close();super.onDestroy();}
     @Override public void onBackPressed(){
         if(modal!=null){Runnable r=backModal;dismiss();if(r!=null)r.run();}
         else if(stage!=null&&stage.presenting)presentation(false);else if(fullscreen)fullscreen();else if(!route.equals("scene"))go("scene");else super.onBackPressed();
@@ -97,12 +100,18 @@ public final class MainActivity extends Activity {
         }else renderRoute(name);
         content.requestFocus();
     }
-    private void disposeScene(){clearOverlay();generation++;if(preparation!=null)preparation.cancel(true);preparation=null;preparing=false;
+    private void disposeScene(){clearOverlay();cancelPrewarm();stopHdExample();generation++;if(preparation!=null)preparation.cancel(true);preparation=null;preparing=false;
         if(reading!=null)reading.close();reading=null;sig="";forced="";stopped=true;muted=false;scene=null;stage=null;screens=null;
         if(talk!=null)talk.cancel();getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}
     void draft(){if(project==null)return;String key=project.json().toString();if(key.equals(lastDraft))return;
         try{db.draft(project);lastDraft=key;}catch(IOException ex){log("brouillon",ex);}}
-    void changedText(){}
+    private void cancelPrewarm(){if(prewarmTimer!=null)handler.removeCallbacks(prewarmTimer);if(prewarm!=null)prewarm.cancel(true);}
+    void changedText(){
+        cancelPrewarm();String text=project.text,id=project.voice;float rate=project.speed;
+        if(!project.fileAudio&&project.engine.equals("piper")&&text.length()>=30&&text.length()<=12000&&hd.installed(hd.voice(id))){
+            prewarmTimer=()->prewarm=queue.submit(()->{try{hd.prewarm(text,id,rate);}catch(Exception ignored){}});handler.postDelayed(prewarmTimer,2000);
+        }
+    }
     void presentation(boolean yes){if(scene==null)return;hideKeyboard();scene.present(yes);if(yes)note(t("scene.presentationAide"),"info",3500);}
     void fullscreen(){fullscreen=!fullscreen;WindowInsetsController i=getWindow().getInsetsController();if(fullscreen)i.hide(WindowInsets.Type.systemBars());else i.show(WindowInsets.Type.systemBars());}
     void open(Project p){project=p;render("scene");}
@@ -154,12 +163,12 @@ public final class MainActivity extends Activity {
         if(reading!=null&&(sig.equals(signature)||!silent&&reading.silent&&!stopped&&!reading.ended)){
             if(stopped||reading.ended)reading.seek(0);startPlaying();return;}
         if(!silent&&!project.fileAudio&&!project.engine.equals("piper")&&!talk.ready&&!talk.failure){note(t("scene.prep.ressources"),"info");return;}
-        hideKeyboard();content.requestFocus();if(reading!=null){reading.close();reading=null;}stopped=true;preparing=true;playState();
+        cancelPrewarm();hideKeyboard();content.requestFocus();if(reading!=null){reading.close();reading=null;}stopped=true;preparing=true;playState();
         int ticket=++generation;Project cfg=Project.fromJson(project.json());String lang=db.locale();boolean hasPro=pro;
         JSONObject personal=object(db.settings,"motsPerso");Voice v=!silent&&!cfg.fileAudio&&!cfg.engine.equals("piper")?talk.choose(lang,cfg.voice):null;
         boolean localReady=talk.ready;File audio=db.audio(project),cache=getCacheDir();
-        LinearLayout loading=sceneOverlay(t("scene.prep.titre"));ui.add(loading,ui.small(t("scene.prep.ressources")),5);
-        View bar=new android.widget.ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);ui.add(loading,bar,12);
+        LinearLayout loading=sceneOverlay(t("scene.prep.titre"));TextView loadingText=ui.small(t("scene.prep.ressources"));ui.add(loading,loadingText,5);
+        android.widget.ProgressBar bar=new android.widget.ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);bar.setMax(1000);ui.add(loading,bar,12);
         preparation=queue.submit(()->{
             Pcm decoded=null;boolean delivered=false;try{
                 Script.Keywords words=new Script.Keywords(refs,lang,hasPro,personal);List<Script.Segment> segments;float base=1;
@@ -167,7 +176,13 @@ public final class MainActivity extends Activity {
                 else if(cfg.fileAudio){if(!audio.isFile())throw new IOException(t("scene.err.sansAudio"));
                     decoded=Pcm.decode(audio,cache);segments=cfg.subtitles?Script.locate(text,cfg.segments,true):null;
                     if(segments==null)segments=Script.timing(text,decoded.duration(),0);
-                }else if(cfg.engine.equals("piper"))throw new IOException(t("voix.hd.err.absente"));
+                }else if(cfg.engine.equals("piper")){
+                    if(text.length()>12000)throw new IOException(t("voix.hd.err.tropLong","max",12000,"n",text.length()));
+                    if(!hd.installed(hd.voice(cfg.voice)))throw new IOException(t("voix.hd.err.manquant"));
+                    Hd.Synthesis syn=hd.synth(text,cfg.voice,cfg.speed,cfg.cps,(n,total)->handler.post(()->{
+                        loadingText.setText(t("voix.hd.synthesePhrase","i",Math.min(n+1,total),"n",total));bar.setProgress((int)(1000*n/Math.max(1,total)));}));
+                    decoded=syn.pcm;segments=syn.segments;base=cfg.speed;
+                }
                 else {if(v==null)throw new IOException(t(localReady?"voix.err.aucune":"voix.err.absente"));base=cfg.speed;segments=Script.timing(text,Script.estimate(text,cfg.speed,cfg.cps),14./cfg.cps);}
                 Script.reportExpressions(segments,cfg.segments);if(segments.isEmpty())throw new IOException(t("scene.err.texteVide"));
                 Mood m=new Mood(refs,lang,words,hasPro,cfg.emotions);Pcm pcm=decoded;final float baseRate=base;final List<Script.Segment> parts=segments;
@@ -217,15 +232,17 @@ public final class MainActivity extends Activity {
     }
     String voiceName(){
         if(project.fileAudio)return project.fileName.isEmpty()?t("scene.voix.fichierAbsent"):project.fileName+" · "+Refs.time(project.duration);
-        if(project.engine.equals("piper"))return t("scene.voix.hdAbsente");
+        if(project.engine.equals("piper")){JSONObject v=hd.voice(project.voice);return hd.installed(v)?"Lectura HD · "+v.optString("nom"):t("scene.voix.hdAbsente");}
         Voice v=talk.choose(db.locale(),project.voice);if(v!=null){project.voice=v.getName();return v.getName();}return t("scene.voix.aucune");
     }
     void chooseVoice(){LinearLayout r=sheet(t("scene.voix.choisir"));ui.group(r,t("scene.voix.systeme"),true);List<Voice> voices=talk.voices(db.locale());
         if(voices.isEmpty())ui.add(r,ui.small(t("voix.err.aucune")),0);
         for(Voice voice:voices)choice(r,voice.getName()+(voice.isNetworkConnectionRequired()?" · "+t("voix.enLigne"):""),"voice",!project.fileAudio&&project.voice.equals(voice.getName()),false,()->{dismiss();selectVoice("webspeech",voice.getName());});
-        ui.group(r,t("voix.hd.titre"),false);choice(r,t("voix.hd.gerer"),"download",false,false,()->go("reglages"));
+        ui.group(r,t("voix.hd.titre"),false);List<JSONObject> installed=installedHd();
+        if(installed.isEmpty())choice(r,t("voix.hd.gerer"),"download",false,false,()->go("reglages"));
+        for(JSONObject v:installed){String id=v.optString("id");choice(r,"Lectura HD · "+v.optString("nom"),"sparkle",!project.fileAudio&&project.engine.equals("piper")&&project.voice.equals(id),false,()->{dismiss();selectVoice("piper",id);});}
         ui.group(r,t("scene.voix.fichierTitre"),false);choice(r,project.fileAudio?voiceName():t("scene.voix.fichier"),"upload",project.fileAudio,false,()->{dismiss();pickAudio();});}
-    void selectVoice(String engine,String id){project.fileAudio=false;project.engine=engine;project.voice=id;db.set("moteurVoix",engine);db.set("voixId",id);if(scene!=null)scene.voice();}
+    void selectVoice(String engine,String id){project.fileAudio=false;project.engine=engine;project.voice=id;db.set("moteurVoix",engine);db.set("voixId",id);if(scene!=null)scene.voice();cancelPrewarm();if(engine.equals("piper"))prewarm=queue.submit(()->{try{hd.prewarm("a",id,1);}catch(Exception ignored){}});}
     void pick(String mime,Consumer<Uri> onResult){Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime);request(intent,onResult);}
     void createFile(String mime,String name,Consumer<Uri> writer){request(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime).putExtra(Intent.EXTRA_TITLE,name),writer);}
     private void request(Intent intent,Consumer<Uri> callback){if(result!=null)return;result=callback;try{startActivityForResult(intent,73);}catch(Exception e){result=null;report("fichier",e);}}
@@ -254,10 +271,26 @@ public final class MainActivity extends Activity {
     void record(){note(t(pro?"scene.err.videoNonGeree":"pro.requis.video"),"info");}
     void recordFrame(double now){}
     void renderRoute(String name){screens=new Screens(this,name);}
-    List<JSONObject> installedHd(){return List.of();}
-    void hdPanel(LinearLayout c){ui.add(c,ui.small(t("voix.hd.err.absente")),8);}
-    void hdExample(String id,String text,float rate){note(t("voix.hd.err.absente"),"warn");}
-    void clearHd(){note(t("reglages.stockage.libere"),"ok");}
+    List<JSONObject> installedHd(){return hd.installed();}
+    void hdPanel(LinearLayout c){LinearLayout rows=ui.col();ui.add(c,rows,0);new HdPanel(this,rows);}
+    void stopHdExample(){hdDemoGen++;if(hdListening!=null)hdListening.cancel(true);hdListening=null;if(hdPlayer!=null){hdPlayer.release();hdPlayer=null;}}
+    void hdExample(String id,String text,float rate){
+        boolean loading=hdListening!=null&&!hdListening.isDone();stopHdExample();if(loading)return;
+        talk.cancel();int ticket=hdDemoGen;note(t("voix.hd.ecoute.chargement"),"info",8000);
+        hdListening=queue.submit(()->{try(HdResult r=new HdResult(hd.synth(text,id,rate,28,(now,total)->{}))){
+            File wav=r.synthesis.pcm.file;handler.post(()->{if(ticket!=hdDemoGen||!isForeground)return;
+                try{hdPlayer=new android.media.MediaPlayer();hdPlayer.setDataSource(wav.getPath());hdPlayer.setVolume(volume(),volume());
+                    hdPlayer.setOnCompletionListener(player->{player.release();if(hdPlayer==player)hdPlayer=null;});hdPlayer.setOnPreparedListener(android.media.MediaPlayer::start);hdPlayer.prepareAsync();
+                }catch(Exception e){stopHdExample();report("voix-hd",e);}
+            });
+        }catch(Exception e){handler.post(()->{if(ticket==hdDemoGen)report("voix-hd",e);});}});
+    }
+    private static final class HdResult implements AutoCloseable {
+        final Hd.Synthesis synthesis;HdResult(Hd.Synthesis s){synthesis=s;}
+        @Override public void close(){synthesis.pcm.close();}
+    }
+    void clearHd(){stopHdExample();if(hdDownload!=null)hdDownload.cancel(true);queue.submit(()->{hd.removeAll();handler.post(()->{
+        note(t("reglages.stockage.libere"),"ok");if(screens!=null&&route.equals("reglages"))screens.refresh();});});}
     void menu(){
         LinearLayout r=sheet(t("scene.menu"));ui.group(r,t("menu.projet"),true);
         EditText title=ui.field(project.title,t("editeur.sansTitre"),false,200,s->project.title=s);title.setContentDescription(t("editeur.titreProjet"));ui.add(r,title,0);ui.gap(r,14);

@@ -32,8 +32,16 @@ jobs:
           fi
           [[ -x "$ANDROID_HOME/build-tools/37.0.0/aapt2" ]] || sdkmanager 'build-tools;37.0.0'
           python3 -m pip install --user fonttools brotli
+      - name: Dépendances natives et catalogue original
+        run: |
+          ort=1.24.3
+          curl --fail --retry 2 --location "https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/$ort/onnxruntime-android-$ort.aar" -o "$RUNNER_TEMP/ort.aar"
+          echo "LECTURA_ORT_AAR=$RUNNER_TEMP/ort.aar" >> "$GITHUB_ENV"
+          if curl --fail --retry 2 --location 'https://initdv.github.io/Lectura/models/index.json' -o "$RUNNER_TEMP/hd.json"; then
+            echo "LECTURA_HD_INDEX=$RUNNER_TEMP/hd.json" >> "$GITHUB_ENV"
+          fi
       - name: Compiler l’APK, vérifier sa signature
-        run: android/build.sh "$RUNNER_TEMP/Lectura.apk"
+        run: LECTURA_BUILD="${GITHUB_SHA:0:8}" bash android/build.sh "$RUNNER_TEMP/Lectura.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: Lectura-Android-API31+
@@ -57,7 +65,10 @@ jobs:
         timeout-minutes: 10
         env:
           LECTURA_REPORT: ${{ runner.temp }}/lectura-report
-        run: android/tests/emulator.sh "$RUNNER_TEMP/Lectura.apk"
+        run: |
+          echo "::notice file=docs/ANDROID_PARITE.md,title=SDK CI::$(command -v sdkmanager) ; $(command -v adb) ; $(pwd)"
+          ls -l android/tests
+          bash android/tests/emulator.sh "$RUNNER_TEMP/Lectura.apk"
       - name: Comparer les surfaces de l’application
         if: always()
         env:

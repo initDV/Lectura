@@ -22,6 +22,12 @@ trap 'rm -rf -- "$WORK"' EXIT
 mkdir -p "$WORK"/{classes,dex,res} "$(dirname "$OUTPUT")"
 node android/assets.mjs "$WORK/assets" "$WORK/res"
 cp -r android/res/. "$WORK/res/"
+if [[ -v LECTURA_HD_INDEX ]]; then cp "$LECTURA_HD_INDEX" "$WORK/assets/hd-index.json"; fi
+if [[ -v LECTURA_ORT_AAR ]]; then
+  unzip -p "$LECTURA_ORT_AAR" classes.jar > "$WORK/ort.jar"
+  unzip -qo "$LECTURA_ORT_AAR" 'jni/*/*.so' -d "$WORK/ort"
+  unzip -p "$LECTURA_ORT_AAR" META-INF/LICENSE > "$WORK/assets/ONNX-LICENSE" 2>/dev/null || rm -f "$WORK/assets/ONNX-LICENSE"
+fi
 # Décompresse le même WOFF2 (pas de substitution par une police système).
 python3 - "$WORK/assets" <<'PY'
 import sys
@@ -44,7 +50,9 @@ with zipfile.ZipFile(w/'classes.jar', 'w', zipfile.ZIP_DEFLATED) as z:
     for f in sorted(directory.rglob('*.class')):
         z.write(f, f.relative_to(directory))
 PY
-"$D8" --release --min-api 31 --lib "$PLATFORM" --output "$WORK/dex" "$WORK/classes.jar"
+inputs=("$WORK/classes.jar")
+if [[ -f "$WORK/ort.jar" ]]; then inputs+=("$WORK/ort.jar"); fi
+"$D8" --release --min-api 31 --lib "$PLATFORM" --output "$WORK/dex" "${inputs[@]}"
 python3 - "$WORK" <<'PY'
 import sys, zipfile
 from pathlib import Path
@@ -52,6 +60,8 @@ w = Path(sys.argv[1])
 with zipfile.ZipFile(w/'resources.apk', 'a', zipfile.ZIP_DEFLATED) as z:
     for f in sorted((w/'dex').glob('*.dex')):
         z.write(f, f.name)
+    for f in sorted((w/'ort/jni').glob('*/*.so')):
+        z.write(f, 'lib/' + str(f.relative_to(w/'ort/jni')))
 PY
 "$ZIPALIGN" -f 4 "$WORK/resources.apk" "$WORK/aligned.apk"
 KEYSTORE=${LECTURA_KEYSTORE:-${HOME}/.android/debug.keystore}

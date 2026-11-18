@@ -39,6 +39,6 @@ await Promise.all([
   put('fr.json', fr), put('en.json', en), put('defaults.json', DEFAUTS), put('license-key.json', PUB),
   put('themes.json', { app: themes, terminal: THEMES }), put('expressions.json', { neutral: NEUTRE, expressions: EXPRESSIONS }),
   put('g2p.json', { ...phonemes, CLITIQUES: [...phonemes.CLITIQUES], TIRET: [...phonemes.TIRET] }),
-  put('hd-voices.json', voices), put('icons.json', await table('src/ui/icons.js', 'TRACES')),
-  put('version.json', { version: versions.version, base: '39e429522cc715aeda6ce0db9d3eb5690ba1f2fd' }),
+  put('hd-voices.json', { voices }), put('icons.json', await table('src/ui/icons.js', 'TRACES')),
+  put('version.json', { version: versions.version, native: process.env.LECTURA_BUILD || 'android', base: '39e429522cc715aeda6ce0db9d3eb5690ba1f2fd' }),
 ]);
