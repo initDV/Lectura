@@ -45,7 +45,7 @@ public final class MainActivity extends Activity {
     Refs refs;Ui ui;Library db;Project project;
     FrameLayout root,content,modal;
     LinearLayout toasts;
-    ScenePage scene;Stage stage;Reading reading;Mood mood;Talk talk;
+    ScenePage scene;Stage stage;Screens screens;Reading reading;Mood mood;Talk talk;
     String route="scene",forced="",sig="",lastDraft="";
     boolean pro,muted,preparing,stopped=true,isForeground,fullscreen;
     final Handler handler=new Handler(Looper.getMainLooper());
@@ -98,7 +98,7 @@ public final class MainActivity extends Activity {
         content.requestFocus();
     }
     private void disposeScene(){clearOverlay();generation++;if(preparation!=null)preparation.cancel(true);preparation=null;preparing=false;
-        if(reading!=null)reading.close();reading=null;sig="";forced="";stopped=true;muted=false;scene=null;stage=null;
+        if(reading!=null)reading.close();reading=null;sig="";forced="";stopped=true;muted=false;scene=null;stage=null;screens=null;
         if(talk!=null)talk.cancel();getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}
     void draft(){if(project==null)return;String key=project.json().toString();if(key.equals(lastDraft))return;
         try{db.draft(project);lastDraft=key;}catch(IOException ex){log("brouillon",ex);}}
@@ -253,7 +253,11 @@ public final class MainActivity extends Activity {
         createFile("image/png",name,uri->{try(java.io.OutputStream output=getContentResolver().openOutputStream(uri,"wt")){if(output==null||!b.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output))throw new IOException("Capture impossible.");note(t("scene.captureOk"),"ok");}catch(Exception e){report("capture",e);}finally{b.recycle();}});}
     void record(){note(t(pro?"scene.err.videoNonGeree":"pro.requis.video"),"info");}
     void recordFrame(double now){}
-    void renderRoute(String name){LinearLayout r=ui.col();ui.pad(r,14,18);ui.add(r,ui.heading(t("nav."+name),1),0);ui.add(r,ui.button(t("nav.retour"),"back",()->go("scene")),14);content.addView(r);}
+    void renderRoute(String name){screens=new Screens(this,name);}
+    List<JSONObject> installedHd(){return List.of();}
+    void hdPanel(LinearLayout c){ui.add(c,ui.small(t("voix.hd.err.absente")),8);}
+    void hdExample(String id,String text,float rate){note(t("voix.hd.err.absente"),"warn");}
+    void clearHd(){note(t("reglages.stockage.libere"),"ok");}
     void menu(){
         LinearLayout r=sheet(t("scene.menu"));ui.group(r,t("menu.projet"),true);
         EditText title=ui.field(project.title,t("editeur.sansTitre"),false,200,s->project.title=s);title.setContentDescription(t("editeur.titreProjet"));ui.add(r,title,0);ui.gap(r,14);
@@ -273,5 +277,5 @@ public final class MainActivity extends Activity {
         String[] ids={"personnages","reglages","pro","apropos"},icons={"smile","settings","star","info"};for(int i=0;i<ids.length;i++){String id=ids[i];choice(r,t("nav."+id),icons[i],false,false,()->go(id));}
         ui.add(r,ui.small("● "+t(online()?"net.enLigne":"net.horsLigne")),14);
     }
-    void movies(){LinearLayout r=sheet(t("menu.mesVideos"));ui.add(r,ui.small(t("videos.vide")),0);}
+    void movies(){LinearLayout r=sheet(t("menu.mesVideos"));ui.add(r,ui.small(t("mv.vide")),0);}
 }

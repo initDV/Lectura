@@ -78,8 +78,8 @@ def main():
     tap('Arrêter')
     tap('Accélérer')
     assert any(n.get('text') == '1.25x' for n in ui()), 'La vitesse ne change pas'
-    tap('Masquer le texte')
-    tap('Afficher le texte')
+    tap('Masquer le texte du terminal')
+    tap('Afficher le texte du terminal')
     print('::notice file=docs/ANDROID_PARITE.md,title=Android API 31::Installation, tutoriel, scène, aperçu, pause/reprise, arrêt, vitesse et œil exécutés.')
 
 
