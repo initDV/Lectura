@@ -87,3 +87,33 @@ fi
   --out "$OUTPUT" "$WORK/aligned.apk"
 "$APKSIGNER" verify --verbose "$OUTPUT"
 printf '\nAPK : %s\n' "$OUTPUT"
+if [[ -v LECTURA_TEST_APK ]]; then
+  mkdir -p "$WORK"/{tests,res-test,assets-test,dex-test}
+  node android/tests/fixtures.mjs "$WORK/assets-test/fixtures.json"
+  "$AAPT2" link -I "$PLATFORM" --manifest android/tests/AndroidManifest.xml \
+    --min-sdk-version 31 --target-sdk-version 37 -A "$WORK/assets-test" -o "$WORK/tests.apk"
+  find android/tests/java -name '*.java' | sort > "$WORK/test-list"
+  "$JAVAC" -encoding UTF-8 -source 11 -target 11 -classpath "$PLATFORM:$WORK/classes.jar" -d "$WORK/tests" @"$WORK/test-list"
+  python3 - "$WORK" <<'PY'
+import sys, zipfile
+from pathlib import Path
+w = Path(sys.argv[1]); d = w/'tests'
+with zipfile.ZipFile(w/'tests.jar', 'w', zipfile.ZIP_DEFLATED) as z:
+    for f in sorted(d.rglob('*.class')):
+        z.write(f, f.relative_to(d))
+PY
+  "$D8" --release --min-api 31 --lib "$PLATFORM" --classpath "$WORK/classes.jar" --output "$WORK/dex-test" "$WORK/tests.jar"
+  python3 - "$WORK" <<'PY'
+import sys, zipfile
+from pathlib import Path
+w = Path(sys.argv[1]); d = w/'dex-test'
+with zipfile.ZipFile(w/'tests.apk', 'a', zipfile.ZIP_DEFLATED) as z:
+    for f in sorted(d.glob('*.dex')):
+        z.write(f, f.name)
+PY
+  "$ZIPALIGN" -f 4 "$WORK/tests.apk" "$WORK/tests-aligned.apk"
+  "$APKSIGNER" sign --ks "$KEYSTORE" --ks-key-alias "${LECTURA_KEY_ALIAS:-androiddebugkey}" \
+    --ks-pass env:LECTURA_STORE_PASS --key-pass env:LECTURA_KEY_PASS --v4-signing-enabled false \
+    --out "$LECTURA_TEST_APK" "$WORK/tests-aligned.apk"
+  "$APKSIGNER" verify "$LECTURA_TEST_APK"
+fi

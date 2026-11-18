@@ -45,7 +45,7 @@ public final class MainActivity extends Activity {
     Refs refs;Ui ui;Library db;Project project;
     FrameLayout root,content,modal;
     LinearLayout toasts;
-    ScenePage scene;Stage stage;Screens screens;Reading reading;Mood mood;Talk talk;Hd hd;
+    ScenePage scene;Stage stage;Screens screens;Reading reading;Mood mood;Talk talk;Hd hd;ExportUi exports;
     String route="scene",forced="",sig="",lastDraft="";
     boolean pro,muted,preparing,stopped=true,isForeground,fullscreen;
     final Handler handler=new Handler(Looper.getMainLooper());
@@ -57,10 +57,10 @@ public final class MainActivity extends Activity {
     android.media.MediaPlayer hdPlayer;
     String hdChoice="";int generation,hdDemoGen;
     Consumer<Uri> result;
-    Runnable backModal;
+    Runnable backModal,modalCleanup;
 
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);refs=new Refs(this);db=new Library(refs);hd=new Hd(refs);refreshLicense();project=db.draft();ui=new Ui(this,refs);
+        super.onCreate(state);refs=new Refs(this);db=new Library(refs);hd=new Hd(refs);refreshLicense();project=db.draft();ui=new Ui(this,refs);exports=new ExportUi(this);
         getWindow().setDecorFitsSystemWindows(false);getWindow().setStatusBarColor(0);getWindow().setNavigationBarColor(0);
         getWindow().setNavigationBarContrastEnforced(false);getWindow().setStatusBarContrastEnforced(false);
         getWindow().getInsetsController().setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
@@ -73,9 +73,9 @@ public final class MainActivity extends Activity {
         toasts.setElevation(ui.f(16));setContentView(root);talk=new Talk(this,()->{if(scene!=null)scene.voice();else if(screens!=null&&route.equals("reglages"))screens.refresh();});
         render("scene");if(!db.settings.optBoolean("tutorielVu"))tutorial(1);handler.postDelayed(draftTimer,5000);
     }
-    @Override protected void onResume(){super.onResume();isForeground=true;if(stage!=null)stage.refresh();}
-    @Override protected void onPause(){isForeground=false;if(reading!=null&&reading.playing){reading.pause();playState();}draft();super.onPause();}
-    @Override protected void onDestroy(){disposeScene();handler.removeCallbacksAndMessages(null);if(hdDownload!=null)hdDownload.cancel(true);queue.submit(hd::close);queue.shutdown();if(talk!=null)talk.close();super.onDestroy();}
+    @Override protected void onResume(){super.onResume();isForeground=true;if(stage!=null)stage.refresh();exports.foreground();}
+    @Override protected void onPause(){isForeground=false;exports.background();stopHdExample();if(reading!=null&&reading.playing){reading.pause();playState();}draft();super.onPause();}
+    @Override protected void onDestroy(){dismiss();disposeScene();exports.close();handler.removeCallbacksAndMessages(null);if(hdDownload!=null)hdDownload.cancel(true);queue.submit(hd::close);queue.shutdown();if(talk!=null)talk.close();super.onDestroy();}
     @Override public void onBackPressed(){
         if(modal!=null){Runnable r=backModal;dismiss();if(r!=null)r.run();}
         else if(stage!=null&&stage.presenting)presentation(false);else if(fullscreen)fullscreen();else if(!route.equals("scene"))go("scene");else super.onBackPressed();
@@ -100,7 +100,7 @@ public final class MainActivity extends Activity {
         }else renderRoute(name);
         content.requestFocus();
     }
-    private void disposeScene(){clearOverlay();cancelPrewarm();stopHdExample();generation++;if(preparation!=null)preparation.cancel(true);preparation=null;preparing=false;
+    private void disposeScene(){exports.abandon();clearOverlay();cancelPrewarm();stopHdExample();generation++;if(preparation!=null)preparation.cancel(true);preparation=null;preparing=false;
         if(reading!=null)reading.close();reading=null;sig="";forced="";stopped=true;muted=false;scene=null;stage=null;screens=null;
         if(talk!=null)talk.cancel();getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}
     void draft(){if(project==null)return;String key=project.json().toString();if(key.equals(lastDraft))return;
@@ -137,7 +137,7 @@ public final class MainActivity extends Activity {
         FrameLayout.LayoutParams lp=ui.fp(Math.min(460,Math.max(180,root.getWidth()>0?(root.getWidth()-root.getPaddingLeft()-root.getPaddingRight())/ui.density-32:getResources().getDisplayMetrics().widthPixels/ui.density-32)),Ui.WRAP,Gravity.CENTER);
         modal.addView(s,lp);root.addView(modal,ui.fp(Ui.MATCH,Ui.MATCH,Gravity.TOP));r.requestFocus();return r;
     }
-    void dismiss(){backModal=null;if(modal!=null){root.removeView(modal);modal=null;content.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);}}
+    void dismiss(){backModal=null;if(modalCleanup!=null){Runnable clean=modalCleanup;modalCleanup=null;clean.run();}if(modal!=null){root.removeView(modal);modal=null;content.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);}}
     void choice(LinearLayout r,String title,String icon,boolean selected,boolean pro,Runnable fn){ui.add(r,ui.choice(title,icon,selected,pro,fn),4);}
     void choose(String title,List<String> names,int selected,Consumer<Integer> fn){LinearLayout r=sheet(title);for(int i=0;i<names.size();i++){int p=i;choice(r,names.get(i),null,i==selected,false,()->{dismiss();fn.accept(p);});}}
     void confirm(String title,Runnable fn){LinearLayout r=sheet(t("commun.oui"));ui.add(r,ui.p(title),4);LinearLayout row=ui.row();row.setGravity(Gravity.RIGHT);ui.add(r,row,12);
@@ -202,20 +202,20 @@ public final class MainActivity extends Activity {
         sceneOverlay.addView(s,ui.fp(Math.max(120,Math.min(440,stage.getWidth()/ui.density-24)),Ui.WRAP,Gravity.CENTER));stage.addView(sceneOverlay,ui.fp(Ui.MATCH,Ui.MATCH,Gravity.TOP));return c;
     }
     void clearOverlay(){if(sceneOverlay!=null){if(sceneOverlay.getParent() instanceof FrameLayout)((FrameLayout)sceneOverlay.getParent()).removeView(sceneOverlay);sceneOverlay=null;}}
-    void sceneError(Throwable error){if(stage==null)return;log("scene",error);if(reading!=null){reading.close();reading=null;}sig="";preparing=false;stopped=true;playState();
+    void sceneError(Throwable error){if(stage==null)return;exports.abandon();log("scene",error);if(reading!=null){reading.close();reading=null;}sig="";preparing=false;stopped=true;playState();
         LinearLayout card=sceneOverlay(t("scene.err.titre"));TextView p=ui.p(error.getMessage()==null?error.toString():error.getMessage());p.setGravity(Gravity.CENTER);ui.add(card,p,8);
         ui.add(card,ui.button(t("commun.fermer"),null,this::clearOverlay),8);ui.add(card,ui.button(t("nav.reglages"),null,()->go("reglages")),6);
         ui.add(card,ui.button(t("scene.apercuSansSon"),null,()->launch(true)),6);ui.add(card,ui.button(t("commun.reessayer"),null,true,false,()->launch(false)),6);
     }
     private void readingError(String code){sceneError(new IOException(code.equals("bloquee")?t("voix.err.bloquee"):code.equals("non-demarree")?t("voix.err.nonDemarree"):t("voix.err.lecture","code",code)));}
-    private void startPlaying(){try{stopped=false;reading.play();playState();}catch(Exception e){sceneError(e);}}
-    void adjustRate(){try{if(reading!=null)reading.speed(project.speed);}catch(RuntimeException e){sceneError(e);}}
+    void startPlaying(){try{stopped=false;reading.play();playState();}catch(Exception e){sceneError(e);}}
+    void adjustRate(){try{if(reading!=null){reading.speed(project.speed);exports.mark(true);}}catch(RuntimeException e){sceneError(e);}}
     void adjustVolume(){if(reading!=null)reading.volume(volume(),muted);if(scene!=null)scene.update();}
-    void stop(){if(preparing){if(preparation!=null)preparation.cancel(true);generation++;clearOverlay();preparing=false;}
+    void stop(){exports.stop();if(preparing){if(preparation!=null)preparation.cancel(true);generation++;clearOverlay();preparing=false;}
         if(reading!=null)reading.pause();stopped=true;playState();}
-    void readingFinished(){stopped=true;playState();}
-    void playState(){if(scene!=null)scene.update();if(reading!=null&&reading.playing)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}
-    void seek(int ms){if(reading==null)return;double now=reading.time();if(reading.ended)stopped=false;reading.seek(now+ms);playState();}
+    void readingFinished(){stopped=true;playState();exports.naturalEnd();}
+    void playState(){exports.mark(false);if(scene!=null)scene.update();if(reading!=null&&reading.playing)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}
+    void seek(int ms){if(reading==null)return;double now=reading.time();if(reading.ended)stopped=false;reading.seek(now+ms);playState();exports.mark(true);}
     void nextExpression(){List<String> ids=new ArrayList<>();ids.add("");refs.expressions.keys().forEachRemaining(id->{if(!id.equals("neutre")&&(pro||!object(refs.expressions,id).optBoolean("pro")))ids.add(id);});
         forced=ids.get((ids.indexOf(forced)+1)%ids.size());note(t("scene.expression")+" : "+t("expr."+(forced.isEmpty()?"auto":forced)),"info",1800);}
     @Override public boolean dispatchKeyEvent(KeyEvent e){
@@ -268,8 +268,8 @@ public final class MainActivity extends Activity {
         android.graphics.Bitmap b=android.graphics.Bitmap.createBitmap(w,h,android.graphics.Bitmap.Config.ARGB_8888);stage.exportDraw(new android.graphics.Canvas(b),w,h,true,0);
         String name=project.base()+"-"+Instant.now().toString().substring(0,19).replaceAll("[:T]","-")+".png";
         createFile("image/png",name,uri->{try(java.io.OutputStream output=getContentResolver().openOutputStream(uri,"wt")){if(output==null||!b.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output))throw new IOException("Capture impossible.");note(t("scene.captureOk"),"ok");}catch(Exception e){report("capture",e);}finally{b.recycle();}});}
-    void record(){note(t(pro?"scene.err.videoNonGeree":"pro.requis.video"),"info");}
-    void recordFrame(double now){}
+    void record(){exports.toggle();}
+    void recordFrame(double now){exports.frame(now);}
     void renderRoute(String name){screens=new Screens(this,name);}
     List<JSONObject> installedHd(){return hd.installed();}
     void hdPanel(LinearLayout c){LinearLayout rows=ui.col();ui.add(c,rows,0);new HdPanel(this,rows);}
@@ -302,13 +302,13 @@ public final class MainActivity extends Activity {
         for(String format:new String[]{"srt","vtt"})choice(r,t(format.equals("srt")?"menu.exporterSrt":"menu.exporterVtt"),"download",false,!pro,()->{
             dismiss();if(!pro){note(t("pro.requis.sousTitres"),"info");return;}writeDoc(format.equals("srt")?"application/x-subrip":"text/vtt",project.base()+"."+format,Script.subtitles(project.recalc(),format.equals("vtt")));});
         ui.group(r,t("menu.scene"),false);choice(r,t("scene.apercuSansSon"),"eye",false,false,()->{dismiss();launch(true);});
-        choice(r,t("scene.capture"),"camera",false,false,()->{dismiss();capturePng();});choice(r,t("scene.enregistrer"),"record",false,!pro,()->{dismiss();record();});
+        choice(r,t("scene.capture"),"camera",false,false,()->{dismiss();capturePng();});choice(r,t(exports.active()?"scene.arreterEnregistrement":"scene.enregistrer"),exports.active()?"stop":"record",false,!pro,()->{dismiss();record();});
         choice(r,t("scene.pleinEcran"),"fullscreen",false,false,()->{dismiss();fullscreen();});ui.add(r,ui.p(t("scene.format")),8);
-        List<String> formats=List.of("Paysage 16:9 (1280 × 720)","Portrait 9:16 (720 × 1280)");
+        List<String> formats=List.of("Paysage 16:9 (YouTube)","Vertical 9:16 (TikTok)");
         TextView f=ui.button(formats.get(db.settings.optString("formatVideo").equals("16:9")?0:1),"chevron",()->choose(t("scene.format"),formats,db.settings.optString("formatVideo").equals("16:9")?0:1,i->{db.set("formatVideo",i==0?"16:9":"9:16");menu();}));ui.add(r,f,6);
         ui.group(r,t("menu.avance"),false);choice(r,t("menu.mesVideos"),"video",false,false,()->{dismiss();movies();});
         String[] ids={"personnages","reglages","pro","apropos"},icons={"smile","settings","star","info"};for(int i=0;i<ids.length;i++){String id=ids[i];choice(r,t("nav."+id),icons[i],false,false,()->go(id));}
         ui.add(r,ui.small("● "+t(online()?"net.enLigne":"net.horsLigne")),14);
     }
-    void movies(){LinearLayout r=sheet(t("menu.mesVideos"));ui.add(r,ui.small(t("mv.vide")),0);}
+    void movies(){exports.library();}
 }

@@ -41,7 +41,7 @@ jobs:
             echo "LECTURA_HD_INDEX=$RUNNER_TEMP/hd.json" >> "$GITHUB_ENV"
           fi
       - name: Compiler l’APK, vérifier sa signature
-        run: LECTURA_BUILD="${GITHUB_SHA:0:8}" bash android/build.sh "$RUNNER_TEMP/Lectura.apk"
+        run: LECTURA_BUILD="${GITHUB_SHA:0:8}" LECTURA_TEST_APK="$RUNNER_TEMP/LecturaTests.apk" bash android/build.sh "$RUNNER_TEMP/Lectura.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: Lectura-Android-API31+
@@ -68,7 +68,7 @@ jobs:
         run: |
           echo "::notice file=docs/ANDROID_PARITE.md,title=SDK CI::$(command -v sdkmanager) ; $(command -v adb) ; $(pwd)"
           ls -l android/tests
-          bash android/tests/emulator.sh "$RUNNER_TEMP/Lectura.apk"
+          bash android/tests/emulator.sh "$RUNNER_TEMP/Lectura.apk" "$RUNNER_TEMP/LecturaTests.apk"
       - name: Comparer les surfaces de l’application
         if: always()
         env:

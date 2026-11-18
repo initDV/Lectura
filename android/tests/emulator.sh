@@ -14,6 +14,9 @@ report_failure() {
 }
 trap report_failure EXIT
 export PATH="$ANDROID_HOME/platform-tools:$PATH"
+export ANDROID_USER_HOME=${RUNNER_TEMP:-${TMPDIR:-/tmp}}/lectura-android
+export ANDROID_AVD_HOME=$ANDROID_USER_HOME/avd
+mkdir -p "$ANDROID_AVD_HOME"
 cli_dir=$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 4 -name sdkmanager -print -quit 2>/dev/null || true)
 if [[ -z "$cli_dir" ]]; then
   temp=$(mktemp -d)
@@ -31,7 +34,9 @@ echo "::notice file=docs/ANDROID_PARITE.md,title=Outils Android::SDK=${ANDROID_H
   yes | sdkmanager --licenses
   set -o pipefail
   sdkmanager 'platform-tools' 'emulator' 'system-images;android-31;google_apis;x86_64'
-  printf 'no\n' | avdmanager create avd --force --name lectura_ci --package 'system-images;android-31;google_apis;x86_64' --device 'pixel_4'
+  printf 'no\n' | avdmanager create avd --force --name lectura_ci --package 'system-images;android-31;google_apis;x86_64' --device 'pixel_4' --path "$ANDROID_AVD_HOME/lectura_ci.avd"
+  ls -la "$ANDROID_AVD_HOME"
+  "$ANDROID_HOME/emulator/emulator" -list-avds
   ls -l /dev/kvm
   "$ANDROID_HOME/emulator/emulator" -accel-check
 } >"$log" 2>&1
@@ -40,6 +45,13 @@ emu=$!
 for ((i=0;i<150;i++)); do
     if [[ $(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r') == 1 ]]; then
         python3 android/tests/device.py "$1"
+        if [[ -f ${2:-} ]]; then
+          adb install -r "$2"
+          adb shell am instrument -w -r -e hd true io.github.initdv.lectura.tests/io.github.initdv.lectura.DeviceChecks | tee "$LECTURA_REPORT/android-checks.txt"
+          printf '::notice file=docs/ANDROID_PARITE.md,title=Vérifications natives::%s\n' "$(grep -m1 'LECTURA_' "$LECTURA_REPORT/android-checks.txt" | tr -d '\r')"
+          adb pull /sdcard/Android/data/io.github.initdv.lectura/files/verification "$LECTURA_REPORT/media" || true
+          grep -q 'LECTURA_OK' "$LECTURA_REPORT/android-checks.txt"
+        fi
         exit 0
     fi
     if ! kill -0 "$emu" 2>/dev/null; then exit 1; fi
