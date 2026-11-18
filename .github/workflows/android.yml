@@ -25,14 +25,37 @@ jobs:
     environment: android-signing
     steps:
       - name: Exiger la signature permanente
+        id: signing
         env:
-          SIGNING_READY: ${{ secrets.LECTURA_KEYSTORE_B64 != '' && secrets.LECTURA_STORE_PASS != '' && 'yes' || 'no' }}
+          KEYSTORE_PRESENT: ${{ secrets.LECTURA_KEYSTORE_B64 != '' && 'yes' || 'no' }}
+          PASSWORD_PRESENT: ${{ secrets.LECTURA_STORE_PASS != '' && 'yes' || 'no' }}
+          CERTIFICATE_IS_SECRET: ${{ secrets.LECTURA_SIGNING_CERT_SHA256 != '' && 'yes' || 'no' }}
           LECTURA_SIGNING_CERT_SHA256: ${{ vars.LECTURA_SIGNING_CERT_SHA256 }}
         run: |
-          if [[ "$SIGNING_READY" != yes || ! "$LECTURA_SIGNING_CERT_SHA256" =~ ^[0-9A-Fa-f]{64}$ ]]; then
-            echo '::error title=Signature permanente non configurée::Ajouter les deux secrets et l’empreinte du certificat dans android-signing (voir android/README.md). Aucun APK ne sera produit.'
-            exit 1
+          fail=0
+          if [[ "$KEYSTORE_PRESENT" != yes ]]; then
+            echo '::error title=Keystore permanent manquant::LECTURA_KEYSTORE_B64 doit être un Environment secret dans android-signing.'
+            fail=1
           fi
+          if [[ "$PASSWORD_PRESENT" != yes ]]; then
+            echo '::error title=Mot de passe du keystore manquant::LECTURA_STORE_PASS doit être un Environment secret dans android-signing.'
+            fail=1
+          fi
+          # Le certificat est public. Accepter l’affichage keytool (hexadécimal avec deux-points) aussi.
+          cert=$(printf '%s' "$LECTURA_SIGNING_CERT_SHA256" | tr -d '[:space:]:' | tr 'A-F' 'a-f')
+          if [[ -z "$cert" ]]; then
+            if [[ "$CERTIFICATE_IS_SECRET" == yes ]]; then
+              echo '::error title=Empreinte enregistrée au mauvais endroit::Déplacer LECTURA_SIGNING_CERT_SHA256 des secrets vers Environment variables dans android-signing.'
+            else
+              echo '::error title=Empreinte du certificat manquante::Ajouter LECTURA_SIGNING_CERT_SHA256 dans Environment variables de android-signing.'
+            fi
+            fail=1
+          elif [[ ! "$cert" =~ ^[a-f0-9]{64}$ ]]; then
+            echo '::error title=Empreinte du certificat invalide::LECTURA_SIGNING_CERT_SHA256 attend 64 chiffres hexadécimaux, avec ou sans deux-points, sans préfixe SHA256.'
+            fail=1
+          fi
+          if ((fail)); then exit 1; fi
+          printf 'certificate_sha256=%s\n' "$cert" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
@@ -77,7 +100,7 @@ jobs:
         env:
           LECTURA_KEYSTORE_B64: ${{ secrets.LECTURA_KEYSTORE_B64 }}
           LECTURA_STORE_PASS: ${{ secrets.LECTURA_STORE_PASS }}
-          LECTURA_SIGNING_CERT_SHA256: ${{ vars.LECTURA_SIGNING_CERT_SHA256 }}
+          LECTURA_SIGNING_CERT_SHA256: ${{ steps.signing.outputs.certificate_sha256 }}
           LECTURA_KEY_ALIAS: ${{ vars.LECTURA_KEY_ALIAS }}
         run: |
           set -euo pipefail
