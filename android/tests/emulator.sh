@@ -20,14 +20,20 @@ instrument() {
     adb shell am force-stop "$package"
     timeout 330 adb shell am instrument -w -r "$@" "$package.tests/$package.$class" | tee "$check_log" || rc=$?
     cat "$check_log" >> "$LECTURA_REPORT/android-checks.txt"
+    local result summary=''
     while IFS= read -r result; do
-        local level=notice
         result=${result%$'\r'};result=${result//%/%25}
-        if [[ $result == LECTURA_ERROR* ]]; then level=error; fi
-        printf '::%s file=docs/ANDROID_PARITE.md,title=API 31 · %s::%s\n' "$level" "$phase" "${result:0:1400}"
+        if [[ $result == LECTURA_ERROR* ]]; then
+            printf '::error file=docs/ANDROID_PARITE.md,title=API 31 · %s::%s\n' "$phase" "${result:0:1400}"
+        else
+            summary+="${summary:+%0A}$result"
+        fi
     done < <(grep -E '^LECTURA_(OK|ERROR|SKIP)' "$check_log" || true)
+    # GitHub caps annotations per step. Keep the final offline test visible as well.
+    if [[ -n $summary ]]; then
+        printf '::notice file=docs/ANDROID_PARITE.md,title=API 31 · %s::%s\n' "$phase" "$summary"
+    fi
     if ((rc)) || grep -q 'LECTURA_ERROR' "$check_log" || ! grep -q '^LECTURA_COMPLETE' "$check_log"; then
-        local summary
         summary=$(tail -c 1100 "$check_log" | tr '\r\n' ' ')
         printf '::error title=Instrumentation Android · %s::Code de retour %s ; %s\n' "$phase" "$rc" "${summary//%/%25}"
         return 1
