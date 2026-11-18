@@ -49,6 +49,8 @@ for ((i=0;i<150;i++)); do
         adb shell settings put global window_animation_scale 0
         adb shell settings put global transition_animation_scale 0
         adb shell settings put global animator_duration_scale 0
+        # Do not let Android's one-time full-screen hint cover the Lectura controls.
+        adb shell settings put secure immersive_mode_confirmations confirmed
         adb shell input keyevent KEYCODE_WAKEUP
         adb shell wm dismiss-keyguard
         adb install -r "$1"
@@ -79,7 +81,9 @@ for ((i=0;i<150;i++)); do
         adb logcat -d -s AndroidRuntime:E Lectura:E > "$LECTURA_REPORT/android-errors.txt"
         while IFS= read -r result; do
             result=${result%$'\r'};result=${result//%/%25}
-            printf '::notice file=docs/ANDROID_PARITE.md,title=Vérification API 31::%s\n' "${result:0:1400}"
+            level=notice
+            if [[ $result == LECTURA_ERROR* ]]; then level=error; fi
+            printf '::%s file=docs/ANDROID_PARITE.md,title=Vérification API 31::%s\n' "$level" "${result:0:1400}"
         done < <(grep -E '^LECTURA_(OK|ERROR|SKIP)' "$LECTURA_REPORT/android-checks.txt" || true)
         adb pull /sdcard/Android/data/io.github.initdv.lectura/files/verification "$LECTURA_REPORT/device" || true
         mv "$LECTURA_REPORT"/device/android-*.png "$LECTURA_REPORT/" 2>/dev/null || true

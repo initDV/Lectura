@@ -134,12 +134,20 @@ public final class DeviceChecks extends Instrumentation {
             click(a,"Menu");click(a,"Aperçu sans son");
             // Click in the same UI callback that observes the playing state. PixelCopy and PNG
             // encoding are kept out of this time-sensitive part of the transport test.
-            waitFor("Aperçu en cours et contrôle Pause disponibles",()->{
-                if(!a.isForeground||!a.hasWindowFocus()||a.modal!=null||a.reading==null||!a.reading.silent
-                    ||!a.reading.playing||a.reading.terminal.shown==0)return false;
-                View pause=action(a.content,a.t("scene.pause"));
-                return pause!=null&&pause.isEnabled()&&pause.performClick();
-            },10000);
+            try{
+                waitFor("Aperçu en cours et contrôle Pause disponibles",()->{
+                    if(!a.isForeground||!a.hasWindowFocus()||a.modal!=null||a.reading==null||!a.reading.silent
+                        ||!a.reading.playing||a.reading.terminal.shown==0)return false;
+                    View pause=action(a.content,a.t("scene.pause"));
+                    return pause!=null&&pause.isEnabled()&&pause.performClick();
+                },10000);
+            }catch(AssertionError e){
+                AtomicReference<String> detail=new AtomicReference<>();
+                main(()->detail.set("focus="+a.hasWindowFocus()+", premierPlan="+a.isForeground+", modal="+(a.modal!=null)
+                    +", bouton="+(a.scene==null?"absent":a.scene.launch.getText())+", préparation="+a.preparing
+                    +", lecture="+(a.reading==null?"absente":a.reading.playing+"/"+a.reading.ended+" chars="+a.reading.terminal.shown)));
+                throw new AssertionError(e.getMessage()+" ; "+detail.get(),e);
+            }
             main(()->require(!a.reading.playing&&!a.reading.ended&&!a.stopped,"La commande Pause doit suspendre l’aperçu"));
             screen(a,dir,"lecture");click(a,"Reprendre");
             main(()->require(a.reading.playing,"L’aperçu n’a pas repris"));
@@ -450,12 +458,18 @@ public final class DeviceChecks extends Instrumentation {
             r.end(1_600_000);return done.get(40,TimeUnit.SECONDS);
         }finally{r.cancel();worker.shutdownNow();}
     }
+    private static int downloadWithRetry(Hd h,String id,Hd.Progress progress)throws Exception {
+        for(int retries=0;;retries++){
+            try{h.download(id,progress);return retries;}
+            catch(java.net.SocketTimeoutException e){if(retries==2)throw e;Thread.sleep(400L*(retries+1));}
+        }
+    }
     private String mls(Refs refs)throws Exception {
         try(Hd h=new Hd(refs)){
             JSONObject one=h.voice("mls_f1"),two=h.voice("mls_m1");
             require(one!=null&&two!=null&&one.optString("modele").equals(two.optString("modele")),"Catalogue MLS partagé");
             require(one.getInt("speakerId")==0&&two.getInt("speakerId")==3,"Identifiants MLS d’origine");
-            h.remove("mls_f1");h.download("mls_f1",(n,total)->{});
+            h.remove("mls_f1");int retries=downloadWithRetry(h,"mls_f1",(n,total)->{});
             try {
                 require(h.installed(two),"Un seul téléchargement pour les locuteurs MLS");
                 String sentence="Bonjour, voici les voix de Lectura.";
@@ -468,7 +482,7 @@ public final class DeviceChecks extends Instrumentation {
                 }
             }finally{h.remove("mls_f1");}
             require(!h.installed(two),"Suppression du modèle commun MLS");
-            return "Modèle MLS d’origine commun aux locuteurs 0 et 3, deux synthèses PCM audibles et distinctes";
+            return "Modèle MLS d’origine commun aux locuteurs 0 et 3, deux synthèses PCM audibles et distinctes (reprises après délai réseau : "+retries+")";
         }
     }
     private static int peak(short[] samples,int n){int p=0;for(int i=0;i<n;i++)p=Math.max(p,Math.abs((int)samples[i]));return p;}
@@ -489,9 +503,10 @@ public final class DeviceChecks extends Instrumentation {
             require(h.voices.size()==10,"Catalogue des voix HD");
             File partial=new File(refs.context.getFilesDir(),"models/gilles.onnx.part");
             h.remove("gilles");
-            try{h.download("gilles",(a,b)->{if(a<b)throw new java.util.concurrent.CancellationException();});throw new AssertionError("Téléchargement Piper non interrompu");}
+            try{downloadWithRetry(h,"gilles",(a,b)->{if(a<b)throw new java.util.concurrent.CancellationException();});throw new AssertionError("Téléchargement Piper non interrompu");}
             catch(java.util.concurrent.CancellationException expected){require(partial.length()>0,"Reprise Piper sans segment partiel");}
-            h.download("gilles",(a,b)->{});require(!partial.exists()&&h.installed(h.voice("gilles")),"Reprise du téléchargement Piper");
+            int retries=downloadWithRetry(h,"gilles",(a,b)->{});
+            require(!partial.exists()&&h.installed(h.voice("gilles")),"Reprise du téléchargement Piper");
             String text="Bonjour Lectura.\n$ echo\nTrès bien !";
             File synthesis;
             int head,first,last,command;
@@ -511,7 +526,7 @@ public final class DeviceChecks extends Instrumentation {
             try(Pcm cached=h.synth(text,"gilles",1,28,(a,b)->require(b==1,"Cache non réutilisé")).pcm){require(synthesis.equals(cached.file),"Cache Piper");}
             h.remove("gilles");require(!h.installed(h.voice("gilles")),"Suppression modèle Piper");
             return "Gilles : téléchargement interrompu/repris, pics PCM des phrases "+first+"/"+last
-                +" (première seconde "+head+", commande "+command+"), cache, suppression";
+                +" (première seconde "+head+", commande "+command+", reprises après délai réseau : "+retries+"), cache, suppression";
         }
     }
 }
