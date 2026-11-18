@@ -39,7 +39,6 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class DeviceChecks extends Instrumentation {
     private Bundle args;
     @Override public void onCreate(Bundle options){args=options;start();}
-    private final StringBuilder report=new StringBuilder("\n");
     private boolean failed;
     @Override public void onStart(){
         Context ctx=getTargetContext(); Refs refs=new Refs(ctx);
@@ -47,19 +46,23 @@ public final class DeviceChecks extends Instrumentation {
         check("fixtures",()->refsAndModels(refs));
         check("audio-importe",()->imported(ctx));
         check("tts",()->tts(ctx));
+        check("enregistrement",()->recordFromScene(ctx));
         for(String format:new String[]{"mp4","webm"})check(format,()->media(ctx,format));
-        if("true".equals(args.getString("hd")))check("piper",()->hd(refs));
-        Bundle out=new Bundle();out.putString("stream",report.toString());
+        if("true".equals(args.getString("hd"))){
+            check("piper",()->hd(refs));
+            check("piper-mls",()->mls(refs));
+        }
+        Bundle out=new Bundle();out.putString("stream","\nLECTURA_COMPLETE\n");
         finish(failed?Activity.RESULT_CANCELED:Activity.RESULT_OK,out);
     }
     private interface Check { String run() throws Exception; }
     private void check(String name,Check c){
-        try{String result=c.run();report.append(result.startsWith("hors test")?"LECTURA_SKIP ":"LECTURA_OK ").append(name).append(" : ").append(result).append('\n');}
+        String message;
+        try{String result=c.run();message=(result.startsWith("hors test")?"LECTURA_SKIP ":"LECTURA_OK ")+name+" : "+result;}
         catch(Throwable e){
-            failed=true;
-            report.append("LECTURA_ERROR ").append(name).append(" : ").append(e).append('\n')
-                .append(android.util.Log.getStackTraceString(e)).append('\n');
+            failed=true;message="LECTURA_ERROR "+name+" : "+e+"\n"+android.util.Log.getStackTraceString(e);
         }
+        Bundle status=new Bundle();status.putString("stream","\n"+message+"\n");sendStatus(0,status);
     }
     private interface MainAction { void run() throws Exception; }
     private void main(MainAction fn)throws Exception{
@@ -79,9 +82,16 @@ public final class DeviceChecks extends Instrumentation {
         JSONArray box=new JSONArray();if(v==null)return box;int[] xy=new int[2];v.getLocationOnScreen(xy);
         return box.put(xy[0]).put(xy[1]).put(v.getWidth()).put(v.getHeight());
     }
+    private static View action(View view,String label){
+        if(view.getVisibility()!=View.VISIBLE)return null;
+        if(view.hasOnClickListeners()&&(label.contentEquals(view.getContentDescription()==null?"":view.getContentDescription())
+            ||view instanceof TextView&&label.contentEquals(((TextView)view).getText())))return view;
+        if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){
+            View match=action(group.getChildAt(i),label);if(match!=null)return match;
+        }}return null;
+    }
     private void click(MainActivity a,String label)throws Exception{
-        main(()->{View v=named(a.modal==null?a.content:a.modal,label);
-            while(v!=null&&!v.isClickable())v=v.getParent() instanceof View?(View)v.getParent():null;
+        main(()->{View v=action(a.modal==null?a.content:a.modal,label);
             require(v!=null&&v.isEnabled()&&v.performClick(),"Contrôle absent ou inactif : "+label);
         });
     }
@@ -107,8 +117,9 @@ public final class DeviceChecks extends Instrumentation {
             main(()->{require(a.modal!=null,"Tutoriel au premier démarrage");a.fullscreen();});screen(a,dir,"tuto");
             click(a,"Passer");screen(a,dir,"scene");click(a,"Menu");screen(a,dir,"menu");
             main(()->{
-                JSONObject boxes=new JSONObject();View sheet=((ViewGroup)a.modal).getChildAt(0);
-                boxes.put("dialog",bounds(sheet));boxes.put("title",bounds(named(sheet,"Menu")));
+                JSONObject boxes=new JSONObject();ViewGroup sheet=(ViewGroup)((ViewGroup)a.modal).getChildAt(0);
+                ViewGroup body=(ViewGroup)sheet.getChildAt(0);
+                boxes.put("dialog",bounds(sheet));boxes.put("title",bounds(body.getChildAt(0)));
                 boxes.put("name",bounds(named(sheet,a.t("editeur.titreProjet"))));
                 for(String label:new String[]{"Enregistrer","Projets","Importer .txt / .md","Aperçu sans son","Plein écran"})boxes.put(label,bounds(named(sheet,label)));
                 Library.writeJson(new File(dir,"android-menu-boxes.json"),boxes);
@@ -221,6 +232,57 @@ public final class DeviceChecks extends Instrumentation {
             "Partage interapplications : "+name+" ; "+received);
         waitFor("Retour depuis le récepteur",()->a.isForeground,6000);
     }
+    private String recordFromScene(Context ctx)throws Exception {
+        MainActivity a=open(ctx);File wave=tone(ctx,6);File dir=wave.getParentFile();String title="verification-lectura-"+System.nanoTime();
+        try{
+            main(()->{
+                a.dismiss();a.record();require(!a.exports.active(),"Enregistrement gratuit autorisé");
+                // Exercise the Pro UI in the signed test process; never write a licence or change the production key.
+                a.pro=true;a.open(new Project(a.db.settings));a.db.set("formatVideo","9:16");a.project.title=title;
+                a.scene.edit.setText("Bonjour, ceci est une leçon. Deuxième phrase. Dernière phrase.");a.importAudio(Uri.fromFile(wave),"tonalité.wav");
+            });
+            waitFor("Import pour enregistrement",()->a.project.fileAudio,10000);
+            main(()->{a.muted=true;a.launch(false);});
+            waitFor("Lecture initiale",()->a.reading!=null&&a.reading.pcm!=null&&a.reading.time()>300,10000);
+            click(a,"Menu");click(a,"Enregistrer la vidéo");
+            waitFor("Démarrage enregistrement de la scène",()->a.exports.capturing()&&a.reading.playing,15000);
+            Thread.sleep(350);main(()->{a.project.speed=1.25f;a.adjustRate();});
+            Thread.sleep(1200);click(a,"Menu");click(a,"Arrêter l’enregistrement");
+            waitFor("Dialogue Télécharger",()->a.modal!=null&&action(a.modal,"Télécharger")!=null,15000);
+            click(a,"Télécharger");
+            Movies lib=new Movies(ctx);Movies.Entry movie=null;
+            for(int i=0;i<100&&movie==null;i++){
+                for(Movies.Entry e:lib.list())if(e.title.equals(title)){movie=e;break;}
+                if(movie==null)Thread.sleep(100);
+            }
+            require(movie!=null,"Enregistrement absent de Mes vidéos");
+            try {
+                require(movie.format.equals("mp4"),"Sortie MP4 portrait attendue sur cet émulateur");
+                MediaExport.verify(movie.file,new MediaExport.Format(MediaFormat.MIMETYPE_VIDEO_AVC,false),720,1280,true);
+                try(Pcm decoded=Pcm.decode(movie.file,dir)){
+                    short[] audio=new short[4096];int n=decoded.read(decoded.rate/2,audio,audio.length),peak=0;
+                    for(int i=0;i<n;i++)peak=Math.max(peak,Math.abs((int)audio[i]));require(peak>5000,"L'export de scène ignore le son d'écoute coupé");
+                }
+                Files.copy(movie.file.toPath(),new File(dir,"lectura-scene-portrait.mp4").toPath(),StandardCopyOption.REPLACE_EXISTING);
+                click(a,"Menu");click(a,"Mes vidéos");click(a,"Lire");
+                waitFor("Lecture depuis Mes vidéos",()->{
+                    android.widget.VideoView video=video(a.modal);return video!=null&&video.isPlaying();
+                },10000);
+                main(a::dismiss);
+            }finally{lib.delete(movie);}
+            return "Menu Pro : enregistrer/arrêter, MP4 portrait avec son malgré le muet, télécharger, conserver et lire dans Mes vidéos";
+        }finally{
+            wave.delete();main(()->{a.db.audio(a.project).delete();a.finish();});
+            var catalog=android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY);
+            ctx.getContentResolver().delete(catalog,android.provider.MediaStore.MediaColumns.DISPLAY_NAME+" = ?",new String[]{title+".mp4"});
+        }
+    }
+    private static android.widget.VideoView video(View root){
+        if(root instanceof android.widget.VideoView)return (android.widget.VideoView)root;
+        if(root instanceof ViewGroup){ViewGroup group=(ViewGroup)root;for(int i=0;i<group.getChildCount();i++){
+            android.widget.VideoView child=video(group.getChildAt(i));if(child!=null)return child;
+        }}return null;
+    }
     private String media(Context ctx,String ext)throws Exception {
         File wav=tone(ctx,2),dir=wav.getParentFile();
         MainActivity a=(MainActivity)startActivitySync(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -275,6 +337,28 @@ public final class DeviceChecks extends Instrumentation {
             r.end(1_600_000);return done.get(40,TimeUnit.SECONDS);
         }finally{r.cancel();worker.shutdownNow();}
     }
+    private String mls(Refs refs)throws Exception {
+        try(Hd h=new Hd(refs)){
+            JSONObject one=h.voice("mls_f1"),two=h.voice("mls_m1");
+            require(one!=null&&two!=null&&one.optString("modele").equals(two.optString("modele")),"Catalogue MLS partagé");
+            require(one.getInt("speakerId")==0&&two.getInt("speakerId")==3,"Identifiants MLS d’origine");
+            h.remove("mls_f1");h.download("mls_f1",(n,total)->{});
+            try {
+                require(h.installed(two),"Un seul téléchargement pour les locuteurs MLS");
+                String sentence="Bonjour, voici les voix de Lectura.";
+                try(Pcm a=h.synth(sentence,"mls_f1",1,28,(n,total)->{}).pcm;
+                    Pcm b=h.synth(sentence,"mls_m1",1,28,(n,total)->{}).pcm){
+                    short[] x=new short[a.rate],y=new short[b.rate];
+                    int m=a.read(0,x,x.length),n=b.read(0,y,y.length);
+                    require(a.duration()>700&&b.duration()>700&&peak(x,m)>1000&&peak(y,n)>1000
+                        &&!java.util.Arrays.equals(x,y),"Deux sorties MLS audibles et distinctes");
+                }
+            }finally{h.remove("mls_f1");}
+            require(!h.installed(two),"Suppression du modèle commun MLS");
+            return "Modèle MLS d’origine commun aux locuteurs 0 et 3, deux synthèses PCM audibles et distinctes";
+        }
+    }
+    private static int peak(short[] samples,int n){int p=0;for(int i=0;i<n;i++)p=Math.max(p,Math.abs((int)samples[i]));return p;}
     private String hd(Refs refs)throws Exception {
         try(Hd h=new Hd(refs)){
             require(Hd.supported(),"AAR ONNX absent");

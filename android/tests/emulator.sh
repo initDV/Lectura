@@ -56,7 +56,7 @@ for ((i=0;i<150;i++)); do
         adb shell pm clear io.github.initdv.lectura
         adb logcat -c
         instrument=0
-        timeout 220 adb shell am instrument -w -r -e hd true io.github.initdv.lectura.tests/io.github.initdv.lectura.DeviceChecks | tee "$LECTURA_REPORT/android-checks.txt" || instrument=$?
+        timeout 330 adb shell am instrument -w -r -e hd true io.github.initdv.lectura.tests/io.github.initdv.lectura.DeviceChecks | tee "$LECTURA_REPORT/android-checks.txt" || instrument=$?
         adb logcat -d -s AndroidRuntime:E Lectura:E > "$LECTURA_REPORT/android-errors.txt"
         while IFS= read -r result; do
             result=${result%$'\r'};result=${result//%/%25}
@@ -64,7 +64,9 @@ for ((i=0;i<150;i++)); do
         done < <(grep -E '^LECTURA_(OK|ERROR|SKIP)' "$LECTURA_REPORT/android-checks.txt" || true)
         adb pull /sdcard/Android/data/io.github.initdv.lectura/files/verification "$LECTURA_REPORT/device" || true
         mv "$LECTURA_REPORT"/device/android-*.png "$LECTURA_REPORT/" 2>/dev/null || true
-        if ((instrument)) || grep -q 'LECTURA_ERROR' "$LECTURA_REPORT/android-checks.txt" || ! grep -q 'LECTURA_OK' "$LECTURA_REPORT/android-checks.txt"; then
+        summary=$(tail -c 1100 "$LECTURA_REPORT/android-checks.txt" | tr '\r\n' ' ')
+        if ((instrument)) || grep -q 'LECTURA_ERROR' "$LECTURA_REPORT/android-checks.txt" || ! grep -q '^LECTURA_COMPLETE' "$LECTURA_REPORT/android-checks.txt"; then
+            printf '::error title=Instrumentation Android::Code de retour %s ; %s\n' "$instrument" "${summary//%/%25}"
             logline=$(head -c 1700 "$LECTURA_REPORT/android-errors.txt" | tr '\r\n' ' ')
             printf '::error file=docs/ANDROID_PARITE.md,title=Contrôles natifs::%s\n' "${logline//%/%25}"
             exit 1

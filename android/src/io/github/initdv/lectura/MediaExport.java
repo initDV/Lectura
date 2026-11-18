@@ -80,23 +80,29 @@ final class MediaExport {
     static final class Recording {
         final int w,h;final File dir;final Pcm sound;
         private Frame next;
-        private boolean writing,stopped,cancelled,begun;
+        private Bitmap spare;
+        private boolean stopped,cancelled,begun;
         private long stopAt;
         private final ArrayList<Mark> marks=new ArrayList<>();
         Recording(int w,int h,File dir,Pcm sound)throws IOException{
             this.w=w;this.h=h;this.dir=dir;this.sound=sound==null?null:new Pcm(sound.file,sound.channels,sound.rate,sound.frames,false);
         }
-        synchronized boolean room(){return !stopped&&!cancelled&&!writing&&next==null;}
+        synchronized boolean room(){return !stopped&&!cancelled&&next==null;}
+        synchronized Bitmap buffer(){
+            if(!room())return null;
+            Bitmap b=spare;spare=null;return b==null?Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888):b;
+        }
         synchronized void offer(Bitmap b,long us){if(!room()){b.recycle();return;}next=new Frame(b,us);notifyAll();}
         synchronized void mark(Mark mark){if(!stopped&&!cancelled&&sound!=null)marks.add(mark);}
         synchronized void end(long us){stopped=true;stopAt=us;notifyAll();}
         synchronized void cancel(){
             if(cancelled)return;cancelled=true;if(next!=null){next.image.recycle();next=null;}
+            if(spare!=null){spare.recycle();spare=null;}
             if(!begun&&sound!=null)sound.close();notifyAll();
         }
         synchronized void check(){if(cancelled||Thread.currentThread().isInterrupted())throw new CancellationException();}
-        private synchronized Frame take()throws InterruptedException {while(!stopped&&!cancelled&&next==null)wait(100);check();Frame f=next;next=null;writing=f!=null;return f;}
-        private synchronized void taken(){writing=false;}
+        private synchronized Frame take()throws InterruptedException {while(!stopped&&!cancelled&&next==null)wait(100);check();Frame f=next;next=null;return f;}
+        private synchronized void used(Bitmap b){if(spare!=null||cancelled||stopped)b.recycle();else spare=b;}
         File run(String forcedExt,Runnable started)throws Exception {
             synchronized(this){check();begun=true;}
             File video=null,audio=null,merged=null,finalFile=null;
@@ -112,7 +118,7 @@ final class MediaExport {
                 try(VideoEncoder destination=encoder){
                     started.run();
                     while(true){Frame frame=take();if(frame==null)break;
-                        try{destination.write(frame);n++;last=frame.us;}finally{frame.image.recycle();taken();}
+                        try{destination.write(frame);n++;last=frame.us;}finally{used(frame.image);}
                     }
                     if(n==0)throw new IOException("Enregistrement vide.");
                     destination.end();
@@ -295,6 +301,7 @@ final class MediaExport {
         final int width,height;
         final FloatBuffer vertex=ByteBuffer.allocateDirect(64).order(ByteOrder.nativeOrder()).asFloatBuffer();
         int program,tex,xy,uv;
+        boolean uploaded;
         Egl(Surface target,int w,int h)throws IOException{
             width=w;height=h;
             try{
@@ -320,7 +327,9 @@ final class MediaExport {
             }catch(Exception e){close();throw e;}
         }
         void blit(Bitmap b,long us)throws IOException {
-            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D,0,b,0);GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);
+            if(uploaded)GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D,0,0,0,b);
+            else{GLUtils.texImage2D(GLES20.GL_TEXTURE_2D,0,b,0);uploaded=true;}
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);
             req(EGLExt.eglPresentationTimeANDROID(display,surface,us*1000));req(EGL14.eglSwapBuffers(display,surface));
         }
         private static int shader(int kind,String source)throws IOException{

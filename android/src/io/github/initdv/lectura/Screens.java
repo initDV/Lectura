@@ -257,7 +257,8 @@ final class Screens {
         if(pro){try{JSONObject o=parse(new String(java.util.Base64.getUrlDecoder().decode(settings.optString("licence").split("\\.")[0]),java.nio.charset.StandardCharsets.UTF_8));
             if(o.has("issuedAt"))small(c,t("pro.emise","date",o.optString("issuedAt").split("T")[0]),6);}catch(Exception ignored){}}
         small(c,t("pro.explication"),8);
-        c=card(t("pro.id.titre"),14);small(c,t("pro.id.aide"),0);String id=settings.optString("idInstallation");
+        c=card(t("pro.id.titre"),14);small(c,a.db.locale().equals("en")?"Give this identifier to the vendor: the key will be issued for this Android installation.":
+            "Transmets cet identifiant au vendeur : la clé sera créée pour cette installation Android.",0);String id=settings.optString("idInstallation");
         TextView x=u.text(id,13.6f,u.text,400);x.setTextIsSelectable(true);x.setBackground(u.shape(u.bg,10,u.border,1));u.pad(x,12,10);u.add(c,x,8);
         addButton(c,t("pro.id.copier"),"copy",false,()->a.copy(t("pro.id.titre"),id),12);
         c=card(t("pro.cle.titre"),14);EditText key=u.field("",t("pro.cle.aide"),true,16000,s->{});key.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE|InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);key.setMinHeight(u.d(180));
@@ -272,6 +273,8 @@ final class Screens {
         LinearLayout c=card("Lectura "+version(),0);para(c,t("apropos.description"),0);small(c,t("reglages.version")+" : "+version()+" ("+build()+")",12);
         addButton(c,t("apropos.revoirTuto"),null,false,()->{a.db.set("tutorielVu",false);a.tutorial(1);},12);
         c=card(t("apropos.confidentialite"),14);para(c,t("apropos.confidentialite.texte"),0);
+        small(c,a.db.locale().equals("en")?"An online system voice may send the text to its Android speech provider. Piper runs on the device once downloaded.":
+            "Une voix système en ligne peut transmettre le texte à son fournisseur Android. Piper fonctionne sur l’appareil une fois téléchargé.",6);
         c=card(t("apropos.raccourcis"),14);String[] names={t("touche.espace"),"← →","P","S","R","M","F","E"},keys={"scene.lecture","aide.pm5","scene.presentation","scene.capture","scene.enregistrer","scene.muet","scene.pleinEcran","aide.expression"};
         for(int i=0;i<names.length;i++){LinearLayout r=u.row();u.add(c,r,6);TextView k=u.text(names[i],13.6f,u.mutedText,400);k.setBackground(u.shape(u.surface2,6,0,0));u.pad(k,6,2);r.addView(k);u.gap(r,14);u.grow(r,u.p(t(keys[i])));}
         c=card(t("apropos.licences"),14);para(c,t("apropos.licences.texte"),0);for(String k:List.of("code","polices","voix"))para(c,"• "+t("apropos.lic."+k),4);

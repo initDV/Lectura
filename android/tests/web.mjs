@@ -27,7 +27,7 @@ try {
   const menuBoxes = {};
   for (const [label, element] of [
     ['dialog', dialog], ['title', dialog.locator('h2')], ['name', dialog.locator('input[type=text]')],
-    ...['Enregistrer','Projets','Importer .txt / .md','Aperçu sans son','Plein écran'].map(label => [label,dialog.getByText(label, { exact:true })]),
+    ...['Enregistrer','Projets','Importer .txt / .md','Aperçu sans son','Plein écran'].map(label => [label,dialog.getByText(label, { exact:true }).locator('..')]),
   ]) {
     const r = await element.boundingBox();
     if (r) menuBoxes[label] = [r.x, r.y, r.width, r.height];

@@ -65,8 +65,15 @@ final class Hd implements AutoCloseable {
     List<JSONObject> installed(){List<JSONObject> out=new ArrayList<>();if(supported())for(JSONObject v:voices)if(installed(v))out.add(v);return out;}
     private JSONObject deployed(JSONObject v){JSONArray a=catalogue==null?new JSONArray():array(catalogue,"voix");for(int i=0;i<a.length();i++){
         JSONObject entry=a.optJSONObject(i);if(entry!=null&&entry.optString("id").equals(v.optString("id")))return entry;}return new JSONObject();}
-    long size(JSONObject v){long s=array(deployed(v),"parts").optJSONObject(0)==null?0:array(deployed(v),"parts").optJSONObject(0).optLong("taille")+6000;
-        return s>0?s:installed(v)?onnx(v).length()+cfg(v).length():0;}
+    long size(JSONObject v){
+        JSONObject source=deployed(v),part=array(source,"parts").optJSONObject(0);
+        long bytes=part==null?0:part.optLong("taille")+source.optLong("tailleConfig",6000);
+        return bytes>0?bytes:installed(v)?onnx(v).length()+cfg(v).length():0;
+    }
+    String attribution(JSONObject v){
+        if(model(v).equals("siwis"))return "SIWIS French Speech Synthesis Database · University of Edinburgh · CC BY 4.0";
+        return deployed(v).optString("attribution","rhasspy/piper-voices");
+    }
     private static HttpURLConnection connect(String name,long start)throws IOException {
         if(!name.matches("[a-z]+\\.onnx(?:\\.json)?|index\\.json"))throw new IOException("Fichier HD non reconnu.");
         HttpURLConnection c=(HttpURLConnection)new URL(BASE+name).openConnection();c.setInstanceFollowRedirects(false);c.setConnectTimeout(15000);c.setReadTimeout(4500);

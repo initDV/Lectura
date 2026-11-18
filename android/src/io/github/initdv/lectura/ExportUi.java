@@ -81,8 +81,8 @@ final class ExportUi implements AutoCloseable {
     private long nowUs(){return Math.max(0,(System.nanoTime()-origin)/1000);}
     void frame(double sceneTime){
         MediaExport.Recording r=recording;if(r==null||origin==0||finishing||a.stage==null)return;
-        long index=nowUs()*30/1_000_000;if(index<=lastFrame||!r.room())return;long timestamp=lastFrame<0?0:index*1_000_000/30;
-        Bitmap bitmap=Bitmap.createBitmap(r.w,r.h,Bitmap.Config.ARGB_8888);
+        long index=nowUs()*30/1_000_000;if(index<=lastFrame)return;long timestamp=lastFrame<0?0:index*1_000_000/30;
+        Bitmap bitmap=r.buffer();if(bitmap==null)return;
         a.stage.exportDraw(new Canvas(bitmap),r.w,r.h,false,sceneTime);r.offer(bitmap,timestamp);lastFrame=index;
     }
     void naturalEnd(){if(active()&&origin>0){MediaExport.Recording r=recording;a.handler.postDelayed(()->{if(recording==r)stop();},600);}}
@@ -130,11 +130,12 @@ final class ExportUi implements AutoCloseable {
             File encoded=original;
             try{
                 if(mp3){encoded=File.createTempFile("lecture-",".mp3",temp);Mp3.transcode(original,encoded,temp);}
-                if(keep){try{movies.save(encoded,name);}catch(IOException e){a.handler.post(()->a.report("mes-videos",e));}}
                 long size=encoded.length();
-                if(share){Uri uri=SharedMedia.reserveShare(a,encoded,name);a.handler.post(()->share(uri,name));}
-                else {SharedMedia.publish(a,encoded,name);a.handler.post(()->{
-                    if(!closed)a.note(mp3?t("dl.mp3.ok","taille",Refs.size(size)):t("scene.videoPrete","format",ext.toUpperCase(Locale.ROOT),"taille",Refs.size(size)),"ok");});}
+                Uri uri=share?SharedMedia.reserveShare(a,encoded,name):SharedMedia.publish(a,encoded,name);
+                if(keep){try{movies.save(encoded,name);}catch(IOException e){a.handler.post(()->a.report("mes-videos",e));}}
+                if(share)a.handler.post(()->share(uri,name));
+                else a.handler.post(()->{
+                    if(!closed)a.note(mp3?t("dl.mp3.ok","taille",Refs.size(size)):t("scene.videoPrete","format",ext.toUpperCase(Locale.ROOT),"taille",Refs.size(size)),"ok");});
             }catch(Exception e){a.handler.post(()->a.report(mp3?"audio-export":"video-export",e));}
             finally{if(encoded!=original)encoded.delete();original.delete();}
         });

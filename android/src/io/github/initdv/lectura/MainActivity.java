@@ -136,7 +136,7 @@ public final class MainActivity extends Activity {
     LinearLayout sheet(String title,int padding,boolean dismissOutside){
         dismiss();hideKeyboard();modal=new FrameLayout(this);modal.setBackgroundColor(0xd106060a);ui.pad(modal,16,16);modal.setElevation(ui.f(12));
         modal.setOnClickListener(v->{if(dismissOutside)dismiss();});content.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-        LinearLayout r=ui.col();ui.pad(r,padding,padding);r.setFocusableInTouchMode(true);r.setClickable(true);
+        LinearLayout r=ui.col();ui.pad(r,padding+1,padding+1);r.setFocusableInTouchMode(true);r.setClickable(true);
         ScrollView s=ui.scroll();s.setBackground(ui.shape(ui.surface,title==null?18:ui.radiusLg,ui.border,1));s.setClipToOutline(true);s.addView(r,new ScrollView.LayoutParams(-1,-2));
         if(title!=null){LinearLayout h=ui.row();ui.grow(h,ui.heading(title,2));ui.gap(h,8);h.addView(ui.iconButton("x",t("commun.fermer"),ui.mutedText,20,this::dismiss),ui.lp(44,44));ui.add(r,h,0);r.setAccessibilityPaneTitle(title);}
         FrameLayout.LayoutParams lp=ui.fp(Math.min(460,Math.max(180,root.getWidth()>0?(root.getWidth()-root.getPaddingLeft()-root.getPaddingRight())/ui.density-32:getResources().getDisplayMetrics().widthPixels/ui.density-32)),Ui.WRAP,Gravity.CENTER);
@@ -306,8 +306,9 @@ public final class MainActivity extends Activity {
     void clearHd(){stopHdExample();if(hdDownload!=null)hdDownload.cancel(true);queue.submit(()->{hd.removeAll();handler.post(()->{
         note(t("reglages.stockage.libere"),"ok");if(screens!=null&&route.equals("reglages"))screens.refresh();});});}
     void menu(){
-        LinearLayout r=sheet(t("scene.menu"));ui.group(r,t("menu.projet"),true);
-        EditText title=ui.field(project.title,t("editeur.sansTitre"),false,200,s->project.title=s);title.setContentDescription(t("editeur.titreProjet"));ui.add(r,title,0);ui.gap(r,14);
+        LinearLayout r=sheet(t("scene.menu"));ui.menuGroup(r,t("menu.projet"),6);
+        EditText title=ui.field(project.title,t("editeur.sansTitre"),false,200,s->project.title=s);title.setContentDescription(t("editeur.titreProjet"));
+        ui.pad(title,13,0);title.setMinHeight(ui.d(44.5f));ui.add(r,title,0);ui.gap(r,10);
         choice(r,t("editeur.enregistrer"),"save",false,false,()->{dismiss();try{project.recalc();db.save(project);lastDraft=project.json().toString();note(t("editeur.enregistre"),"ok");}catch(IOException e){report("projet",e);}});
         choice(r,t("nav.projets"),"folder",false,false,()->go("projets"));
         choice(r,t("editeur.importerTexte"),"upload",false,false,()->{dismiss();pick("text/*",uri->{try{project.text=fileText(uri,2_000_000).replaceAll("\\r\\n?","\n").trim();if(project.title.isEmpty())project.title=fileName(uri).replaceFirst("\\.[^.]+$", "");
@@ -316,13 +317,13 @@ public final class MainActivity extends Activity {
         choice(r,t("editeur.importerSrt"),"upload",false,!pro,()->{dismiss();if(!pro){note(t("pro.requis.sousTitres"),"info");return;}pick("*/*",uri->{try{Script.importSubtitles(fileText(uri,500000),project);scene.edit.setText(project.text);note(t("editeur.sousTitresImportes","n",project.segments.length()),"ok");}catch(Exception e){report("sous-titres",e);}});});
         for(String format:new String[]{"srt","vtt"})choice(r,t(format.equals("srt")?"menu.exporterSrt":"menu.exporterVtt"),"download",false,!pro,()->{
             dismiss();if(!pro){note(t("pro.requis.sousTitres"),"info");return;}if(project.text.trim().isEmpty()){note(t("scene.err.texteVide"),"warn");return;}writeDoc(format.equals("srt")?"application/x-subrip":"text/vtt",project.base()+"."+format,Script.subtitles(project.recalc(),format.equals("vtt")));});
-        ui.group(r,t("menu.scene"),false);choice(r,t("scene.apercuSansSon"),"eye",false,false,()->{dismiss();launch(true);});
+        ui.menuGroup(r,t("menu.scene"),2);choice(r,t("scene.apercuSansSon"),"eye",false,false,()->{dismiss();launch(true);});
         choice(r,t("scene.capture"),"camera",false,false,()->{dismiss();capturePng();});choice(r,t(exports.active()?"scene.arreterEnregistrement":"scene.enregistrer"),exports.active()?"stop":"record",false,!pro,()->{dismiss();record();});
         choice(r,t("scene.pleinEcran"),"fullscreen",false,false,()->{dismiss();fullscreen();});ui.add(r,ui.p(t("scene.format")),8);
         List<String> formats=db.locale().equals("en")?List.of("Landscape 16:9 (YouTube)","Portrait 9:16 (TikTok)"):
             List.of("Paysage 16:9 (YouTube)","Vertical 9:16 (TikTok)");
         TextView f=ui.button(formats.get(db.settings.optString("formatVideo").equals("16:9")?0:1),"chevron",()->choose(t("scene.format"),formats,db.settings.optString("formatVideo").equals("16:9")?0:1,i->{db.set("formatVideo",i==0?"16:9":"9:16");menu();}));ui.add(r,f,6);
-        ui.group(r,t("menu.avance"),false);choice(r,t("menu.mesVideos"),"video",false,false,()->{dismiss();movies();});
+        ui.menuGroup(r,t("menu.avance"),2);choice(r,t("menu.mesVideos"),"video",false,false,()->{dismiss();movies();});
         String[] ids={"personnages","reglages","pro","apropos"},icons={"smile","settings","star","info"};for(int i=0;i<ids.length;i++){String id=ids[i];choice(r,t("nav."+id),icons[i],false,false,()->go(id));}
         ui.add(r,ui.small("● "+t(online()?"net.enLigne":"net.horsLigne")),14);
     }
