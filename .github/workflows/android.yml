@@ -39,3 +39,41 @@ jobs:
           name: Lectura-Android-API31+
           path: ${{ runner.temp }}/Lectura.apk
           if-no-files-found: error
+      - name: Accélération KVM pour Android 12
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Captures de la référence Pages
+        continue-on-error: true
+        env:
+          LECTURA_REPORT: ${{ runner.temp }}/lectura-report
+        run: |
+          npm install --prefix "$RUNNER_TEMP/lectura-web" playwright@1.57.0
+          cp android/tests/web.mjs "$RUNNER_TEMP/lectura-web/web.mjs"
+          "$RUNNER_TEMP/lectura-web/node_modules/.bin/playwright" install chromium
+          node "$RUNNER_TEMP/lectura-web/web.mjs"
+      - name: Test Android 12
+        uses: reactivecircus/android-emulator-runner@ed009f5318f15b1cf93a191b856c4f1748a2d4c1
+        env:
+          LECTURA_REPORT: ${{ runner.temp }}/lectura-report
+        with:
+          api-level: 31
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -accel on
+          script: python3 android/tests/device.py "$RUNNER_TEMP/Lectura.apk"
+      - name: Comparer les surfaces de l’application
+        if: always()
+        env:
+          LECTURA_REPORT: ${{ runner.temp }}/lectura-report
+        run: |
+          python3 -m pip install --user pillow
+          python3 android/tests/compare.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Lectura-comparaison
+          path: ${{ runner.temp }}/lectura-report
+          if-no-files-found: warn
