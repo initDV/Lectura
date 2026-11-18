@@ -201,6 +201,8 @@ public final class DeviceChecks extends Instrumentation {
     private static void require(boolean b,String msg) {if(!b)throw new AssertionError(msg);}
     private String refsAndModels(Refs refs)throws Exception {
         require(refs.characters.size()==43,"Catalogue personnages");
+        require(Sprite.fixed2(1.005)==1f&&Sprite.fixed2(1.125)==1.13f&&Sprite.fixed2(2.675)==2.67f
+            &&Sprite.fixed2(-2.675)==-2.67f&&Sprite.fixed2(-.005)==-.01f,"Arrondi SVG coté à mi-centième sur Android 12");
         Bitmap frame=Bitmap.createBitmap(200,330,Bitmap.Config.ARGB_8888);Canvas c=new Canvas(frame);
         for(JSONObject def:refs.characters){Sprite s=new Sprite(refs,def);s.expression("enthousiaste",1,"triste",.3);
             for(int i=0;i<8;i++){s.viseme=i%4;s.letter="aeiou".substring(i%5,i%5+1);s.tick(i*16);}

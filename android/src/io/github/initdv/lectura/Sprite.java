@@ -4,6 +4,7 @@ import android.graphics.Matrix;
 import android.graphics.Path;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.math.BigDecimal;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -87,11 +88,13 @@ final class Sprite {
     private static Svg.Node forearm(Svg.Node arm,String id){for(Svg.Node n:arm.children)if(n.attr("id").startsWith("forearm"))return n;return group(arm,false,262,id);}
     private static double clamp(double v,double lo,double hi){return max(lo,min(v,hi));}
     private static float f(double n){return (float)(Math.round(n*100)/100d);}
-    private static float fixed2(double n){
+    static float fixed2(double n){
         // SVG rect attributes use Number.toFixed, not mouth.js's Math.round. At a half cent
         // check the unrounded product, since multiplying a binary double can round to a tie.
         double abs=abs(n),scaled=abs*100,cent=floor(scaled),frac=scaled-cent;
-        if(frac>.5||frac==.5&&Math.fma(abs,100,-scaled)>=0)cent++;
+        // Math.fma(double, double, double) is not available on API 31. BigDecimal(double)
+        // recovers the exact binary input only on the tie path, unlike valueOf(double).
+        if(frac>.5||frac==.5&&new BigDecimal(abs).movePointRight(2).compareTo(BigDecimal.valueOf(scaled))>=0)cent++;
         return (float)copySign(cent/100,n);
     }
     private static float q(double n){return Math.round(n*4)/4f;}
