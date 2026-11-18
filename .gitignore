@@ -6,3 +6,15 @@ private.pem
 .DS_Store
 coverage/
 test-results/
+
+# Android : sorties, SDK et clés de signature restent hors de Git
+/android/build/
+/android/.gradle/
+/android/local.properties
+/artifacts/
+*.apk
+*.aab
+*.jks
+*.keystore
+*.idsig
+__pycache__/
