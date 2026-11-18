@@ -7,7 +7,11 @@ permissions:
   contents: read
 jobs:
   inspect:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
@@ -36,11 +40,23 @@ jobs:
                           long t=System.nanoTime();float[] x=p.generate(line);float peak=0;
                           for(float v:x){if(!Float.isFinite(v))throw new AssertionError("Non fini");peak=Math.max(peak,Math.abs(v));}
                           if(peak<.01||x.length<10000||x.length>24000*15)throw new AssertionError("PCM : "+x.length+" / "+peak);
-                          System.out.printf("::notice title=Vrai WAV Estelle::%s ; %d échantillons, pic %.3f, calcul %.2f s, total %.2f s%n",line,x.length,peak,(System.nanoTime()-t)*1e-9,(System.nanoTime()-begin)*1e-9);
+                          System.out.printf("::notice title=PCM Estelle Linux %s::%s ; %d échantillons, pic %.3f, calcul %.2f s, total %.2f s%n",System.getProperty("os.arch"),line,x.length,peak,(System.nanoTime()-t)*1e-9,(System.nanoTime()-begin)*1e-9);
+                          if(line.endsWith("?")) {
+                              float[] shifted=x.clone();int end=x.length;
+                              while(end>1&&Math.abs(x[end-1])<.001)end--;
+                              boolean lift=QuestionPitch.lift(shifted,0,end,24000);
+                              int changed=0;
+                              for(int i=0;i<x.length;i++)if(x[i]!=shifted[i]){
+                                  if(i<end-12480||i>=end||!Float.isFinite(shifted[i]))throw new AssertionError("Montée hors de la fin voisée");
+                                  changed++;
+                              }
+                              if(lift!=(changed>0))throw new AssertionError("Montée sans modification du PCM");
+                              System.out.printf("::notice title=Contour de question Estelle::%s ; %d échantillons modifiés dans la fin, durée inchangée%n",lift?"Montée appliquée":"Finale laissée intacte",changed);
+                          }
                       }
                   }catch(Throwable e){System.out.println("::error title=Contrat Estelle::"+e.toString().replace("\n","%0A"));throw e;}
               }
           }
           JAVA
-          javac -encoding UTF-8 -d "$d" android/src/io/github/initdv/lectura/{LocalUnigram,OrtLocal,Pocket}.java "$d/Check.java"
+          javac -encoding UTF-8 -d "$d" android/src/io/github/initdv/lectura/{LocalUnigram,OrtLocal,Pocket,QuestionPitch}.java "$d/Check.java"
           java -cp "$d:$d/ort.jar" io.github.initdv.lectura.Check "$d"
