@@ -45,16 +45,21 @@ jobs:
           if curl --fail --retry 2 --location 'https://initdv.github.io/Lectura/models/index.json' -o "$RUNNER_TEMP/hd.json"; then
             echo "LECTURA_HD_INDEX=$RUNNER_TEMP/hd.json" >> "$GITHUB_ENV"
           fi
-      - name: Voix de test française et fichier audio commun
+      - name: Fichier de parole commun aux deux tests
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends espeak-ng speech-dispatcher speech-dispatcher-espeak-ng pulseaudio
-          node --input-type=module -e "import { lipsFixture } from './android/tests/lips.mjs'; import { splitSentences } from './src/modules/timeline.js'; console.log(splitSentences(lipsFixture().data.text).filter(p => p.type === 'parle').map(p => p.texte).join(' '));" |
-            espeak-ng -v fr-fr -w "$RUNNER_TEMP/lips-spoken.wav" --stdin
+          npm install --prefix "$RUNNER_TEMP/lectura-tts" --no-save --ignore-scripts espeak-ng@1.0.2
+          node --input-type=module <<'JS'
+          import { writeFile } from 'node:fs/promises';
+          import { pathToFileURL } from 'node:url';
+          import { lipsFixture } from './android/tests/lips.mjs';
+          import { splitSentences } from './src/modules/timeline.js';
+          const out = process.env.RUNNER_TEMP;
+          const { default: espeak } = await import(pathToFileURL(`${out}/lectura-tts/node_modules/espeak-ng/dist/espeak-ng.js`));
+          const spoken = splitSentences(lipsFixture().data.text).filter(p => p.type === 'parle').map(p => p.texte).join(' ');
+          const synth = await espeak({ arguments: ['-v', 'fr-fr', '-w', 'fixture.wav', spoken] });
+          await writeFile(`${out}/lips-spoken.wav`, synth.FS.readFile('fixture.wav'));
+          JS
           echo "LECTURA_TEST_SPEECH_WAV=$RUNNER_TEMP/lips-spoken.wav" >> "$GITHUB_ENV"
-          curl -fsSL --retry 2 'https://github.com/espeak-ng/espeak-ng/releases/download/1.52.0/espeak-1.52.0-signed.apk' -o "$RUNNER_TEMP/espeak.apk"
-          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify "$RUNNER_TEMP/espeak.apk"
-          echo "LECTURA_TEST_TTS_APK=$RUNNER_TEMP/espeak.apk" >> "$GITHUB_ENV"
       - name: Compiler l’APK, vérifier sa signature
         run: LECTURA_BUILD="${GITHUB_SHA:0:8}" LECTURA_TEST_APK="$RUNNER_TEMP/LecturaTests.apk" bash android/build.sh "$RUNNER_TEMP/Lectura.apk"
       - name: Récupérer l’APK à mettre à jour
@@ -120,11 +125,24 @@ jobs:
           cp android/tests/web.mjs "$RUNNER_TEMP/lectura-web/web.mjs"
           unzip -p "$RUNNER_TEMP/LecturaTests.apk" assets/fixtures.json > "$RUNNER_TEMP/lectura-web/fixtures.json"
           "$RUNNER_TEMP/lectura-web/node_modules/.bin/playwright" install chromium
-          pulseaudio --start --exit-idle-time=-1
-          pactl load-module module-null-sink sink_name=lectura_ci
-          pactl set-default-sink lectura_ci
-          speech-dispatcher -d
-          LECTURA_TEST_SYSTEM_VOICE=1 xvfb-run -a node "$RUNNER_TEMP/lectura-web/web.mjs"
+          # Isolate the Linux speech setup from the APK build and the reference WAV check.
+          sources="$RUNNER_TEMP/ubuntu.sources"
+          sed -E 's#http://[^ ]+/ubuntu/?#https://archive.ubuntu.com/ubuntu/#g' /etc/apt/sources.list.d/ubuntu.sources > "$sources"
+          aptopts=(-o "Dir::Etc::SourceList=$sources" -o Dir::Etc::SourceParts=- -o Acquire::https::Timeout=10 -o Acquire::Retries=0)
+          if sudo timeout 45 apt-get "${aptopts[@]}" update -qq &&
+             sudo timeout 45 apt-get "${aptopts[@]}" install -y --no-install-recommends speech-dispatcher speech-dispatcher-espeak-ng pulseaudio &&
+             pulseaudio --start --exit-idle-time=-1 && pactl load-module module-null-sink sink_name=lectura_ci &&
+             pactl set-default-sink lectura_ci && speech-dispatcher -d; then
+            LECTURA_TEST_SYSTEM_VOICE=1 xvfb-run -a node "$RUNNER_TEMP/lectura-web/web.mjs"
+          else
+            echo '::warning title=Web Speech non testé::Moteur Linux indisponible ; vérifier uniquement le fichier WAV sur Pages.'
+            node "$RUNNER_TEMP/lectura-web/web.mjs"
+          fi
+      - name: Moteur TextToSpeech de l’émulateur (test seulement)
+        run: |
+          curl -fsSL --retry 2 --max-time 25 'https://github.com/espeak-ng/espeak-ng/releases/download/1.52.0/espeak-1.52.0-signed.apk' -o "$RUNNER_TEMP/espeak.apk"
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify "$RUNNER_TEMP/espeak.apk"
+          echo "LECTURA_TEST_TTS_APK=$RUNNER_TEMP/espeak.apk" >> "$GITHUB_ENV"
       - name: Test Android 12
         timeout-minutes: 10
         env:
