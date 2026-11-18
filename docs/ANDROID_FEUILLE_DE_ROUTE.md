@@ -4,11 +4,17 @@ Périmètre : branche `arena/d2229c4f-lectura`, application native (`io.github.i
 
 | Phase | État et critère de livraison |
 |---|---|
-| 0 — Signature | Le build n’accepte plus les clés de secours. Compilation locale application + instrumentation vérifiée, sans APK. **Bloquée sur la configuration du keystore permanent** : [procédure](ANDROID_SIGNATURE.md). L’APK de phase 0 attend un run signé et vert. |
+| 0 — Signature | **Livrée** : [APK signé permanent](https://github.com/initDV/Lectura/actions/runs/44329414529/artifacts/14438028918), build `70b1ff2`, `versionCode` 21. [CI et instrumentation API 31 réussies](https://github.com/initDV/Lectura/actions/runs/44329414529). Aucun repli sur une clé de débogage. |
 | 1 — Parité | Inventaire de départ ci-dessous. Comparer les surfaces et les parcours visibles, corriger les écarts hors Pro, puis compiler, nettoyer, committer et livrer l’APK signé et son rapport. |
 | 2 — Texte → voix | Durées et règles de symboles validées avec les exceptions ci-dessous. Pas encore implémentées ; le nouveau flux de voix reste Android seul. |
 | 3 — Voix | `synthesizeToFile` approuvé pour cette phase avec mesure de l’alignement de la bouche avant/après ; Kokoro reste une étude sans ajout. Aucun changement de moteur ou de catalogue à ce stade. |
 | 4 — Vérification | Passages instrumentés hors ligne puis en ligne, et test sur un téléphone réel pour ce que l’émulateur ne prouve pas. APK final et rapport seulement après vérifications, sans substitution silencieuse. |
+
+## Phase 0 — premier APK à clé permanente
+
+Empreinte SHA-256 du **certificat**, vérifiée par la CI sur l’APK final et égale à [`android/signing-cert.sha256`](../android/signing-cert.sha256) : `b6873c0f1a2f447163fb9af7e6f4181280b31fd1f5c45b0535993075b3dc7d8b`. Le keystore est resté dans les secrets `android-signing`, avec nettoyage du fichier temporaire du runner. L’APK de test antérieur n’a pas le même certificat : suivre les [précautions pour l’installation initiale](ANDROID_SIGNATURE.md#3-vérifier-avant-installation).
+
+Sur l’émulateur Android 12 : installation, tutoriel/lecture/commandes, WAV importé, voix système FR, synthèse Piper et Pro désactivé contrôlés. [Rapport et captures](https://github.com/initDV/Lectura/actions/runs/44329414529/artifacts/14438761976) ; [sources correspondantes](https://github.com/initDV/Lectura/actions/runs/44329414529/artifacts/14437678702). Sur Pages, le WAV commun a passé ; la voix système Chromium n’a pas été testée sur ce run (moteur Linux indisponible). Pas d’essai sur téléphone réel ni de mise à jour entre deux installations permanentes à ce stade.
 
 ## Phase 1 — Parité à contrôler (Pro désactivé)
 

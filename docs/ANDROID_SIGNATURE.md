@@ -2,7 +2,7 @@
 
 L’APK et l’APK d’instrumentation doivent porter le **même certificat permanent**, vérifié par son empreinte SHA-256 avant et après la signature. Aucun script de build ne génère de clé ni ne se rabat sur une clé de débogage. Le paquet reste `io.github.initdv.lectura`. Les builds Actions utilisent le numéro d’exécution comme `versionCode` ; une relance du même run garde ce numéro.
 
-Le propriétaire configure les secrets Actions ; l’intégration du sandbox ne peut pas les lire ni les modifier. La CI inscrit une seule fois l’empreinte du certificat **public** dans `android/signing-cert.sha256`. Ce fichier ne contient ni clé privée, ni keystore, ni mot de passe. Sans secrets valides ou si le certificat ne correspond plus à cette empreinte, aucun APK n’est publié.
+Le propriétaire configure les secrets Actions ; l’intégration du sandbox ne peut pas les lire ni les modifier. L’empreinte du certificat **public**, relevée par la CI, est fixée dans [`android/signing-cert.sha256`](../android/signing-cert.sha256). Ce fichier ne contient ni clé privée, ni keystore, ni mot de passe. Sans secrets valides ou si le certificat ne correspond plus à cette empreinte, aucun APK n’est publié.
 
 ## 1. Créer la clé une seule fois, hors du dépôt
 
