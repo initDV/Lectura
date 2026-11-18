@@ -52,6 +52,11 @@ public final class DeviceChecks extends Instrumentation {
         Context ctx=getTargetContext(); Refs refs=new Refs(ctx);
         switch(args.getString("mode","clean")){
             case "download":
+                check("reseau-avant-telechargement",()->{
+                    waitFor("Reconnexion après le mode avion",()->ctx.getSystemService(ConnectivityManager.class).getActiveNetwork()!=null
+                        &&Settings.Global.getInt(ctx.getContentResolver(),Settings.Global.AIRPLANE_MODE_ON,0)==0,30000);
+                    return "Mode avion désactivé, réseau Android de nouveau actif";
+                });
                 check("piper",()->hd(refs));
                 check("piper-mls",()->mls(refs));
                 break;
@@ -373,14 +378,14 @@ public final class DeviceChecks extends Instrumentation {
         JSONObject f=fixtures().getJSONObject("subtitles");
         try{
             main(()->a.open(new Project(a.db.settings)));
-            Files.writeString(vtt.toPath(),f.getString("vtt"));
+            Files.write(vtt.toPath(),f.getString("vtt").getBytes(StandardCharsets.UTF_8));
             document(a,a.t("editeur.importerSrt"),Intent.ACTION_OPEN_DOCUMENT,vtt);
             main(()->require(a.project.subtitles&&a.project.text.equals(f.optString("text")),"Import VTT via le menu"));
             document(a,a.t("menu.exporterSrt"),Intent.ACTION_CREATE_DOCUMENT,srt);
-            require(Files.readString(srt.toPath()).equals(f.getString("srt")),"Horodatages/export SRT");
+            require(new String(Files.readAllBytes(srt.toPath()),StandardCharsets.UTF_8).equals(f.getString("srt")),"Horodatages/export SRT");
             document(a,a.t("editeur.importerSrt"),Intent.ACTION_OPEN_DOCUMENT,srt);
             document(a,a.t("menu.exporterVtt"),Intent.ACTION_CREATE_DOCUMENT,vtt);
-            require(Files.readString(vtt.toPath()).equals(f.getString("exported")),"Réimport SRT et export VTT");
+            require(new String(Files.readAllBytes(vtt.toPath()),StandardCharsets.UTF_8).equals(f.getString("exported")),"Réimport SRT et export VTT");
             main(()->a.importAudio(Uri.fromFile(input),"tonalité.wav"));
             waitFor("Import audio associé aux sous-titres",()->a.project.fileAudio,10000);
             main(()->a.launch(false));
@@ -593,6 +598,7 @@ public final class DeviceChecks extends Instrumentation {
         for(int retries=0;;retries++){
             try{h.download(id,progress);return retries;}
             catch(java.net.SocketTimeoutException e){if(retries==2)throw e;Thread.sleep(400L*(retries+1));}
+            catch(java.net.UnknownHostException e){if(retries==2)throw e;Thread.sleep(5000L*(retries+1));}
         }
     }
     private String mls(Refs refs)throws Exception {
