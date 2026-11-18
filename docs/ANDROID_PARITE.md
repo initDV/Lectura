@@ -20,7 +20,7 @@ Référence de départ : le déploiement de `initDV/Lectura` à [`39e4295`](http
 | Licence Pro ECDSA P-256 liée à l’installation | Même format et clé publique ; nouvel identifiant pour l’installation Android |
 | Installation et mise à jour PWA | APK Android ; ressources de base embarquées, pas de service worker ni mise à jour silencieuse |
 
-L’inventaire des ressources et les dimensions de référence se trouvent dans [ANDROID_INVENTAIRE.md](ANDROID_INVENTAIRE.md).
+L’inventaire des ressources et les dimensions de référence se trouvent dans [ANDROID_INVENTAIRE.md](ANDROID_INVENTAIRE.md). Ce tableau décrit les capacités implémentées, pas les fonctionnalités visibles dans chaque APK : **le Pro est maintenant désactivé sur Android**. Le [rapport bouche et Pro](ANDROID_BOUCHE_PRO.md) contient la campagne plus récente avec la voix locale FR, le WAV parlé commun à Pages, les résultats avant/après et le contrôle de signature.
 
 ## Mesures sur l’émulateur Android 12
 
