@@ -13,7 +13,23 @@ report_failure() {
     exit "$code"
 }
 trap report_failure EXIT
+export PATH="$ANDROID_HOME/platform-tools:$PATH"
+cli_dir=$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 4 -name sdkmanager -print -quit 2>/dev/null || true)
+if [[ -z "$cli_dir" ]]; then
+  temp=$(mktemp -d)
+  curl -fsSL --retry 2 'https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip' -o "$temp/tools.zip" >"$log" 2>&1
+  unzip -qo "$temp/tools.zip" -d "$temp"
+  mkdir -p "$ANDROID_HOME/cmdline-tools"
+  mv "$temp/cmdline-tools" "$ANDROID_HOME/cmdline-tools/lectura"
+  cli_dir="$ANDROID_HOME/cmdline-tools/lectura/bin/sdkmanager"
+  rm -rf "$temp"
+fi
+export PATH="$(dirname "$cli_dir"):$PATH"
+echo "::notice file=docs/ANDROID_PARITE.md,title=Outils Android::SDK=${ANDROID_HOME}; sdkmanager=${cli_dir}; KVM=$(test -c /dev/kvm && echo oui || echo non)"
 {
+  set +o pipefail
+  yes | sdkmanager --licenses
+  set -o pipefail
   sdkmanager 'platform-tools' 'emulator' 'system-images;android-31;google_apis;x86_64'
   printf 'no\n' | avdmanager create avd --force --name lectura_ci --package 'system-images;android-31;google_apis;x86_64' --device 'pixel_4'
   ls -l /dev/kvm

@@ -6,6 +6,8 @@
     <queries><intent><action android:name="android.intent.action.TTS_SERVICE" /></intent></queries>
     <application android:label="Lectura" android:icon="@mipmap/lectura" android:theme="@style/Lectura"
         android:enableOnBackInvokedCallback="false" android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
+        <provider android:name=".SharedMedia" android:authorities="io.github.initdv.lectura.files"
+            android:exported="false" android:grantUriPermissions="true" />
         <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout">
             <intent-filter>

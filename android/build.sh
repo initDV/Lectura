@@ -41,6 +41,16 @@ PY
 "$AAPT2" link -I "$PLATFORM" --manifest android/AndroidManifest.xml \
   --min-sdk-version 31 --target-sdk-version 37 -A "$WORK/assets" -o "$WORK/resources.apk" "$WORK/res.zip"
 find android/src -name '*.java' | sort > "$WORK/sources"
+LAME_REV=582bbba6a12f981b984d8fb9e1874499fed85675
+if [[ -v LECTURA_LAME_SRC ]]; then
+  LAME_SRC=$LECTURA_LAME_SRC
+else
+  curl -fsSL --retry 2 "https://codeload.github.com/zhuker/lamejs/tar.gz/$LAME_REV" -o "$WORK/lame.tar.gz"
+  tar -xzf "$WORK/lame.tar.gz" -C "$WORK" --wildcards '*/src/main/java/mp3/*' '*/src/main/java/mpg/*'
+  LAME_SRC="$WORK/lamejs-$LAME_REV/src/main/java"
+fi
+find "$LAME_SRC/mp3" "$LAME_SRC/mpg" -name '*.java' ! -name 'Main.java' ! -name 'LameTest.java' ! -name 'GetAudio.java' ! -name 'Parse.java' ! -name 'BRHist.java' | sort >> "$WORK/sources"
+cp src/vendor/lamejs/LICENSE "$WORK/assets/LAME-LICENSE"
 "$JAVAC" -encoding UTF-8 -source 11 -target 11 -classpath "$PLATFORM" -d "$WORK/classes" @"$WORK/sources"
 python3 - "$WORK" <<'PY'
 import sys, zipfile
