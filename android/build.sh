@@ -100,6 +100,7 @@ printf '\nAPK : %s\n' "$OUTPUT"
 if [[ -v LECTURA_TEST_APK ]]; then
   mkdir -p "$WORK"/{tests,assets-test,dex-test}
   node android/tests/fixtures.mjs "$WORK/assets-test/fixtures.json"
+  if [[ -n ${LECTURA_TEST_SPEECH_WAV:-} ]]; then cp "$LECTURA_TEST_SPEECH_WAV" "$WORK/assets-test/lips-spoken.wav"; fi
   "$AAPT2" link -I "$PLATFORM" --manifest android/tests/AndroidManifest.xml \
     --min-sdk-version 31 --target-sdk-version 37 -A "$WORK/assets-test" -o "$WORK/tests.apk"
   find android/tests/java -name '*.java' | sort > "$WORK/test-list"

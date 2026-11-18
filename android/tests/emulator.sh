@@ -54,9 +54,17 @@ for ((i=0;i<150;i++)); do
         adb install -r "$1"
         adb install -r "$2"
         adb shell pm clear io.github.initdv.lectura
+        tts=()
+        if [[ -n ${LECTURA_TEST_TTS_APK:-} ]]; then
+            adb install -r "$LECTURA_TEST_TTS_APK"
+            adb shell settings put secure tts_default_synth com.reecedunn.espeak
+            adb shell settings put secure tts_default_locale com.reecedunn.espeak:fra-FRA
+            adb shell am start -W -n com.reecedunn.espeak/.DownloadVoiceData
+            tts=(-e espeak true)
+        fi
         adb logcat -c
         instrument=0
-        timeout 330 adb shell am instrument -w -r -e hd true io.github.initdv.lectura.tests/io.github.initdv.lectura.DeviceChecks | tee "$LECTURA_REPORT/android-checks.txt" || instrument=$?
+        timeout 330 adb shell am instrument -w -r -e hd true "${tts[@]}" io.github.initdv.lectura.tests/io.github.initdv.lectura.DeviceChecks | tee "$LECTURA_REPORT/android-checks.txt" || instrument=$?
         adb logcat -d -s AndroidRuntime:E Lectura:E > "$LECTURA_REPORT/android-errors.txt"
         while IFS= read -r result; do
             result=${result%$'\r'};result=${result//%/%25}

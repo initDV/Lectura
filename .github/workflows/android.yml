@@ -5,9 +5,14 @@ on:
     branches: ['arena/**', main]
     paths: ['android/**', '.github/workflows/android.yml', 'characters/**', 'data/**', 'fonts/**', 'icons/**', 'src/**', 'tools/fetch_voice.mjs']
   workflow_dispatch:
+    inputs:
+      predecessor_run:
+        description: 'Run Android précédent à comparer pour la signature (facultatif)'
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: android-${{ github.ref }}
@@ -40,8 +45,50 @@ jobs:
           if curl --fail --retry 2 --location 'https://initdv.github.io/Lectura/models/index.json' -o "$RUNNER_TEMP/hd.json"; then
             echo "LECTURA_HD_INDEX=$RUNNER_TEMP/hd.json" >> "$GITHUB_ENV"
           fi
+      - name: Voix de test française et fichier audio commun
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends espeak-ng speech-dispatcher speech-dispatcher-espeak-ng pulseaudio
+          node --input-type=module -e "import { lipsFixture } from './android/tests/lips.mjs'; import { splitSentences } from './src/modules/timeline.js'; console.log(splitSentences(lipsFixture().data.text).filter(p => p.type === 'parle').map(p => p.texte).join(' '));" |
+            espeak-ng -v fr-fr -w "$RUNNER_TEMP/lips-spoken.wav" --stdin
+          echo "LECTURA_TEST_SPEECH_WAV=$RUNNER_TEMP/lips-spoken.wav" >> "$GITHUB_ENV"
+          curl -fsSL --retry 2 'https://github.com/espeak-ng/espeak-ng/releases/download/1.52.0/espeak-1.52.0-signed.apk' -o "$RUNNER_TEMP/espeak.apk"
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify "$RUNNER_TEMP/espeak.apk"
+          echo "LECTURA_TEST_TTS_APK=$RUNNER_TEMP/espeak.apk" >> "$GITHUB_ENV"
       - name: Compiler l’APK, vérifier sa signature
         run: LECTURA_BUILD="${GITHUB_SHA:0:8}" LECTURA_TEST_APK="$RUNNER_TEMP/LecturaTests.apk" bash android/build.sh "$RUNNER_TEMP/Lectura.apk"
+      - name: Récupérer l’APK à mettre à jour
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: Lectura-Android-API31+
+          github-token: ${{ github.token }}
+          # Compare to the last APK sent for the Android test unless another run is specified.
+          run-id: ${{ inputs.predecessor_run || '44295570195' }}
+          path: ${{ runner.temp }}/lectura-predecessor
+      - name: Comparer les certificats de signature
+        env:
+          LECTURA_REPORT: ${{ runner.temp }}/lectura-report
+        run: |
+          signer="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          mkdir -p "$LECTURA_REPORT"
+          fingerprint() { "$signer" verify --print-certs "$1" | awk '/certificate SHA-256 digest:/ {print $NF}'; }
+          current=$(fingerprint "$RUNNER_TEMP/Lectura.apk")
+          test -n "$current"
+          echo "::notice title=Certificat APK Lectura::SHA-256 $current"
+          echo "Nouveau : $current" > "$LECTURA_REPORT/apk-certificates.txt"
+          previous="$RUNNER_TEMP/lectura-predecessor/Lectura.apk"
+          if [[ -f "$previous" ]]; then
+            old=$(fingerprint "$previous")
+            test -n "$old"
+            echo "Précédent : $old" >> "$LECTURA_REPORT/apk-certificates.txt"
+            if [[ "$current" == "$old" ]]; then
+              echo '::notice title=Signature de mise à jour::Même certificat que l’APK précédent.'
+            else
+              echo "::warning title=Pas une mise à jour::Certificats différents. Ancien SHA-256 $old ; nouveau SHA-256 $current. Ne pas désinstaller l’ancienne application."
+            fi
+            rm -f -- "$previous"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: Lectura-Android-API31+
@@ -71,8 +118,13 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/lectura-web" playwright@1.57.0
           cp android/tests/web.mjs "$RUNNER_TEMP/lectura-web/web.mjs"
+          unzip -p "$RUNNER_TEMP/LecturaTests.apk" assets/fixtures.json > "$RUNNER_TEMP/lectura-web/fixtures.json"
           "$RUNNER_TEMP/lectura-web/node_modules/.bin/playwright" install chromium
-          node "$RUNNER_TEMP/lectura-web/web.mjs"
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=lectura_ci
+          pactl set-default-sink lectura_ci
+          speech-dispatcher -d
+          LECTURA_TEST_SYSTEM_VOICE=1 xvfb-run -a node "$RUNNER_TEMP/lectura-web/web.mjs"
       - name: Test Android 12
         timeout-minutes: 10
         env:

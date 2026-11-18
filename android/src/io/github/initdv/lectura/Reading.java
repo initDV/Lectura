@@ -41,8 +41,8 @@ final class Reading implements AutoCloseable {
             player.setOnSeekCompleteListener(ignored->pendingSeek=-1);
             player.setOnErrorListener((ignored,w,e)->{playing=false;fail.accept("audio "+w+"/"+e);return true;});
         }else{
-            player=null;lip=null;duration=Math.max(1,silent?text.length()*1000./p.cps:timeline.duration);
-            queue=silent?null:new Talk.Queue(talk,voice,text,p.cps,p.speed,p.pitch,this::complete,code->{playing=false;fail.accept(code);});
+            player=null;lip=null;duration=Math.max(1,silent?text.length()*1000./p.typingCps():timeline.duration);
+            queue=silent?null:new Talk.Queue(talk,voice,text,p.typingCps(),p.speed,p.pitch,this::complete,code->{playing=false;fail.accept(code);});
         }
         rate=p.speed/baseRate;
     }
@@ -55,7 +55,13 @@ final class Reading implements AutoCloseable {
         double t=position+(SystemClock.uptimeMillis()-mark)*rate;
         if(t>=duration){complete();return duration;}return t;
     }
-    int chars(double time){return ended?text.length():queue==null?timeline.charAt(time):queue.pos;}
+    double chars(double time){return ended?text.length():queue==null?timeline.charAt(time):queue.pos;}
+    static String letterAt(String text,double chars){
+        // scene.js indexes the string with the raw cursor. A fractional SpeechSource cursor
+        // selects no letter (the terminal and simulatedViseme still use the integer part).
+        int i=(int)chars;
+        return i==chars&&i>=0&&i<text.length()?text.substring(i,i+1):"";
+    }
     void play(){
         if(playing)return;if(ended)seek(0);playing=true;
         if(queue!=null)queue.play();else if(player!=null){player.start();player.setPlaybackParams(new PlaybackParams().allowDefaults().setSpeed(rate).setPitch(1));}
@@ -68,19 +74,27 @@ final class Reading implements AutoCloseable {
     void seek(double ms){
         position=Math.max(0,Math.min(duration-1,ms));ended=false;mark=SystemClock.uptimeMillis();
         if(queue!=null)queue.seek((int)(position/duration*text.length()));
-        if(player!=null){pendingSeek=(int)position;player.seekTo(pendingSeek,MediaPlayer.SEEK_CLOSEST);lip.reset();}
+        if(player!=null){pendingSeek=(int)position;player.seekTo(pendingSeek,MediaPlayer.SEEK_CLOSEST);}
     }
     void speed(float speed){
-        position=time();mark=SystemClock.uptimeMillis();rate=speed/baseRate;
         if(queue!=null)queue.setRate(speed);
+        else {position=time();mark=SystemClock.uptimeMillis();}
+        rate=speed/baseRate;
         if(player!=null&&playing)player.setPlaybackParams(new PlaybackParams().allowDefaults().setSpeed(rate).setPitch(1));
     }
     void volume(float v,boolean muted){volume=v;if(player!=null)player.setVolume(muted?0:v,muted?0:v);
         if(queue!=null){queue.volume=v;if(mute!=muted)queue.mute(muted);}mute=muted;}
-    int viseme(double time,double frame,boolean pro){
-        if(!playing)return 0;if(lip!=null)return lip.read(time,pro);
-        if(queue!=null&&!queue.speaking())return 0;int n=queue==null?(int)(time/duration*text.length()):queue.pos;
+    int viseme(double time,double frame,double chars,boolean pro){
+        if(!playing)return 0;
+        // The requested seek position isn't yet playing. Don't analyse its future samples.
+        if(lip!=null)return lip.read(pendingSeek>=0?0:time,pro);
+        if(queue!=null)return speechViseme(frame,queue.speaking(),text,chars);
+        int n=(int)(time/duration*text.length());
         return simulated(frame,n<text.length()?text.charAt(n):' ');
+    }
+    static int speechViseme(double frame,boolean speaking,String text,double chars){
+        int n=(int)chars;
+        return speaking&&n>=0&&n<text.length()?simulated(frame,text.charAt(n)):0;
     }
     static int simulated(double ms,char c){
         if(Script.space(c)||".,;:!?…()«»\"-".indexOf(c)>=0)return 0;double t=ms/1000,hz=7.5+1.5*Math.sin(t*2.1);

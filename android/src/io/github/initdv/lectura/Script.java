@@ -11,16 +11,17 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import static io.github.initdv.lectura.Refs.*;
+import static io.github.initdv.lectura.Features.PRO_ENABLED;
 
 /** UTF-16 offsets match the .lectura model and the browser's timing. */
 final class Script {
     static final int VOICE_CPS=14, TYPE_CPS=28;
     static final int SPOKEN=0, COMMAND=1, COMMENT=2;
-    static final Pattern STRONG=Pattern.compile("(?<=[.!?…])\\s+");
+    static final Pattern STRONG=Pattern.compile("(?<=[.!?…])[\\x09-\\x0d\\p{Z}\ufeff]+");
     static final Pattern LONG_SPLIT=Pattern.compile("[.!?…][\"'»)\\]]*\\s+|\\s+");
     static final Pattern TIME=Pattern.compile("(?:(\\d+):)?(\\d{1,2}):(\\d{2})[.,](\\d{1,3})\\s*-->\\s*(?:(\\d+):)?(\\d{1,2}):(\\d{2})[.,](\\d{1,3})");
     static int type(String s){return s.startsWith("$ ")?COMMAND:s.startsWith("# ")?COMMENT:SPOKEN;}
-    static boolean space(char c){return Character.isWhitespace(c)||Character.isSpaceChar(c)||c=='\ufeff';}
+    static boolean space(char c){return (c>=0x09&&c<=0x0d)||Character.isSpaceChar(c)||c=='\ufeff';}
     static String clean(String s){
         return s.replaceAll("(?m)^#{2,6}\\s+","")
             .replaceAll("\\*\\*([^*\\n]+)\\*\\*","$1").replaceAll("__([^_\\n]+)__","$1")
@@ -132,7 +133,7 @@ final class Script {
         final Pattern regex;
         Keywords(Refs refs,String lang,boolean pro,JSONObject custom){
             JSONObject base=refs.json("data/keywords_"+lang+".json");JSONObject cats=object(base,"categories"),rules=object(base,"regles");
-            Dictionary d=new Dictionary();d.add(cats); if(pro){d.add(object(refs.json("data/keywords_fr_pro.json"),"categories"));d.add(custom);}
+            Dictionary d=new Dictionary();d.add(cats); if(PRO_ENABLED&&pro){d.add(object(refs.json("data/keywords_fr_pro.json"),"categories"));d.add(custom);}
             boolean whole=rules.optBoolean("motsEntiers",true),ignore=!rules.optBoolean("sensibleCasse"),multi=rules.optBoolean("expressionsMultiMots",true);
             for(String cat:d.words.keySet()){
                 colors.put(cat,d.inks.getOrDefault(cat,0xffe6edf3));

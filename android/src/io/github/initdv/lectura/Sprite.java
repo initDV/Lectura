@@ -88,6 +88,13 @@ final class Sprite {
     private static Svg.Node forearm(Svg.Node arm,String id){for(Svg.Node n:arm.children)if(n.attr("id").startsWith("forearm"))return n;return group(arm,false,262,id);}
     private static double clamp(double v,double lo,double hi){return max(lo,min(v,hi));}
     private static float f(double n){return (float)(Math.round(n*100)/100d);}
+    private static float fixed2(double n){
+        // SVG rect attributes use Number.toFixed, not mouth.js's Math.round. At a half cent
+        // check the unrounded product, since multiplying a binary double can round to a tie.
+        double abs=abs(n),scaled=abs*100,cent=floor(scaled),frac=scaled-cent;
+        if(frac>.5||frac==.5&&Math.fma(abs,100,-scaled)>=0)cent++;
+        return (float)copySign(cent/100,n);
+    }
     private static float q(double n){return Math.round(n*4)/4f;}
     private double v(String name){return pose.get(name);}
     void expression(String id,double force,String mix,double weight){
@@ -172,10 +179,12 @@ final class Sprite {
         for(Svg.Node n:new Svg.Node[]{left,right}){n.reset().preTranslate(f(dx),f(dy));n.transform.preTranslate(0,f(v("bodyY")));rotate(n.transform,lean,hip);}
         rotate(left.transform,al,shoulderL);rotate(right.transform,aa,shoulderR);rotate(foreL.reset(),aFl,elbowL);rotate(foreR.reset(),aFr,elbowR);
         double h=max(VIS[max(0,min(3,viseme))],v("h")),w=v("w")*(rich?shape/48:1);
-        if(human)drawLips(cx+v("gx")*.2,cy+v("my"),halfWidth*w/48,h*maxOpening/19);
+        if(human)drawLips(cx+v("gx")*.2,cy+v("my"),halfWidth*(w/48),h*(maxOpening/19));
         else if(mouth.kind.equals("rect")){
-            float hm=f(max(1,h*hBase/5)),wm=f(max(1,w*wBase/48)),xm=f(xBase+wBase/2-wm/2),ym=f(yBase+hBase/2+v("my")-hm/2),r=f(min(6,min(wm,hm)/2));
-            mouth.path().addRoundRect(xm,ym,xm+wm,ym+hm,r,r,Path.Direction.CW);
+            // character.js rounds each SVG attribute, after computing the centre and corner radius.
+            double height=max(1,h*hBase/5),width=max(1,w*wBase/48);
+            float xm=fixed2(xBase+wBase/2-width/2),ym=fixed2(yBase+hBase/2+v("my")-height/2),r=fixed2(min(6,min(width,height)/2));
+            mouth.path().addRoundRect(xm,ym,xm+fixed2(width),ym+fixed2(height),r,r,Path.Direction.CW);
         }
         double sy=t<blinkUntil?.15:v("lid"),eyex=v("gx")+lookX+sin(s*.55)*1.3*k+sin(s*1.5)*.6*k+rgx+scriptedLook;
         double eyey=v("gy")+lookY+cos(s*.45)*.8*k+rgy;

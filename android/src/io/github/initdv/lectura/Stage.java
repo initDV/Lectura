@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONObject;
 import static io.github.initdv.lectura.Refs.*;
+import static io.github.initdv.lectura.Features.PRO_ENABLED;
 
 /** Scene composition and clock-coupled sprite/terminal, shared with the capture renderer. */
 final class Stage extends FrameLayout {
@@ -48,10 +49,10 @@ final class Stage extends FrameLayout {
     private Reading lastReading;
 
     Stage(MainActivity a,JSONObject def){
-        super(a);this.a=a;ui=a.ui;project=a.project;pro=a.pro;reduced=a.reduced();
+        super(a);this.a=a;ui=a.ui;project=a.project;pro=a.hasPro();reduced=a.reduced();
         decor=new Decor(object(a.db.settings,"decor"));background=color(project.background);
-        JSONObject ts=object(a.refs.themes,"terminal");JSONObject t=ts.optJSONObject(project.terminalTheme);term=t==null?object(ts,"sombre"):t;
-        termFont=project.font.equals("Système")?Typeface.MONOSPACE:ui.mono(400);
+        JSONObject ts=object(a.refs.themes,"terminal");JSONObject t=ts.optJSONObject(PRO_ENABLED?project.terminalTheme:"sombre");term=t==null?object(ts,"sombre"):t;
+        termFont=PRO_ENABLED&&project.font.equals("Système")?Typeface.MONOSPACE:ui.mono(400);
         title=a.db.settings.optString("titreTerminal");radius=Math.round(ui.radiusLg);
         sprite=new Sprite(a.refs,def);sprite.rich=pro;sprite.reduced=reduced||a.db.settings.optBoolean("reduireAnimations");
         sprite.gain=project.motion.equals("calme")?.6:project.motion.equals("vif")?1.3:1;
@@ -70,8 +71,9 @@ final class Stage extends FrameLayout {
         Reading r=a.reading;
         if(r!=lastReading){current=punctuation=null;rank=0;prev=-1;lastReading=r;expressionKey="";screenText.reset();}
         if(r!=null&&!a.preparing){
-            double ms=r.time();int chars=r.chars(ms);r.terminal.shown=chars;Script.Segment seg=r.timeline.segment(chars);
-            boolean speak=r.playing&&seg!=null&&seg.type==Script.SPOKEN;
+            double ms=r.time(),cursor=r.chars(ms);int chars=(int)cursor;
+            r.terminal.shown=chars;Script.Segment seg=r.timeline.segment(chars);
+            boolean speak=r.playing&&seg!=null&&Script.type(seg.text)==Script.SPOKEN;
             if(speak){if(seg!=punctuation){punctuation=seg;prev=-1;}int pos=Math.min(seg.text.length()-1,chars-seg.start);
                 for(int i=prev+1;i<=pos;i++)sprite.punct(seg.text.substring(i,i+1),now);prev=pos;}
             Mood.Pose p=a.stopped||seg==null?new Mood.Pose("neutre",1,"",0,0,""):
@@ -80,9 +82,9 @@ final class Stage extends FrameLayout {
             if(!expressionKey.equals(key)){sprite.expression(p.expr,p.strength,p.mix,p.weight);expressionKey=key;}
             if(seg!=current){current=seg;rank=0;if(speak&&!r.terminal.keywords.find(seg.text).isEmpty())sprite.gesture("",now);}
             if(r.playing&&rank!=p.rank){if(p.rank>rank&&!p.gesture.isEmpty())sprite.gesture(p.gesture,now);rank=p.rank;}
-            sprite.viseme=speak?r.viseme(ms,now,pro):0;sprite.shape=speak?r.shape():48;sprite.letter=chars<r.text.length()?r.text.substring(chars,chars+1):"";
+            sprite.viseme=speak?r.viseme(ms,now,cursor,pro):0;sprite.shape=speak?r.shape():48;sprite.letter=Reading.letterAt(r.text,cursor);
             sprite.talk=speak?(sprite.viseme>0?1:.15):0;
-        }else{sprite.viseme=0;sprite.talk=0;sprite.expression("neutre",1,"",0);}
+        }else{sprite.viseme=0;sprite.letter="";sprite.talk=0;sprite.expression("neutre",1,"",0);}
         sprite.tick(now);
     }
     private final class Face extends View {

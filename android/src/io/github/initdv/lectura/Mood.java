@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import static io.github.initdv.lectura.Refs.*;
+import static io.github.initdv.lectura.Features.PRO_ENABLED;
 
 /** sentiment.js + humeur.js. Longest match, original UTF-16 offsets, then negation and intensity. */
 final class Mood {
@@ -35,7 +36,7 @@ final class Mood {
     private final boolean pro,automatic;
     private int maxWords=1;
     Mood(Refs refs,String lang,Script.Keywords words,boolean pro,boolean automatic){
-        this.expressions=refs.expressions;this.keywords=words;this.pro=pro;this.automatic=automatic;
+        this.expressions=refs.expressions;this.keywords=words;this.pro=PRO_ENABLED&&pro;this.automatic=automatic;
         JSONObject s=refs.json("data/sentiments_"+lang+".json"),em=object(s,"emotions");
         em.keys().forEachRemaining(k->{JSONObject d=object(em,k);readWords(k,array(d,"mots"),1);readWords(k,array(d,"forts"),1.6);});
         JSONObject gestures=object(s,"gestes");gestures.keys().forEachRemaining(k->{String n=key(k);if(n.isEmpty())return;
@@ -102,9 +103,9 @@ final class Mood {
         if(scores.isEmpty())return;
         List<String> order=new ArrayList<>(scores.keySet());order.sort((x,y)->Double.compare(scores.get(y),scores.get(x)));
         String first=order.get(0);double n=scores.get(first);a.sentiment=true;a.expr=playable(first);a.force=force(n,boost);
-        if(order.size()>1){String second=order.get(1);double w=scores.get(second);if(w>=n*.5&&!a.expr.equals(playable(second))){a.second=playable(second);a.weight=Math.min(.45,w/(w+n));}}
+        if(PRO_ENABLED&&order.size()>1){String second=order.get(1);double w=scores.get(second);if(w>=n*.5&&!a.expr.equals(playable(second))){a.second=playable(second);a.weight=Math.min(.45,w/(w+n));}}
         for(Moment x:a.moments) if(!x.emotion.isEmpty()) {
-            if(x.gesture.isEmpty())x.gesture=object(expressions,x.emotion).optString("geste");x.emotion=playable(x.emotion);
+            if(x.gesture.isEmpty())x.gesture=object(expressions,PRO_ENABLED?x.emotion:playable(x.emotion)).optString("geste");x.emotion=playable(x.emotion);
         }
     }
     Analysis summary(Script.Segment seg){return cache.computeIfAbsent(seg,s->{Analysis a=new Analysis();int type=Script.type(s.text);
@@ -117,7 +118,7 @@ final class Mood {
         return a;});}
     Pose pose(Script.Segment s,int n){
         Analysis a=summary(s);int r=0;String gesture="",before="";Moment last=null;
-        for(Moment x:a.moments){if(x.pos>n)break;r++;gesture=x.gesture;if(!x.emotion.isEmpty()){if(last!=null&&!last.emotion.equals(x.emotion))before=last.emotion;last=x;}}
+        for(Moment x:a.moments){if(x.pos>n)break;r++;gesture=x.gesture;if(!x.emotion.isEmpty()){if(PRO_ENABLED&&last!=null&&!last.emotion.equals(x.emotion))before=last.emotion;last=x;}}
         if(last==null)return new Pose(a.expr,a.force*(a.sentiment&&!a.moments.isEmpty()?.35:1),"",0,r,gesture);
         return new Pose(last.emotion,last.force,before,before.isEmpty()?0:.3,r,gesture);
     }

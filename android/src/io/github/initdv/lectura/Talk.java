@@ -54,26 +54,35 @@ final class Talk implements AutoCloseable {
     void cancel(){current="";listener=null;if(ready)tts.stop();}
     @Override public void close(){closed=true;cancel();tts.shutdown();}
 
+    @FunctionalInterface interface Speech {
+        void speak(String text,float rate,float pitch,float volume,Listener listener);
+    }
     static final class Queue {
         final String text;private final List<Script.Segment> chunks;
-        private final Talk talk;private final Voice voice;private final int typing; private final float pitch;
+        private final Speech speech;private final Runnable cancel;private final java.util.function.LongSupplier now;
+        private final int typing;private final float pitch;
         private final Handler handler=new Handler(Looper.getMainLooper());
         private final Runnable onEnd;private final java.util.function.Consumer<String> onError;
-        float rate,volume=1; boolean playing,started,silent,muted;int pos;
+        float rate,volume=1; boolean playing,started,silent,muted;double pos;
         private int index,gen;private double cps,anchor,cap,first=-1;private long t0,anchorT,lastEvent,firstT;
         private Runnable timer;
         Queue(Talk talk,Voice voice,String text,int typing,float rate,float pitch,Runnable end,java.util.function.Consumer<String> error){
-            this.talk=talk;this.voice=voice;this.text=text;this.typing=typing;this.rate=rate;this.pitch=pitch;chunks=Script.chunks(text);cps=14*rate;onEnd=end;onError=error;
+            this((s,r,p,v,l)->talk.speak(s,voice,r,p,v,l),talk::cancel,SystemClock::uptimeMillis,text,typing,rate,pitch,end,error);
         }
-        void play(){if(playing)return;if(pos>=text.length())pos=0;playing=true;from(pos);}
+        Queue(Speech speech,Runnable cancel,java.util.function.LongSupplier now,String text,int typing,float rate,float pitch,
+              Runnable end,java.util.function.Consumer<String> error){
+            this.speech=speech;this.cancel=cancel;this.now=now;this.text=text;this.typing=typing;this.rate=rate;this.pitch=pitch;
+            chunks=Script.chunks(text);cps=Script.VOICE_CPS*(double)rate;onEnd=end;onError=error;
+        }
+        void play(){if(playing)return;if(pos>=text.length())pos=0;playing=true;from((int)pos);}
         void pause(){position();stop();}
         void stop(){playing=false;clear();}
-        private void clear(){gen++;if(timer!=null)handler.removeCallbacks(timer);timer=null;talk.cancel();}
-        void seek(int n){pos=Math.max(0,Math.min(text.length(),n));if(!playing)return;clear();started=false;lastEvent=clock();later(()->from(pos),90);}
-        void setRate(float r){int p=position();cps*=r/rate;rate=r;if(playing)seek(p);}
+        private void clear(){gen++;if(timer!=null)handler.removeCallbacks(timer);timer=null;cancel.run();}
+        void seek(double n){pos=Math.max(0,Math.min(text.length(),Math.floor(n)));if(!playing)return;clear();started=false;lastEvent=clock();later(()->from((int)pos),90);}
+        void setRate(float r){cps*=(double)r/rate;rate=r;if(playing)seek(position());}
         void mute(boolean b){muted=b;if(playing)seek(position());}
         private void later(Runnable fn,long delay){if(timer!=null)handler.removeCallbacks(timer);int generation=gen;timer=()->{if(playing&&generation==gen)fn.run();};handler.postDelayed(timer,delay);}
-        private static long clock(){return SystemClock.uptimeMillis();}
+        private long clock(){return now.getAsLong();}
         private void from(int at){
             gen++;index=0;while(index<chunks.size()&&chunks.get(index).end<=at)index++;
             if(index==chunks.size()){finish();return;}
@@ -81,7 +90,7 @@ final class Talk implements AutoCloseable {
             silent=c.type!=Script.SPOKEN;if(!silent)while(off>0&&!Script.space(c.text.charAt(off-1)))off--;
             int base=c.start+off;pos=base;anchor=base;t0=anchorT=lastEvent=clock();cap=c.end;first=-1;started=silent;
             if(silent){later(this::next,(long)((c.end-base)*1000/(typing*rate))+220);return;}
-            talk.speak(c.text.substring(off),voice,rate,pitch,muted?0:volume,new Listener(){
+            speech.speak(c.text.substring(off),rate,pitch,muted?0:volume,new Listener(){
                 @Override public void start(){if(gen==generation){started=true;lastEvent=anchorT=clock();anchor=base;}}
                 @Override public void range(int i){if(gen!=generation)return;started=true;long t=lastEvent=clock();int abs=base+i;
                     if(first<0){first=abs;firstT=t;}else if(t-firstT>600)cps=Math.max(5,Math.min(45,cps*.6+(abs-first)/(t-firstT)*400));
@@ -93,9 +102,9 @@ final class Talk implements AutoCloseable {
         }
         private void next(){if(index+1<chunks.size())from(chunks.get(index+1).start);else finish();}
         private void finish(){playing=false;pos=text.length();onEnd.run();}
-        int position(){
+        double position(){
             if(!playing||index>=chunks.size())return pos;Script.Segment c=chunks.get(index);long t=clock();
-            if(started)pos=(int)Math.max(pos,Math.min(Math.min(c.end,cap),anchor+(t-anchorT)*(silent?typing*rate:cps)/1000));
+            if(started)pos=Math.max(pos,Math.min(Math.min(c.end,cap),anchor+(t-anchorT)*(silent?typing*(double)rate:cps)/1000));
             if(!silent&&t-lastEvent>6000+(started?(c.end-c.start)*3000/cps:0)){stop();onError.accept(started?"bloquee":"non-demarree");}
             return pos;
         }

@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import static io.github.initdv.lectura.Refs.*;
+import static io.github.initdv.lectura.Features.PRO_ENABLED;
 
 /** All non-scene routes share the original shell, typography and source translation keys. */
 final class Screens {
@@ -40,7 +41,7 @@ final class Screens {
     final LinearLayout body;
     final ScrollView scroll;
     Screens(MainActivity a,String route){
-        this.a=a;u=a.ui;settings=a.db.settings;p=a.project;pro=a.pro;
+        this.a=a;u=a.ui;settings=a.db.settings;p=a.project;pro=a.hasPro();
         LinearLayout root=u.col();a.content.addView(root,u.fp(Ui.MATCH,Ui.MATCH,Gravity.TOP));
         top(root,route);
         scroll=u.scroll();root.addView(scroll,new LinearLayout.LayoutParams(Ui.MATCH,0,1));body=u.col();u.pad(body,14,18,14,48);
@@ -59,7 +60,8 @@ final class Screens {
         LinearLayout items=u.row();items.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);nav.addView(items,new HorizontalScrollView.LayoutParams(-2,-1));
         String[] rs={"scene","projets","personnages","reglages","pro","apropos"},ic={"back","folder","smile","settings","star","info"};
         boolean large=a.getResources().getDisplayMetrics().widthPixels/u.density>=640;
-        for(int i=0;i<rs.length;i++){if(i>0)u.gap(items,2);String id=rs[i],label=t(i==0?"nav.retour":"nav."+id);boolean current=id.equals(active);
+        for(int i=0;i<rs.length;i++){String id=rs[i];if(!PRO_ENABLED&&id.equals("pro"))continue;
+            if(i>0)u.gap(items,2);String label=t(i==0?"nav.retour":"nav."+id);boolean current=id.equals(active);
             View b;
             if(large){TextView tb=u.button(label,ic[i],()->a.go(id));u.style(tb,13.6f,current?u.accentText:u.mutedText,400);u.pad(tb,10,0);b=tb;}
             else b=u.iconButton(ic[i],label,current?u.accentText:u.mutedText,20,()->a.go(id));
@@ -131,20 +133,24 @@ final class Screens {
         }catch(Exception e){a.report("projets",e);}
     }
     private void movements(LinearLayout c){List<String> ids=List.of("calme","normal","vif");select(c,t("reglages.mouvements"),List.of(t("reglages.mouvements.calme"),t("reglages.mouvements.normal"),t("reglages.mouvements.vif")),ids.indexOf(p.motion),true,i->p.motion=ids.get(i));}
-    static List<String> expressions(Refs refs){List<String> out=new ArrayList<>();out.add("auto");refs.expressions.keys().forEachRemaining(out::add);return out;}
+    static List<String> expressions(Refs refs){List<String> out=new ArrayList<>();out.add("auto");
+        refs.expressions.keys().forEachRemaining(id->{if(PRO_ENABLED||!object(refs.expressions,id).optBoolean("pro"))out.add(id);});return out;}
     private void characters(){
         LinearLayout c=card(t("editeur.personnage"),0);small(c,t("persos.aide"),0);
         Map<String,View> cards=new LinkedHashMap<>();
         int width=(int)Math.min(960,a.getResources().getDisplayMetrics().widthPixels/u.density)-62,cols=Math.max(1,(width+10)/102);
+        JSONObject selection=a.refs.character(p.character);
+        String shown=!PRO_ENABLED&&selection!=null&&selection.optBoolean("pro")?"robot_lectura":p.character;
         LinearLayout row=null;int n=0;for(JSONObject d:a.refs.characters){
+            boolean paid=d.optBoolean("pro");if(paid&&!PRO_ENABLED)continue;
             if(n%cols==0){row=u.row();row.setGravity(Gravity.TOP);u.add(c,row,10);}else u.gap(row,10);
-            String id=d.optString("id"),name=d.optString("nom");boolean paid=d.optBoolean("pro"),locked=paid&&!pro;
+            String id=d.optString("id"),name=d.optString("nom");boolean locked=paid&&!pro;
             FrameLayout box=new FrameLayout(a);box.setMinimumHeight(u.d(120));LinearLayout v=u.col();u.pad(v,4,8);v.setGravity(Gravity.CENTER_HORIZONTAL);
             box.addView(v,u.fp(Ui.MATCH,Ui.WRAP,Gravity.TOP));
             try{v.addView(u.art(a.svg(d.optString("svg")),locked?.45f:1),u.lp(52,104));}catch(Exception e){a.log("personnages",e);}
             TextView label=u.text(name,12.8f,u.text,400);label.setGravity(Gravity.CENTER);u.add(v,label,4);
             if(paid){FrameLayout.LayoutParams lp=u.fp(Ui.WRAP,Ui.WRAP,Gravity.TOP|Gravity.RIGHT);lp.topMargin=u.d(6);lp.rightMargin=u.d(6);box.addView(u.badge("PRO",u.c("accent-2"),0xff1a0b33),lp);}
-            box.setContentDescription(name+(paid?" (Pro)":""));cards.put(id,box);markCharacter(box,id.equals(p.character));
+            box.setContentDescription(name+(paid?" (Pro)":""));cards.put(id,box);markCharacter(box,id.equals(shown));
             u.click(box,()->{if(locked){a.note(t("pro.requis.personnage","nom",name),"info");return;}
                 p.character=id;a.db.set("personnageId",id);cards.forEach((k,w)->markCharacter(w,k.equals(id)));});
             row.addView(box,new LinearLayout.LayoutParams(0,Ui.WRAP,1));n++;
@@ -152,7 +158,7 @@ final class Screens {
         if(row!=null&&n%cols!=0)for(int i=n%cols;i<cols;i++){u.gap(row,10);row.addView(new View(a),new LinearLayout.LayoutParams(0,1,1));}
         LinearLayout ec=card(t("persos.emotions"),14),list=u.col();
         check(ec,t("persos.emotions.auto"),p.emotions,b->{p.emotions=b;if(list.getVisibility()==View.VISIBLE)segments(list);});
-        small(ec,t(pro?"persos.emotions.aidePro":"persos.emotions.aide"),0);u.gap(ec,12);movements(ec);
+        small(ec,t(!PRO_ENABLED?"android.emotions.aide":pro?"persos.emotions.aidePro":"persos.emotions.aide"),0);u.gap(ec,12);movements(ec);
         if(p.text.trim().isEmpty()){small(ec,t("persos.sansTexte"),0);return;}
         List<Script.Segment> parts=p.recalc();TextView expand=u.text(t("editeur.expressions")+" ("+parts.size()+")",15,u.text,600);expand.setMinimumHeight(u.d(44));u.setIcon(expand,"chevron",14,u.text,6);
         list.setVisibility(View.GONE);u.click(expand,()->{boolean visible=list.getVisibility()!=View.VISIBLE;list.setVisibility(visible?View.VISIBLE:View.GONE);if(visible)segments(list);});
@@ -169,9 +175,11 @@ final class Screens {
             for(String id:ids.subList(1,ids.size()))names.add(t("expr."+id)+(!pro&&object(a.refs.expressions,id).optBoolean("pro")?" (Pro)":""));
             LinearLayout row=u.col();u.pad(row,8,6);row.setBackground(u.shape(u.bg,10,u.border,1));u.add(inner,row,6);
             TextView text=u.text(seg.text,14.4f,u.text,400);u.one(text);u.add(row,text,0);
-            String label=t("editeur.expressionDe","n",i+1);TextView b=selector(label,names,ids.indexOf(set),true,k->{});b.setContentDescription(label);
+            String label=t("editeur.expressionDe","n",i+1);
+            String active=!PRO_ENABLED&&!ids.contains(set)?m.playable(set):set;
+            TextView b=selector(label,names,ids.indexOf(active),true,k->{});b.setContentDescription(label);
             u.click(b,()->{LinearLayout sheet=a.sheet(label);for(int k=0;k<names.size();k++){
-                String id=ids.get(k),name=names.get(k);View v=u.choice(name,null,id.equals(seg.expression),false,()->{
+                String id=ids.get(k),name=names.get(k);View v=u.choice(name,null,id.equals(!PRO_ENABLED&&!ids.contains(seg.expression)?m.playable(seg.expression):seg.expression),false,()->{
                     seg.expression=id;put(p.segments.optJSONObject(index),"expression",id);b.setText(name);a.dismiss();});
                 u.enable(v,pro||!object(a.refs.expressions,id).optBoolean("pro"),.5f);u.add(sheet,v,4);
             }});u.add(row,b,8);
@@ -185,23 +193,26 @@ final class Screens {
         LinearLayout c=card(t("reglages.langue"),14);
         select(c,t("reglages.langue.choix"),List.of("Français","English"),a.db.locale().equals("en")?1:0,true,i->{a.db.set("langue",i==0?"fr":"en");refresh();});
         c=card(t("reglages.voix"),14);voicePanel(c);
-        c=card(t("voix.hd.titre"),14);small(c,t("voix.hd.aide"),0);a.hdPanel(c);
-        c=panel(body,t("reglages.terminal"),!pro,14);if(!pro)small(c,t("reglages.terminal.pro"),0);
+        c=card(t("voix.hd.titre"),14);small(c,t(PRO_ENABLED?"voix.hd.aide":"android.hd.aide"),0);a.hdPanel(c);
+        c=panel(body,t("reglages.terminal"),PRO_ENABLED&&!pro,14);if(PRO_ENABLED&&!pro)small(c,t("reglages.terminal.pro"),0);
         field(c,t("reglages.titreTerminal"),u.field(settings.optString("titreTerminal"),"",false,60,s->a.db.set("titreTerminal",s)),null);
         LinearLayout appearance=panel(c,t("reglages.themeApp"),false,0);small(appearance,t("reglages.themeApp.aide"),0);
         u.add(appearance,selector(t("reglages.themeApp"),THEME_LABELS,THEME_IDS.indexOf(settings.optString("themeApp")),true,i->{a.db.set("themeApp",THEME_IDS.get(i));refresh();}),10);
-        u.gap(c,10);List<String> ids=List.of("sombre","matrix","ambre","ocean"),names=List.of("Sombre","Matrix","Ambre","Océan"),fonts=List.of("JetBrains Mono","Système");
-        select(c,t("reglages.theme"),names,ids.indexOf(settings.optString("themeTerminal")),pro,i->{p.terminalTheme=ids.get(i);a.db.set("themeTerminal",p.terminalTheme);});
-        select(c,t("reglages.police"),fonts,fonts.indexOf(settings.optString("policeTerminal")),pro,i->{p.font=fonts.get(i);a.db.set("policeTerminal",p.font);});
+        u.gap(c,10);
+        if(PRO_ENABLED){
+            List<String> ids=List.of("sombre","matrix","ambre","ocean"),names=List.of("Sombre","Matrix","Ambre","Océan"),fonts=List.of("JetBrains Mono","Système");
+            select(c,t("reglages.theme"),names,ids.indexOf(settings.optString("themeTerminal")),pro,i->{p.terminalTheme=ids.get(i);a.db.set("themeTerminal",p.terminalTheme);});
+            select(c,t("reglages.police"),fonts,fonts.indexOf(settings.optString("policeTerminal")),pro,i->{p.font=fonts.get(i);a.db.set("policeTerminal",p.font);});
+        }
         slider(c,t("reglages.taille"),12,40,setting("tailleTexte",18),true,n->n+" px",n->{p.fontSize=n;a.db.set("tailleTexte",n);},null);
-        slider(c,t("reglages.vitesse"),5,120,setting("vitesseDefilement",28),pro,n->n+" "+t("reglages.cps"),n->{p.cps=n;a.db.set("vitesseDefilement",n);},t("reglages.vitesse.aide"));
+        if(PRO_ENABLED)slider(c,t("reglages.vitesse"),5,120,setting("vitesseDefilement",28),pro,n->n+" "+t("reglages.cps"),n->{p.cps=n;a.db.set("vitesseDefilement",n);},t("reglages.vitesse.aide"));
         colorField(c,t("reglages.fond"),p.background,s->p.background=s);movements(c);
         c=card(t("reglages.animations"),14);check(c,t("reglages.reduire"),settings.optBoolean("reduireAnimations"),b->a.db.set("reduireAnimations",b));
         check(c,t("reglages.presentation"),settings.optBoolean("modePresentation"),b->a.db.set("modePresentation",b));
         c=card(t("reglages.decor"),14);JSONObject decor=object(settings,"decor"),defaults=object(a.refs.defaults,"decor");
         for(String key:new String[]{"mur","sol","horizon","neon"})colorField(c,t("reglages.decor."+key),decor.optString(key,defaults.optString(key)),s->a.db.set("decor",put(decor,key,s)));
         small(c,t("reglages.decor.aide"),0);addButton(c,t("reglages.decor.reset"),null,false,()->{a.db.set("decor",merge(new JSONObject(),defaults));refresh();},12);
-        c=panel(body,t("reglages.mots"),true,14);custom(c);
+        if(PRO_ENABLED){c=panel(body,t("reglages.mots"),true,14);custom(c);}
         c=card(t("reglages.stockage"),14);storage(c);
         c=card(t("reglages.version"),14);para(c,"Lectura "+version()+" ("+build()+")",0);addButton(c,t("nav.apropos"),null,false,()->a.go("apropos"),12);
     }
@@ -252,6 +263,7 @@ final class Screens {
     private String version(){return a.refs.json("version.json").optString("version");}
     private String build(){return a.refs.json("version.json").optString("native","android");}
     private void license(){
+        if(!PRO_ENABLED)return;
         LinearLayout c=card(null,0),row=u.row();u.add(c,row,0);row.addView(u.text(t("pro.etat"),15,u.text,700));u.gap(row,10);
         row.addView(pro?u.badge("PRO",u.ok,0xff06250a):u.badge(t("pro.gratuit"),u.surface2,u.mutedText));
         if(pro){try{JSONObject o=parse(new String(java.util.Base64.getUrlDecoder().decode(settings.optString("licence").split("\\.")[0]),java.nio.charset.StandardCharsets.UTF_8));
@@ -276,7 +288,7 @@ final class Screens {
         small(c,a.db.locale().equals("en")?"An online system voice may send the text to its Android speech provider. Piper runs on the device once downloaded.":
             "Une voix système en ligne peut transmettre le texte à son fournisseur Android. Piper fonctionne sur l’appareil une fois téléchargé.",6);
         c=card(t("apropos.raccourcis"),14);String[] names={t("touche.espace"),"← →","P","S","R","M","F","E"},keys={"scene.lecture","aide.pm5","scene.presentation","scene.capture","scene.enregistrer","scene.muet","scene.pleinEcran","aide.expression"};
-        for(int i=0;i<names.length;i++){LinearLayout r=u.row();u.add(c,r,6);TextView k=u.text(names[i],13.6f,u.mutedText,400);k.setBackground(u.shape(u.surface2,6,0,0));u.pad(k,6,2);r.addView(k);u.gap(r,14);u.grow(r,u.p(t(keys[i])));}
+        for(int i=0;i<names.length;i++){if(!PRO_ENABLED&&names[i].equals("R"))continue;LinearLayout r=u.row();u.add(c,r,6);TextView k=u.text(names[i],13.6f,u.mutedText,400);k.setBackground(u.shape(u.surface2,6,0,0));u.pad(k,6,2);r.addView(k);u.gap(r,14);u.grow(r,u.p(t(keys[i])));}
         c=card(t("apropos.licences"),14);para(c,t("apropos.licences.texte"),0);for(String k:List.of("code","polices","voix"))para(c,"• "+t("apropos.lic."+k),4);
         if(Hd.supported())para(c,"• ONNX Runtime Android (Microsoft) · MIT",4);
         para(c,"• LAME / lamejs · LGPL",4);

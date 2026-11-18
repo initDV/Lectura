@@ -1,4 +1,6 @@
 import { writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { lipsFixture } from './lips.mjs';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { NOMS_PRO } from '../../src/modules/expressions.js';
 import { parseSubtitles, cuesToProject, toSrt, toVtt } from '../../src/modules/subtitles.js';
@@ -29,4 +31,7 @@ fixtures.licence = {
   public: publicKey.export({format:'jwk'}),
   key: `${payload.toString('base64url')}.${sign('sha256', payload, {key: privateKey, dsaEncoding: 'ieee-p1363'}).toString('base64url')}`,
 };
+const { data, wav } = lipsFixture();
+fixtures.lips = data;
 await writeFile(process.argv[2], JSON.stringify(fixtures));
+await writeFile(join(dirname(process.argv[2]), 'lips-reference.wav'), wav);

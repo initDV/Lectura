@@ -7,6 +7,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.view.KeyEvent;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.net.Uri;
@@ -27,6 +28,7 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -44,9 +46,10 @@ public final class DeviceChecks extends Instrumentation {
         Context ctx=getTargetContext(); Refs refs=new Refs(ctx);
         check("surfaces",()->surfaces(ctx));
         check("fixtures",()->refsAndModels(refs));
+        check("lips-reference",()->lipsReference(ctx,refs));
         check("audio-importe",()->imported(ctx));
         check("tts",()->tts(ctx));
-        check("enregistrement",()->recordFromScene(ctx));
+        check("pro",()->proSurfaces(ctx));
         for(String format:new String[]{"mp4","webm"})check(format,()->media(ctx,format));
         if("true".equals(args.getString("hd"))){
             check("piper",()->hd(refs));
@@ -136,11 +139,11 @@ public final class DeviceChecks extends Instrumentation {
                 require(a.project.speed==1.25f,"Vitesse 1.25x");});
             click(a,"Masquer le texte du terminal");main(()->require(a.stage.masked,"Masquage du terminal"));
             click(a,"Afficher le texte du terminal");main(()->require(!a.stage.masked,"Réaffichage du terminal"));
-            for(String[] route:new String[][]{{"Projets","projets"},{"Personnages","personnages"},{"Réglages","reglages"},{"Pro","pro"},{"À propos","apropos"}}){
+            for(String[] route:new String[][]{{"Projets","projets"},{"Personnages","personnages"},{"Réglages","reglages"},{"À propos","apropos"}}){
                 click(a,"Menu");click(a,route[0]);main(()->require(a.route.equals(route[1]),route[0]));
                 click(a,"Retour à la scène");
             }
-            return "API 31, installation, tutoriel, scène, menu, aperçu, pause/reprise/arrêt, vitesse, œil, cinq destinations";
+            return "API 31, installation, tutoriel, scène, menu, aperçu, pause/reprise/arrêt, vitesse, œil, quatre destinations de base";
         }finally{main(a::finish);}
     }
     private void waitFor(String message,java.util.function.BooleanSupplier condition,long millis)throws Exception {
@@ -156,8 +159,7 @@ public final class DeviceChecks extends Instrumentation {
             for(int i=0;i<8;i++){s.viseme=i%4;s.letter="aeiou".substring(i%5,i%5+1);s.tick(i*16);}
             s.svg.fit(c,0,0,200,330,true);
         }
-        frame.recycle();JSONObject fixture;
-        try(InputStream in=getContext().getAssets().open("fixtures.json")){fixture=Refs.parse(new String(Refs.read(in,1000000),StandardCharsets.UTF_8));}
+        frame.recycle();JSONObject fixture=fixtures();
         G2p g=new G2p(refs.json("g2p.json"));JSONArray tests=fixture.getJSONArray("phrases");
         for(int i=0;i<tests.length();i++){JSONArray row=tests.getJSONArray(i);String actual=g.phrase(row.getString(0));require(actual.equals(row.getString(1)),"G2P : "+row.getString(0)+" | "+actual+" != "+row.getString(1));}
         tests=fixture.getJSONArray("timeline");for(int i=0;i<tests.length();i++){
@@ -179,6 +181,125 @@ public final class DeviceChecks extends Instrumentation {
         require(!Library.verify(key.replaceFirst("^.","_"),"lectura-ci",pub).isEmpty(),"Licence altérée");
         return "43 rigs, "+pro+" expressions Pro, 8 cas G2P, 8 chronologies, SRT/VTT, projet v1 et licence P-256";
     }
+    private JSONObject fixtures()throws Exception{
+        try(InputStream in=getContext().getAssets().open("fixtures.json")){
+            return Refs.parse(new String(Refs.read(in,1000000),StandardCharsets.UTF_8));
+        }
+    }
+    private File assetFile(Context ctx,String name)throws Exception{
+        File target=File.createTempFile("fixture-",".wav",ctx.getCacheDir());
+        try(InputStream in=getContext().getAssets().open(name)){
+            Files.copy(in,target.toPath(),StandardCopyOption.REPLACE_EXISTING);
+        }catch(Exception e){target.delete();throw e;}
+        return target;
+    }
+    private String lipsReference(Context ctx,Refs refs)throws Exception {
+        JSONObject f=fixtures().getJSONObject("lips");String text=f.getString("text");
+        JSONArray speech=f.getJSONArray("speech"),audio=f.getJSONArray("audio"),paths=f.getJSONArray("paths");
+        int speechFrames=0;
+        for(int i=0;i<speech.length();i++){
+            JSONArray trace=speech.getJSONArray(i);speechFrames+=trace.length();
+            main(()->{
+                long[] clock={0};Talk.Listener[] events={null};float rate=(float)f.getDouble("speed");int cps=f.getInt("cps");
+                Talk.Queue q=new Talk.Queue((words,speed,pitch,vol,l)->{require(speed==rate,"Vitesse TTS");events[0]=l;},
+                    ()->{},()->clock[0],text,cps,rate,1,()->{},code->{throw new AssertionError(code);});
+                Script.Timeline timeline=new Script.Timeline(text,Script.timing(text,Script.estimate(text,rate,cps),(double)Script.VOICE_CPS/cps));
+                try {
+                    for(int j=0;j<trace.length();j++){
+                        JSONArray r=trace.getJSONArray(j);long t=clock[0]=r.getLong(0);
+                        switch(r.getString(1)){
+                            case "play":q.play();break;case "pause":q.pause();break;
+                            case "start":events[0].start();break;case "end":events[0].done();break;case "range":events[0].range(r.getInt(2));break;
+                            default:break;
+                        }
+                        double pos=q.position();Script.Segment part=timeline.segment((int)pos);
+                        int level=q.playing&&part!=null&&Script.type(part.text)==Script.SPOKEN?Reading.speechViseme(t,q.speaking(),text,pos):0;
+                        require(Math.abs(pos-r.getDouble(3))<1e-9,"Position TTS à "+t+" ms : "+pos+" / "+r.getDouble(3));
+                        require(level==r.getInt(4)&&Reading.letterAt(text,pos).equals(r.getString(5)),"Bouche TTS à "+t+" ms");
+                    }
+                }finally{q.stop();}
+            });
+        }
+        File input=assetFile(ctx,"lips-reference.wav");
+        try(Pcm pcm=Pcm.decode(input,ctx.getCacheDir())){
+            Lip lip=new Lip(pcm);Script.Timeline timeline=new Script.Timeline(text,Script.timing(text,pcm.duration(),0));
+            for(int i=0;i<audio.length();i++){
+                JSONArray r=audio.getJSONArray(i);double t=r.getDouble(0);int pos=timeline.charAt(t);
+                Script.Segment part=timeline.segment(pos);int level=part!=null&&Script.type(part.text)==Script.SPOKEN?lip.read(t,false):0;
+                require(pos==r.getInt(1)&&level==r.getInt(2),"Fenêtre PCM à "+t+" ms : "+pos+"/"+level+" ; attendu "+r);
+            }
+        }finally{input.delete();}
+        String[] nodes={"levre-creux","levre-haut","levre-bas","bouche-dents","bouche-langue"};
+        String[] keys={"interieur","levreHaut","levreBas","dents","langue"};
+        for(int i=0;i<paths.length();i++){
+            JSONObject p=paths.getJSONObject(i),expected=p.getJSONObject("paths");Sprite s=new Sprite(refs,refs.character("wend"));
+            s.expression(p.getString("expr"),1,"",0);s.viseme=p.getInt("level");s.letter=p.getString("letter");s.tick(16);
+            for(int j=0;j<nodes.length;j++){
+                Svg.Node node=s.svg.get(nodes[j]);String d=expected.getString(keys[j]);
+                require(node.alpha==(d.isEmpty()?0:1),"Visibilité "+nodes[j]);
+                if(!d.isEmpty())require(Arrays.equals(node.current.approximate(.04f),Svg.parsePath(d).approximate(.04f)),"Tracé "+nodes[j]+" (cas "+i+")");
+            }
+        }
+        return speechFrames+" images TTS (callbacks rejoués, avec/sans limites de mots), "+audio.length()+" fenêtres du même WAV et "+paths.length()+" formes Wend : positions/niveaux/tracés de référence à 1,25×";
+    }
+    private static void absent(MainActivity a,View page,String... keys){
+        for(String key:keys)require(named(page,a.t(key))==null,"Contrôle encore visible : "+key);
+    }
+    private String proSurfaces(Context ctx)throws Exception {
+        MainActivity a=open(ctx);File input=tone(ctx,6);
+        try {
+            if(Features.PRO_ENABLED){
+                main(()->{a.dismiss();require(!a.hasPro(),"Test lancé avec une licence");a.record();require(!a.exports.active(),"Enregistrement sans licence");
+                    a.menu();require(named(a.modal,a.t("nav.pro"))!=null,"Route Pro non restaurée");});
+                return "commutateur actif : route restaurée et licence exigée pour enregistrer";
+            }
+            String[] hidden={"nav.pro","pro.titre","menu.mesVideos","scene.enregistrer","scene.arreterEnregistrement","scene.format",
+                "editeur.importerSrt","menu.exporterSrt","menu.exporterVtt"};
+            main(()->{
+                a.dismiss();Project stored=new Project(a.db.settings);stored.character="hacker";stored.terminalTheme="matrix";stored.font="Système";stored.cps=90;
+                Script.importSubtitles("WEBVTT\n\n00:00:01.500 --> 00:00:02.000\nBonjour Lectura.\n",stored);
+                Refs.put(stored.segments.optJSONObject(0),"expression","colere");a.open(Project.fromJson(stored.json()));
+                require(!a.hasPro()&&!a.stage.sprite.rich&&!a.stage.pro,"Activation Pro / spectre / filigrane");
+                require(a.stage.sprite.svg.root.attr("aria-label").equals("Robot Lectura"),"Personnage importé non ramené à la base");
+                require(a.stage.term.optString("nom").equals("Sombre")&&a.stage.termFont.equals(a.ui.mono(400))&&a.project.typingCps()==28,"Réglages de terminal importés encore actifs");
+                require(!a.project.usesSubtitleTiming()&&a.project.subtitles&&a.project.recalc().get(0).from==1500,"Timing importé appliqué ou perdu");
+                require(a.project.character.equals("hacker")&&a.project.terminalTheme.equals("matrix")&&a.project.cps==90,"Métadonnées Pro perdues");
+                a.menu();absent(a,a.modal,hidden);require(named(a.modal,a.t("scene.capture"))!=null,"PNG masqué");a.dismiss();
+                a.go("pro");require(a.route.equals("scene"),"Route Pro accessible");a.movies();require(a.modal==null,"Mes vidéos accessible directement");
+                a.go("personnages");absent(a,a.content,"nav.pro","persos.emotions.aide");
+                int base=0,paid=0;
+                for(JSONObject d:a.refs.characters){String name=d.optString("nom");if(d.optBoolean("pro")){paid++;require(named(a.content,name)==null&&named(a.content,name+" (Pro)")==null,"Personnage visible : "+name);}
+                    else{base++;require(action(a.content,name)!=null,"Personnage de base masqué : "+name);}}
+                require(base==32&&paid==11,"Inventaire de 32 personnages de base et 11 Pro");
+                require(Screens.expressions(a.refs).size()==5,"Sélecteur d'expressions");
+            });
+            click(a,a.t("editeur.expressions")+" (1)");click(a,a.t("editeur.expressionDe","n",1));
+            main(()->{
+                for(var i=a.refs.expressions.keys();i.hasNext();){String id=i.next();if(Refs.object(a.refs.expressions,id).optBoolean("pro")){
+                    require(named(a.modal,a.t("expr."+id))==null&&named(a.modal,a.t("expr."+id)+" (Pro)")==null,"Expression visible : "+id);}}
+                a.dismiss();a.go("reglages");absent(a,a.content,"nav.pro","reglages.mots","reglages.terminal.pro","voix.hd.aide");
+                require(named(a.content,a.t("voix.hd.titre"))!=null,"Réglages HD masqués");
+                JSONObject custom=Refs.put(new JSONObject(),"ci",Refs.put(new JSONObject(),"mots",new JSONArray().put("lecturaciunique")));
+                Script.Keywords words=new Script.Keywords(a.refs,"fr",true,custom);
+                require(words.find("GDScript lecturaciunique").isEmpty(),"Dictionnaires payants utilisés");
+                Mood m=new Mood(a.refs,"fr",words,true,true);
+                for(var i=a.refs.expressions.keys();i.hasNext();){String id=i.next();if(Refs.object(a.refs.expressions,id).optBoolean("pro"))require(!m.playable(id).equals(id),"Pose Pro appliquée : "+id);}
+                a.go("apropos");absent(a,a.content,"nav.pro","scene.enregistrer");require(named(a.content,"R")==null,"Raccourci R annoncé");
+                a.go("scene");a.importAudio(Uri.fromFile(input),"tonalité.wav");
+            });
+            waitFor("Import du WAV avec projet premium",()->a.project.fileAudio,10000);
+            main(()->{a.muted=true;a.launch(false);});
+            waitFor("Lecture du projet premium en mode de base",()->a.reading!=null&&a.reading.playing&&a.reading.time()>300,10000);
+            main(()->{
+                Script.Segment part=a.reading.timeline.parts.get(0);Mood.Pose pose=a.mood.pose(part,part.end);
+                require(part.from==0&&pose.expr.equals("concentre")&&pose.mix.isEmpty(),"Dates ou expressions Pro appliquées à la lecture");
+                a.content.requestFocus();a.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_R));a.record();a.exports.toggle();
+                require(!a.exports.busy()&&!a.stage.recording&&a.modal==null,"Enregistrement contournable depuis la scène");
+                a.stop();
+            });
+            return "masqués : 11 personnages, 34 expressions, badges/menus, licence, terminal Pro, SRT/VTT, vidéo/R et Mes vidéos ; données conservées, HD et PNG accessibles";
+        }finally{input.delete();main(()->{a.db.audio(a.project).delete();a.finish();});}
+    }
     private File tone(Context ctx,int seconds)throws Exception {
         File dir=ctx.getExternalFilesDir("verification");require(dir!=null,"Stockage de test");
         File wav=File.createTempFile("tone-",".wav",dir);int rate=48000,frames=rate*seconds;
@@ -187,33 +308,67 @@ public final class DeviceChecks extends Instrumentation {
         return wav;
     }
     private MainActivity open(Context ctx){return (MainActivity)startActivitySync(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
+    // Observe the values from the actual drawn frame. t is a playback-clock sample, not an audio timestamp.
+    private JSONArray sampleReading(MainActivity a,File dir,String name,long timeout)throws Exception {
+        waitFor("Démarrage de la lecture : "+name,()->a.reading!=null&&a.reading.playing,10000);
+        JSONArray frames=new JSONArray();boolean[] end={false};double[] duration={0};
+        long start=android.os.SystemClock.uptimeMillis();
+        while(!end[0]&&android.os.SystemClock.uptimeMillis()-start<timeout){
+            main(()->{
+                Reading r=a.reading;require(r!=null&&(r.playing||r.ended),"Lecture interrompue : "+name);
+                Sprite s=a.stage.sprite;duration[0]=r.duration;
+                frames.put(new JSONArray().put(android.os.SystemClock.uptimeMillis()-start).put(r.terminal.shown).put(s.viseme).put(s.letter));
+                end[0]=r.ended;
+            });
+            if(!end[0])Thread.sleep(24);
+        }
+        require(end[0],"Lecture incomplète : "+name);
+        Library.writeJson(new File(dir,"android-lips-"+name+".json"),new JSONObject().put("durationMs",duration[0]).put("frames",frames));
+        int open=0;for(int i=0;i<frames.length();i++)if(frames.getJSONArray(i).getInt(2)>0)open++;
+        require(open>0&&frames.getJSONArray(frames.length()-1).getInt(1)>0,"Aucune animation de bouche ou de terminal : "+name);
+        return frames;
+    }
     private String imported(Context ctx)throws Exception{
-        MainActivity a=open(ctx);File input=tone(ctx,6);
+        MainActivity a=open(ctx);boolean spoken=Arrays.asList(getContext().getAssets().list("")).contains("lips-spoken.wav");
+        String name=spoken?"lips-spoken.wav":"lips-reference.wav";File input=assetFile(ctx,name),dir=ctx.getExternalFilesDir("verification");
+        var test=fixtures().getJSONObject("lips");String text=test.getString("text");float speed=(float)test.getDouble("speed");
         try{
-            main(()->{a.dismiss();a.open(new Project(a.db.settings));a.scene.edit.setText("Bonjour, ceci est une leçon.");a.importAudio(Uri.fromFile(input),"tonalité.wav");});
+            main(()->{a.dismiss();Project p=new Project(a.db.settings);p.speed=speed;p.text=text;a.open(p);a.importAudio(Uri.fromFile(input),name);});
             waitFor("Import audio non terminé",()->a.project.fileAudio&&a.db.audio(a.project).isFile(),10000);
             main(()->{a.muted=true;a.launch(false);});
-            waitFor("Lecture synchronisée du WAV",()->a.reading!=null&&a.reading.playing&&a.reading.time()>350&&a.reading.terminal.shown>0,10000);
+            JSONArray frames=sampleReading(a,dir,"wav",18000);
             main(()->{
-                require(a.reading.pcm!=null&&a.reading.duration>=5900,"Piste fichier perdue");
-                require(a.reading.viseme(a.reading.time(),700,true)>0,"Lip-sync audio importé");
-                a.reading.pause();a.playState();require(!a.reading.playing,"Pause WAV");
-                a.seek(1500);a.project.speed=1.25f;a.adjustRate();a.startPlaying();
+                require(a.reading.pcm!=null&&a.reading.terminal.shown==text.length()&&a.reading.rate==speed,"Lecture WAV à la vitesse prévue");
+                a.startPlaying();
             });
-            waitFor("Reprise du fichier",()->a.reading!=null&&a.reading.playing&&a.reading.time()>1700,10000);
-            main(a::stop);return "WAV copié et décodé via le chemin d'import, lecture, pause, avance, vitesse et lip-sync sous muet";
+            waitFor("Redémarrage du WAV",()->a.reading.playing&&a.reading.time()>200,6000);
+            main(()->{a.reading.pause();a.playState();require(!a.reading.playing,"Pause WAV");a.seek(1000);a.startPlaying();});
+            waitFor("Reprise après avance",()->a.reading.playing&&a.reading.time()>1400,6000);
+            main(a::stop);
+            return name+", texte et vitesse 1,25× communs à Pages, "+frames.length()+" observations ; pause, avance, reprise, animation sous muet";
         }finally{input.delete();main(()->{a.db.audio(a.project).delete();a.finish();});}
     }
     private String tts(Context ctx)throws Exception{
         MainActivity a=open(ctx);
         try{
-            waitFor("Initialisation TextToSpeech",()->a.talk.ready||a.talk.failure,7000);
+            waitFor("Initialisation TextToSpeech",()->a.talk.ready||a.talk.failure,10000);
             AtomicReference<String> voice=new AtomicReference<>();
             main(()->{var v=a.talk.choose("fr","");if(v!=null&&!v.isNetworkConnectionRequired())voice.set(v.getName());});
-            if(voice.get()==null)return "hors test de lecture : aucune voix française locale exploitable sur cette image";
-            main(()->{a.dismiss();a.open(new Project(a.db.settings));a.selectVoice("webspeech",voice.get());a.scene.edit.setText("Bonjour.\n$ echo test\nLectura lit un texte.");a.launch(false);});
-            waitFor("TextToSpeech n'a pas terminé la phrase et la commande",()->a.reading!=null&&a.reading.ended,17000);
-            return "voix française locale, lecture jusqu'au bout avec une commande non prononcée";
+            if(voice.get()==null){
+                require(!"true".equals(args.getString("espeak")),"Moteur eSpeak NG installé mais aucune voix française locale");
+                return "hors test de lecture : aucune voix française locale exploitable sur cette image";
+            }
+            var test=fixtures().getJSONObject("lips");String text=test.getString("text");float speed=(float)test.getDouble("speed");
+            main(()->{a.dismiss();Project p=new Project(a.db.settings);p.speed=speed;p.text=text;a.open(p);
+                a.selectVoice("webspeech",voice.get());a.launch(false);});
+            JSONArray frames=sampleReading(a,ctx.getExternalFilesDir("verification"),"tts",20000);
+            boolean command=false;
+            for(int i=0,start=text.indexOf("$ "),end=text.indexOf('\n',start);i<frames.length();i++){
+                var frame=frames.getJSONArray(i);int chars=frame.getInt(1);
+                if(chars>=start&&chars<=end){command=true;require(frame.getInt(2)==0,"Visème pendant la commande");}
+            }
+            require(command,"La commande silencieuse n'a pas été affichée");
+            return "voix française locale "+voice.get()+", même texte et vitesse 1,25×, "+frames.length()+" observations jusqu'à la fin (commande muette)";
         }finally{main(a::finish);}
     }
     private void shareGrant(MainActivity a,File media)throws Exception {
@@ -231,57 +386,6 @@ public final class DeviceChecks extends Instrumentation {
             &&received.getInt("uid")!=Process.myUid()&&SharedMedia.mime(SharedMedia.extension(name)).equals(received.getString("mime")),
             "Partage interapplications : "+name+" ; "+received);
         waitFor("Retour depuis le récepteur",()->a.isForeground,6000);
-    }
-    private String recordFromScene(Context ctx)throws Exception {
-        MainActivity a=open(ctx);File wave=tone(ctx,6);File dir=wave.getParentFile();String title="verification-lectura-"+System.nanoTime();
-        try{
-            main(()->{
-                a.dismiss();a.record();require(!a.exports.active(),"Enregistrement gratuit autorisé");
-                // Exercise the Pro UI in the signed test process; never write a licence or change the production key.
-                a.pro=true;a.open(new Project(a.db.settings));a.db.set("formatVideo","9:16");a.project.title=title;
-                a.scene.edit.setText("Bonjour, ceci est une leçon. Deuxième phrase. Dernière phrase.");a.importAudio(Uri.fromFile(wave),"tonalité.wav");
-            });
-            waitFor("Import pour enregistrement",()->a.project.fileAudio,10000);
-            main(()->{a.muted=true;a.launch(false);});
-            waitFor("Lecture initiale",()->a.reading!=null&&a.reading.pcm!=null&&a.reading.time()>300,10000);
-            click(a,"Menu");click(a,"Enregistrer la vidéo");
-            waitFor("Démarrage enregistrement de la scène",()->a.exports.capturing()&&a.reading.playing,15000);
-            Thread.sleep(350);main(()->{a.project.speed=1.25f;a.adjustRate();});
-            Thread.sleep(1200);click(a,"Menu");click(a,"Arrêter l’enregistrement");
-            waitFor("Dialogue Télécharger",()->a.modal!=null&&action(a.modal,"Télécharger")!=null,15000);
-            click(a,"Télécharger");
-            Movies lib=new Movies(ctx);Movies.Entry movie=null;
-            for(int i=0;i<100&&movie==null;i++){
-                for(Movies.Entry e:lib.list())if(e.title.equals(title)){movie=e;break;}
-                if(movie==null)Thread.sleep(100);
-            }
-            require(movie!=null,"Enregistrement absent de Mes vidéos");
-            try {
-                require(movie.format.equals("mp4"),"Sortie MP4 portrait attendue sur cet émulateur");
-                MediaExport.verify(movie.file,new MediaExport.Format(MediaFormat.MIMETYPE_VIDEO_AVC,false),720,1280,true);
-                try(Pcm decoded=Pcm.decode(movie.file,dir)){
-                    short[] audio=new short[4096];int n=decoded.read(decoded.rate/2,audio,audio.length),peak=0;
-                    for(int i=0;i<n;i++)peak=Math.max(peak,Math.abs((int)audio[i]));require(peak>5000,"L'export de scène ignore le son d'écoute coupé");
-                }
-                Files.copy(movie.file.toPath(),new File(dir,"lectura-scene-portrait.mp4").toPath(),StandardCopyOption.REPLACE_EXISTING);
-                click(a,"Menu");click(a,"Mes vidéos");click(a,"Lire");
-                waitFor("Lecture depuis Mes vidéos",()->{
-                    android.widget.VideoView video=video(a.modal);return video!=null&&video.isPlaying();
-                },10000);
-                main(a::dismiss);
-            }finally{lib.delete(movie);}
-            return "Menu Pro : enregistrer/arrêter, MP4 portrait avec son malgré le muet, télécharger, conserver et lire dans Mes vidéos";
-        }finally{
-            wave.delete();main(()->{a.db.audio(a.project).delete();a.finish();});
-            var catalog=android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY);
-            ctx.getContentResolver().delete(catalog,android.provider.MediaStore.MediaColumns.DISPLAY_NAME+" = ?",new String[]{title+".mp4"});
-        }
-    }
-    private static android.widget.VideoView video(View root){
-        if(root instanceof android.widget.VideoView)return (android.widget.VideoView)root;
-        if(root instanceof ViewGroup){ViewGroup group=(ViewGroup)root;for(int i=0;i<group.getChildCount();i++){
-            android.widget.VideoView child=video(group.getChildAt(i));if(child!=null)return child;
-        }}return null;
     }
     private String media(Context ctx,String ext)throws Exception {
         File wav=tone(ctx,2),dir=wav.getParentFile();

@@ -100,9 +100,13 @@ final class Lip {
     Lip(Pcm p){pcm=p;samples=new short[N*p.channels];for(int i=0;i<N;i++)window[i]=.42-.5*Math.cos(2*Math.PI*i/N)+.08*Math.cos(4*Math.PI*i/N);}
     void reset(){env=0;level=0;}
     int read(double ms,boolean pro){
-        int n=0,offset=(int)Math.round(ms*pcm.rate/1000);try{n=pcm.read(Math.max(0,offset-N),samples,N);}catch(IOException ignored){}
+        // AnalyserNode reads the latest samples, never the samples after the current playhead.
+        long end=Math.min(pcm.frames,Math.max(0,(long)(ms*pcm.rate/1000))),start=Math.max(0,end-N);
+        int count=(int)(end-start),prefix=N-count,n=0;
+        try{n=pcm.read(start,samples,count);}catch(IOException ignored){}
         double sum=0;for(int i=0;i<N;i++){
-            double a=i>=n?0:pcm.channels==1?samples[i]/32768.:(samples[i*2]+samples[i*2+1])/65536.;
+            int sample=i-prefix;
+            double a=sample<0||sample>=n?0:pcm.channels==1?samples[sample]/32768.:(samples[sample*2]+samples[sample*2+1])/65536.;
             double x=Math.max(-128,Math.min(127,Math.floor(a*128)))/128;sum+=x*x;
             if(pro){int j=Integer.reverse(i)>>>22;real[j]=a*window[i];imag[j]=0;}
         }

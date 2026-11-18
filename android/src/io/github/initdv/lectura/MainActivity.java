@@ -40,6 +40,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import static io.github.initdv.lectura.Refs.*;
+import static io.github.initdv.lectura.Features.PRO_ENABLED;
 
 public final class MainActivity extends Activity {
     Refs refs;Ui ui;Library db;Project project;
@@ -47,7 +48,8 @@ public final class MainActivity extends Activity {
     LinearLayout toasts;
     ScenePage scene;Stage stage;Screens screens;Reading reading;Mood mood;Talk talk;Hd hd;ExportUi exports;
     String route="scene",forced="",sig="",lastDraft="";
-    boolean pro,muted,preparing,stopped=true,isForeground,fullscreen;
+    private boolean licensed;
+    boolean muted,preparing,stopped=true,isForeground,fullscreen;
     final Handler handler=new Handler(Looper.getMainLooper());
     final ExecutorService queue=Executors.newSingleThreadExecutor();
     final ArrayDeque<String> journal=new ArrayDeque<>();
@@ -83,7 +85,8 @@ public final class MainActivity extends Activity {
         if(modal!=null){Runnable r=backModal;dismiss();if(r!=null)r.run();}
         else if(stage!=null&&stage.presenting)presentation(false);else if(fullscreen)fullscreen();else if(!route.equals("scene"))go("scene");else super.onBackPressed();
     }
-    void refreshLicense(){String key=db.settings.optString("licence");pro=!key.isEmpty()&&Library.verify(key,db.settings.optString("idInstallation"),refs.json("license-key.json")).isEmpty();}
+    void refreshLicense(){String key=db.settings.optString("licence");licensed=PRO_ENABLED&&!key.isEmpty()&&Library.verify(key,db.settings.optString("idInstallation"),refs.json("license-key.json")).isEmpty();}
+    boolean hasPro(){return PRO_ENABLED&&licensed;}
     boolean reduced(){return !android.animation.ValueAnimator.areAnimatorsEnabled();}
     boolean online(){ConnectivityManager cm=getSystemService(ConnectivityManager.class);return cm.getActiveNetwork()!=null;}
     float volume(){return (float)db.settings.optDouble("volume",1);}
@@ -91,6 +94,7 @@ public final class MainActivity extends Activity {
     String t(String key,Object... data){return refs.label(db.locale(),key,data);}
     void go(String name){draft();render(name);}
     void render(String name){
+        if(!PRO_ENABLED&&name.equals("pro"))name="scene";
         dismiss();hideKeyboard();if(fullscreen&&!name.equals("scene"))fullscreen();disposeScene();ui.theme(db.settings.optString("themeApp","actuel"));
         root.setBackgroundColor(ui.bg);content.removeAllViews();route=name;
         int light=android.graphics.Color.luminance(ui.bg)>.5?WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS:0;
@@ -98,7 +102,11 @@ public final class MainActivity extends Activity {
         if(bars!=null)bars.setSystemBarsAppearance(light,WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
         if(name.equals("scene")){
             JSONObject d=refs.character(project.character);
-            if(d==null||!pro&&d.optBoolean("pro")){note(t(d==null?"scene.persoIntrouvable":"scene.persoPro","id",project.character,"nom",d==null?"":d.optString("nom")),"warn");d=refs.character("robot_lectura");}
+            if(d==null||!hasPro()&&d.optBoolean("pro")){
+                if(d==null)note(t("scene.persoIntrouvable","id",project.character),"warn");
+                else if(PRO_ENABLED)note(t("scene.persoPro","nom",d.optString("nom")),"warn");
+                d=refs.character("robot_lectura");
+            }
             stage=new Stage(this,d);scene=new ScenePage(this,stage);content.addView(scene.scroll,ui.fp(Ui.MATCH,Ui.MATCH,Gravity.TOP));
             if(db.settings.optBoolean("modePresentation"))presentation(true);
         }else renderRoute(name);
@@ -162,7 +170,7 @@ public final class MainActivity extends Activity {
     void copy(String desc,String text){getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText(desc,text));note(t("commun.copie"),"ok");}
     void hideKeyboard(){if(getCurrentFocus()!=null)getSystemService(InputMethodManager.class).hideSoftInputFromWindow(getCurrentFocus().getWindowToken(),0);}
 
-    private String signature(boolean silent){return Script.clean(project.text)+"\u0001"+silent+"|"+project.fileAudio+"|"+project.fileName+"|"+project.engine+"|"+project.voice+"|"+(project.engine.equals("piper")?project.speed:0)+"|"+project.cps;}
+    private String signature(boolean silent){return Script.clean(project.text)+"\u0001"+silent+"|"+project.fileAudio+"|"+project.fileName+"|"+project.engine+"|"+project.voice+"|"+(project.engine.equals("piper")?project.speed:0)+"|"+project.typingCps();}
     void launch(boolean silent){
         if(scene==null||preparing)return;if(reading!=null&&reading.playing&&!silent){reading.pause();playState();return;}
         String text=Script.clean(project.text);if(text.trim().isEmpty()){note(t("scene.err.texteVide"),"warn");scene.edit.requestFocus();return;}
@@ -173,26 +181,27 @@ public final class MainActivity extends Activity {
             if(stopped||reading.ended)reading.seek(0);startPlaying();return;}
         if(!silent&&!project.fileAudio&&!project.engine.equals("piper")&&!talk.ready&&!talk.failure){note(t("scene.prep.ressources"),"info");return;}
         cancelPrewarm();hideKeyboard();content.requestFocus();if(reading!=null){reading.close();reading=null;}stopped=true;preparing=true;playState();
-        int ticket=++generation;Project cfg=Project.fromJson(project.json());String lang=db.locale();boolean hasPro=pro;
+        int ticket=++generation;Project cfg=Project.fromJson(project.json());String lang=db.locale();boolean hasPro=hasPro();
         JSONObject personal=object(db.settings,"motsPerso");Voice v=!silent&&!cfg.fileAudio&&!cfg.engine.equals("piper")?talk.choose(lang,cfg.voice):null;
         boolean localReady=talk.ready;File audio=db.audio(project),cache=getCacheDir();
         LinearLayout loading=sceneOverlay(t("scene.prep.titre"));TextView loadingText=ui.small(t("scene.prep.ressources"));ui.add(loading,loadingText,5);
         android.widget.ProgressBar bar=new android.widget.ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);bar.setMax(1000);ui.add(loading,bar,12);
         preparation=queue.submit(()->{
             Pcm decoded=null;boolean delivered=false;try{
+                int cps=cfg.typingCps();
                 Script.Keywords words=new Script.Keywords(refs,lang,hasPro,personal);List<Script.Segment> segments;float base=1;
-                if(silent)segments=Script.timing(text,text.length()*1000./cfg.cps,1);
+                if(silent)segments=Script.timing(text,text.length()*1000./cps,1);
                 else if(cfg.fileAudio){if(!audio.isFile())throw new IOException(t("scene.err.sansAudio"));
-                    decoded=Pcm.decode(audio,cache);segments=cfg.subtitles?Script.locate(text,cfg.segments,true):null;
+                    decoded=Pcm.decode(audio,cache);segments=cfg.usesSubtitleTiming()?Script.locate(text,cfg.segments,true):null;
                     if(segments==null)segments=Script.timing(text,decoded.duration(),0);
                 }else if(cfg.engine.equals("piper")){
                     if(text.length()>12000)throw new IOException(t("voix.hd.err.tropLong","max",12000,"n",text.length()));
                     if(!hd.installed(hd.voice(cfg.voice)))throw new IOException(t("voix.hd.err.manquant"));
-                    Hd.Synthesis syn=hd.synth(text,cfg.voice,cfg.speed,cfg.cps,(n,total)->handler.post(()->{
+                    Hd.Synthesis syn=hd.synth(text,cfg.voice,cfg.speed,cps,(n,total)->handler.post(()->{
                         loadingText.setText(t("voix.hd.synthesePhrase","i",Math.min(n+1,total),"n",total));bar.setProgress((int)(1000*n/Math.max(1,total)));}));
                     decoded=syn.pcm;segments=syn.segments;base=cfg.speed;
                 }
-                else {if(v==null)throw new IOException(t(localReady?"voix.err.aucune":"voix.err.absente"));base=cfg.speed;segments=Script.timing(text,Script.estimate(text,cfg.speed,cfg.cps),14./cfg.cps);}
+                else {if(v==null)throw new IOException(t(localReady?"voix.err.aucune":"voix.err.absente"));base=cfg.speed;segments=Script.timing(text,Script.estimate(text,cfg.speed,cps),(double)Script.VOICE_CPS/cps);}
                 Script.reportExpressions(segments,cfg.segments);if(segments.isEmpty())throw new IOException(t("scene.err.texteVide"));
                 Mood m=new Mood(refs,lang,words,hasPro,cfg.emotions);Pcm pcm=decoded;final float baseRate=base;final List<Script.Segment> parts=segments;
                 handler.post(()->{if(generation!=ticket||scene==null){if(pcm!=null)pcm.close();return;}try{
@@ -225,7 +234,7 @@ public final class MainActivity extends Activity {
     void readingFinished(){stopped=true;playState();exports.naturalEnd();}
     void playState(){exports.mark(false);if(scene!=null)scene.update();if(reading!=null&&reading.playing)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}
     void seek(int ms){if(reading==null)return;double now=reading.time();if(reading.ended)stopped=false;reading.seek(now+ms);playState();exports.mark(true);}
-    void nextExpression(){List<String> ids=new ArrayList<>();ids.add("");refs.expressions.keys().forEachRemaining(id->{if(!id.equals("neutre")&&(pro||!object(refs.expressions,id).optBoolean("pro")))ids.add(id);});
+    void nextExpression(){List<String> ids=new ArrayList<>();ids.add("");refs.expressions.keys().forEachRemaining(id->{if(!id.equals("neutre")&&(hasPro()||!object(refs.expressions,id).optBoolean("pro")))ids.add(id);});
         forced=ids.get((ids.indexOf(forced)+1)%ids.size());note(t("scene.expression")+" : "+t("expr."+(forced.isEmpty()?"auto":forced)),"info",1800);}
     @Override public boolean dispatchKeyEvent(KeyEvent e){
         if(e.getAction()==KeyEvent.ACTION_DOWN&&e.getKeyCode()==KeyEvent.KEYCODE_ESCAPE&&modal!=null){onBackPressed();return true;}
@@ -236,7 +245,7 @@ public final class MainActivity extends Activity {
                 case KeyEvent.KEYCODE_P:presentation(!stage.presenting);return true;case KeyEvent.KEYCODE_M:muted=!muted;adjustVolume();return true;
                 case KeyEvent.KEYCODE_F:fullscreen();return true;case KeyEvent.KEYCODE_E:nextExpression();return true;
                 case KeyEvent.KEYCODE_ESCAPE:presentation(false);return true;
-                case KeyEvent.KEYCODE_S:capturePng();return true;case KeyEvent.KEYCODE_R:record();return true;
+                case KeyEvent.KEYCODE_S:capturePng();return true;case KeyEvent.KEYCODE_R:if(PRO_ENABLED){record();return true;}break;
                 default:break;}
         }return super.dispatchKeyEvent(e);
     }
@@ -282,7 +291,7 @@ public final class MainActivity extends Activity {
         android.graphics.Bitmap b=android.graphics.Bitmap.createBitmap(w,h,android.graphics.Bitmap.Config.ARGB_8888);stage.exportDraw(new android.graphics.Canvas(b),w,h,true,0);
         String name=project.base()+"-"+Instant.now().toString().substring(0,19).replaceAll("[:T]","-")+".png";
         createFile("image/png",name,uri->{try(java.io.OutputStream output=getContentResolver().openOutputStream(uri,"wt")){if(output==null||!b.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output))throw new IOException("Capture impossible.");note(t("scene.captureOk"),"ok");}catch(Exception e){report("capture",e);}finally{b.recycle();}});}
-    void record(){exports.toggle();}
+    void record(){if(PRO_ENABLED)exports.toggle();}
     void recordFrame(double now){exports.frame(now);}
     void renderRoute(String name){screens=new Screens(this,name);}
     List<JSONObject> installedHd(){return hd.installed();}
@@ -314,17 +323,24 @@ public final class MainActivity extends Activity {
         choice(r,t("editeur.importerTexte"),"upload",false,false,()->{dismiss();pick("text/*",uri->{try{project.text=fileText(uri,2_000_000).replaceAll("\\r\\n?","\n").trim();if(project.title.isEmpty())project.title=fileName(uri).replaceFirst("\\.[^.]+$", "");
             project.recalc();scene.edit.setText(project.text);}catch(Exception e){report("import",e);}});});
         choice(r,t("editeur.exporter"),"download",false,false,()->{dismiss();project.recalc();writeDoc("application/json",project.base()+".lectura",project.json().toString());});
-        choice(r,t("editeur.importerSrt"),"upload",false,!pro,()->{dismiss();if(!pro){note(t("pro.requis.sousTitres"),"info");return;}pick("*/*",uri->{try{Script.importSubtitles(fileText(uri,500000),project);scene.edit.setText(project.text);note(t("editeur.sousTitresImportes","n",project.segments.length()),"ok");}catch(Exception e){report("sous-titres",e);}});});
-        for(String format:new String[]{"srt","vtt"})choice(r,t(format.equals("srt")?"menu.exporterSrt":"menu.exporterVtt"),"download",false,!pro,()->{
-            dismiss();if(!pro){note(t("pro.requis.sousTitres"),"info");return;}if(project.text.trim().isEmpty()){note(t("scene.err.texteVide"),"warn");return;}writeDoc(format.equals("srt")?"application/x-subrip":"text/vtt",project.base()+"."+format,Script.subtitles(project.recalc(),format.equals("vtt")));});
+        if(PRO_ENABLED){
+            choice(r,t("editeur.importerSrt"),"upload",false,!hasPro(),()->{dismiss();if(!hasPro()){note(t("pro.requis.sousTitres"),"info");return;}pick("*/*",uri->{try{Script.importSubtitles(fileText(uri,500000),project);scene.edit.setText(project.text);note(t("editeur.sousTitresImportes","n",project.segments.length()),"ok");}catch(Exception e){report("sous-titres",e);}});});
+            for(String format:new String[]{"srt","vtt"})choice(r,t(format.equals("srt")?"menu.exporterSrt":"menu.exporterVtt"),"download",false,!hasPro(),()->{
+                dismiss();if(!hasPro()){note(t("pro.requis.sousTitres"),"info");return;}if(project.text.trim().isEmpty()){note(t("scene.err.texteVide"),"warn");return;}writeDoc(format.equals("srt")?"application/x-subrip":"text/vtt",project.base()+"."+format,Script.subtitles(project.recalc(),format.equals("vtt")));});
+        }
         ui.menuGroup(r,t("menu.scene"),2);choice(r,t("scene.apercuSansSon"),"eye",false,false,()->{dismiss();launch(true);});
-        choice(r,t("scene.capture"),"camera",false,false,()->{dismiss();capturePng();});choice(r,t(exports.active()?"scene.arreterEnregistrement":"scene.enregistrer"),exports.active()?"stop":"record",false,!pro,()->{dismiss();record();});
-        choice(r,t("scene.pleinEcran"),"fullscreen",false,false,()->{dismiss();fullscreen();});ui.add(r,ui.p(t("scene.format")),8);
-        List<String> formats=db.locale().equals("en")?List.of("Landscape 16:9 (YouTube)","Portrait 9:16 (TikTok)"):
-            List.of("Paysage 16:9 (YouTube)","Vertical 9:16 (TikTok)");
-        TextView f=ui.button(formats.get(db.settings.optString("formatVideo").equals("16:9")?0:1),"chevron",()->choose(t("scene.format"),formats,db.settings.optString("formatVideo").equals("16:9")?0:1,i->{db.set("formatVideo",i==0?"16:9":"9:16");menu();}));ui.add(r,f,6);
-        ui.menuGroup(r,t("menu.avance"),2);choice(r,t("menu.mesVideos"),"video",false,false,()->{dismiss();movies();});
-        String[] ids={"personnages","reglages","pro","apropos"},icons={"smile","settings","star","info"};for(int i=0;i<ids.length;i++){String id=ids[i];choice(r,t("nav."+id),icons[i],false,false,()->go(id));}
+        choice(r,t("scene.capture"),"camera",false,false,()->{dismiss();capturePng();});
+        if(PRO_ENABLED)choice(r,t(exports.active()?"scene.arreterEnregistrement":"scene.enregistrer"),exports.active()?"stop":"record",false,!hasPro(),()->{dismiss();record();});
+        choice(r,t("scene.pleinEcran"),"fullscreen",false,false,()->{dismiss();fullscreen();});
+        if(PRO_ENABLED){
+            ui.add(r,ui.p(t("scene.format")),8);
+            List<String> formats=db.locale().equals("en")?List.of("Landscape 16:9 (YouTube)","Portrait 9:16 (TikTok)"):
+                List.of("Paysage 16:9 (YouTube)","Vertical 9:16 (TikTok)");
+            TextView f=ui.button(formats.get(db.settings.optString("formatVideo").equals("16:9")?0:1),"chevron",()->choose(t("scene.format"),formats,db.settings.optString("formatVideo").equals("16:9")?0:1,i->{db.set("formatVideo",i==0?"16:9":"9:16");menu();}));ui.add(r,f,6);
+        }
+        ui.menuGroup(r,t("menu.avance"),2);
+        if(PRO_ENABLED)choice(r,t("menu.mesVideos"),"video",false,false,()->{dismiss();movies();});
+        String[] ids={"personnages","reglages","pro","apropos"},icons={"smile","settings","star","info"};for(int i=0;i<ids.length;i++){String id=ids[i];if(PRO_ENABLED||!id.equals("pro"))choice(r,t("nav."+id),icons[i],false,false,()->go(id));}
         ui.add(r,ui.small("● "+t(online()?"net.enLigne":"net.horsLigne")),14);
     }
     void movies(){exports.library();}
