@@ -117,6 +117,9 @@ public final class DeviceChecks extends Instrumentation {
         MainActivity a=(MainActivity)startActivitySync(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         try{
             File dir=ctx.getExternalFilesDir("verification");require(dir!=null,"Stockage de test");
+            boolean espeak="true".equals(args.getString("espeak"));
+            waitFor("La fenêtre de test et la voix locale doivent être prêtes",()->a.isForeground&&a.hasWindowFocus()
+                &&(!espeak||a.talk.voices("fr").stream().anyMatch(v->!v.isNetworkConnectionRequired())),15000);
             main(()->{require(a.modal!=null,"Tutoriel au premier démarrage");a.fullscreen();});screen(a,dir,"tuto");
             click(a,"Passer");screen(a,dir,"scene");click(a,"Menu");screen(a,dir,"menu");
             main(()->{
@@ -129,8 +132,18 @@ public final class DeviceChecks extends Instrumentation {
             });
             main(()->{a.dismiss();a.scene.edit.setText("Bonjour Lectura. Ceci est un essai natif. ".repeat(18));});
             click(a,"Menu");click(a,"Aperçu sans son");
-            waitFor("Aperçu non démarré",()->a.isForeground&&a.reading!=null&&a.reading.silent&&a.reading.playing&&a.reading.terminal.shown>0,10000);
-            screen(a,dir,"lecture");click(a,"Pause");click(a,"Reprendre");click(a,"Arrêter");click(a,"Accélérer");
+            // Click in the same UI callback that observes the playing state. PixelCopy and PNG
+            // encoding are kept out of this time-sensitive part of the transport test.
+            waitFor("Aperçu en cours et contrôle Pause disponibles",()->{
+                if(!a.isForeground||!a.hasWindowFocus()||a.modal!=null||a.reading==null||!a.reading.silent
+                    ||!a.reading.playing||a.reading.terminal.shown==0)return false;
+                View pause=action(a.content,a.t("scene.pause"));
+                return pause!=null&&pause.isEnabled()&&pause.performClick();
+            },10000);
+            main(()->require(!a.reading.playing&&!a.reading.ended&&!a.stopped,"La commande Pause doit suspendre l’aperçu"));
+            screen(a,dir,"lecture");click(a,"Reprendre");
+            main(()->require(a.reading.playing,"L’aperçu n’a pas repris"));
+            click(a,"Arrêter");click(a,"Accélérer");
             main(()->{require(a.stopped&&a.reading!=null&&!a.reading.playing&&a.reading.terminal.shown>0,"Arrêt de lecture");
                 require(a.project.speed==1.25f,"Vitesse 1.25x");});
             click(a,"Masquer le texte du terminal");main(()->require(a.stage.masked,"Masquage du terminal"));

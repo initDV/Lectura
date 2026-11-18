@@ -60,12 +60,17 @@ for ((i=0;i<150;i++)); do
             adb shell settings put secure tts_default_synth com.reecedunn.espeak
             adb shell settings put secure tts_default_locale com.reecedunn.espeak:fra-FRA
             adb shell am start -W -n com.reecedunn.espeak/.DownloadVoiceData
-            # Let the engine finish extracting its bundled voice data before capturing the foreground UI.
-            for ((attempt=0;attempt<40;attempt++)); do
-                activity=$(adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true)
-                [[ $activity == *com.reecedunn.espeak* ]] || break
+            # am start -W waits for launch, not for the voice data extraction. Inspect the
+            # activity records rather than assuming a specific spelling of the resumed field.
+            for ((attempt=0;attempt<80;attempt++)); do
+                activities=$(adb shell dumpsys activity activities)
+                if ! grep -Eq 'ActivityRecord\{.*com\.reecedunn\.espeak/[^ ]*DownloadVoiceData' <<< "$activities"; then break; fi
                 sleep 0.25
             done
+            if ((attempt==80)); then
+                echo '::error title=Préparation eSpeak NG::Extraction des données vocales non terminée avant l’instrumentation.'
+                exit 1
+            fi
             tts=(-e espeak true)
         fi
         adb logcat -c
