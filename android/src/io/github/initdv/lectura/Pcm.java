@@ -82,6 +82,18 @@ final class Pcm implements AutoCloseable {
         h.putInt(rate).putInt(rate*ch*2).putShort((short)(ch*2)).putShort((short)16).putInt(0x61746164).putInt((int)data);
         out.seek(0);out.write(h.array());
     }
+    // Synthesized cache files have our canonical 44-byte RIFF header. Never reinterpret a stale or truncated file.
+    static long mono16Frames(File file,int rate)throws IOException {
+        byte[] header=new byte[44];long bytes;
+        try(RandomAccessFile in=new RandomAccessFile(file,"r")){bytes=in.length()-44;in.readFully(header);}
+        if(bytes<=0||bytes>MAX_BYTES||(bytes&1)!=0)throw new IOException("Taille PCM invalide.");
+        ByteBuffer b=ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN);
+        if(b.getInt()!=0x46464952||b.getInt()!=bytes+36||b.getInt()!=0x45564157||b.getInt()!=0x20746d66
+            ||b.getInt()!=16||b.getShort()!=1||b.getShort()!=1||b.getInt()!=rate||b.getInt()!=2*rate
+            ||b.getShort()!=2||b.getShort()!=16||b.getInt()!=0x61746164||b.getInt()!=bytes)
+            throw new IOException("Format WAV de synthèse invalide.");
+        return bytes/2;
+    }
     synchronized int read(long start,short[] out,int frameCount)throws IOException{
         int n=(int)Math.max(0,Math.min(frameCount,frames-start));int len=n*2*channels;
         if(n==0)return 0;if(bytes.length<len)bytes=new byte[len];reader.seek(44+2L*channels*Math.max(0,start));reader.readFully(bytes,0,len);

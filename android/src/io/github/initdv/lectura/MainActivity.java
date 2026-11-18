@@ -89,7 +89,7 @@ public final class MainActivity extends Activity {
     }
     boolean reduced(){return !android.animation.ValueAnimator.areAnimatorsEnabled();}
     boolean online(){ConnectivityManager cm=getSystemService(ConnectivityManager.class);return cm.getActiveNetwork()!=null;}
-    float volume(){return (float)db.settings.optDouble("volume",1);}
+    float volume(){float v=(float)db.settings.optDouble("volume",1);return Float.isFinite(v)?Refs.clamp(v,0,1):1;}
     float viewportHeight(){return content.getHeight()>0?content.getHeight()/ui.density:getResources().getDisplayMetrics().heightPixels/ui.density;}
     String t(String key,Object... data){return refs.label(db.locale(),key,data);}
     void go(String name){draft();render(name);}
@@ -222,7 +222,7 @@ public final class MainActivity extends Activity {
                     decoded=syn.pcm;segments=syn.segments;
                 }
                 Script.reportExpressions(text,segments,cfg.segments);if(segments.isEmpty())throw new IOException(t("scene.err.texteVide"));
-                Performance performance=new Performance(segments,new Mood(refs,lang,words,cfg.emotions));Pcm pcm=decoded;String voiceUsed=spokenBy;List<Script.Segment> parts=segments;
+                Performance performance=new Performance(segments,new Mood(refs,lang,words,cfg.emotions),refs.rig);Pcm pcm=decoded;String voiceUsed=spokenBy;List<Script.Segment> parts=segments;
                 handler.post(()->{if(generation!=ticket||scene==null){if(pcm!=null)pcm.close();return;}try{
                     reading=new Reading(text,parts,words,silent,pcm,talk,v,cfg,1,this::readingFinished,this::readingError);
                     synthesisVoice=voiceUsed;

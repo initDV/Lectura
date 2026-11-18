@@ -18,6 +18,7 @@ import java.util.Locale;
 final class Refs {
     final Context context;
     final JSONObject defaults, themes, expressions, neutral, icons, fr, en;
+    final RigPose rig;
     final Typeface mono;
     final ArrayList<JSONObject> characters = new ArrayList<>();
     Refs(Context c) {
@@ -25,6 +26,7 @@ final class Refs {
         mono = Typeface.createFromAsset(c.getAssets(), "jetbrains-mono.ttf");
         defaults = json("defaults.json"); themes = json("themes.json");
         JSONObject poses = json("expressions.json"); neutral = object(poses, "neutral"); expressions = object(poses, "expressions");
+        rig = new RigPose(neutral, expressions);
         icons = json("icons.json"); fr = json("fr.json"); en = json("en.json");
         JSONArray index = array(json("characters/index.json"), "personnages");
         for (int i = 0; i < index.length(); i++) characters.add(json("characters/" + index.optString(i) + ".json"));

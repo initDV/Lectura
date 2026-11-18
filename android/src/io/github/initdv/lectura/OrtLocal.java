@@ -16,7 +16,7 @@ import java.util.Optional;
 final class OrtLocal {
     private final Object env;
     private final Class<?> tensorType,optionsType;
-    private final Method create,createFloat,createInt,info,run,open,output;
+    private final Method create,createFloat,createInt,info,run,open,output,floatBuffer;
     private final Class<? extends Enum> valueTypes;
     OrtLocal()throws Exception {
         Class<?> environment=Class.forName("ai.onnxruntime.OrtEnvironment");
@@ -30,20 +30,22 @@ final class OrtLocal {
         createFloat=tensorType.getMethod("createTensor",environment,FloatBuffer.class,long[].class);
         createInt=tensorType.getMethod("createTensor",environment,LongBuffer.class,long[].class);
         info=session.getMethod("getInputInfo");run=session.getMethod("run",Map.class);
+        floatBuffer=tensorType.getMethod("getFloatBuffer");
         output=Class.forName("ai.onnxruntime.OrtSession$Result").getMethod("get",String.class);
     }
     static Object call(Method m,Object self,Object... args)throws Exception {
         try{return m.invoke(self,args);}catch(InvocationTargetException e){Throwable why=e.getCause();throw new IOException("ONNX : "+why.getMessage(),why);}
     }
     Session session(File path,int threads)throws Exception {return new Session(path,threads);}
-    AutoCloseable floats(float[] data,long... shape)throws Exception{return (AutoCloseable)call(createFloat,null,env,FloatBuffer.wrap(data),shape);}
+    AutoCloseable floats(float[] data,long... shape)throws Exception{return floats(FloatBuffer.wrap(data),shape);}
+    AutoCloseable floats(FloatBuffer data,long... shape)throws Exception{return (AutoCloseable)call(createFloat,null,env,data,shape);}
     AutoCloseable ints(long[] data,long... shape)throws Exception{return (AutoCloseable)call(createInt,null,env,LongBuffer.wrap(data),shape);}
     @SuppressWarnings({"unchecked","rawtypes"})
     AutoCloseable tensor(ByteBuffer data,long[] shape,String kind)throws Exception {
         return (AutoCloseable)call(create,null,env,data,shape,Enum.valueOf(valueTypes,kind));
     }
     float[] samples(Object tensor)throws Exception {
-        FloatBuffer buffer=(FloatBuffer)call(tensorType.getMethod("getFloatBuffer"),tensor);
+        FloatBuffer buffer=(FloatBuffer)call(floatBuffer,tensor);
         if(buffer==null||buffer.remaining()>24000*90)throw new IOException("Tenseur audio inattendu.");
         float[] array=new float[buffer.remaining()];buffer.get(array);return array;
     }
@@ -90,6 +92,11 @@ final class OrtLocal {
             if(!o.isPresent())throw new IOException("Sortie ONNX absente : "+name);return o.get();
         }
         float[] floats(String name)throws Exception{return samples(get(name));}
+        void copyFloats(String name,float[] dst,int start,int count)throws Exception {
+            FloatBuffer buffer=(FloatBuffer)call(floatBuffer,get(name));
+            if(buffer==null||buffer.remaining()!=count)throw new IOException("Nombre d’échantillons inattendu : "+name);
+            buffer.get(dst,start,count);
+        }
         @Override public void close(){dispose(result);}
     }
 }

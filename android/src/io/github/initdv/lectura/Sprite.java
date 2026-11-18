@@ -8,8 +8,6 @@ import java.math.BigDecimal;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import static java.lang.Math.*;
@@ -18,7 +16,6 @@ import static io.github.initdv.lectura.Refs.object;
 /** Native port of rig.js, character.js and the active lip model in mouth.js. */
 final class Sprite {
     private static final int[] VIS={5,9,14,19};
-    private static final Set<String> LIMBS=Set.of("armL","armR","foreL","foreR");
     private static final Map<String,double[]> STYLES=Map.of("fluide",new double[]{1,1,0,0,0},"saccade",new double[]{1,1,5,0,0},
         "sec",new double[]{1.5,.8,0,0,0},"frappe",new double[]{2.4,.5,0,0,0},"flottant",new double[]{.5,.8,0,5,0},
         "ondulant",new double[]{.6,1,0,0,3},"calme",new double[]{.7,1.2,0,0,0},"expressif",new double[]{1.2,1.5,0,0,0});
@@ -26,7 +23,7 @@ final class Sprite {
         {.54,-125,-90,-6,-4},{.62,-120,-80,-6,-4},{.85,-120,-80,-6,-4},{1,0,0,0,0}};
     private static final double[][] GLASSES={{0,0,0,0,0},{.3,-140,-110,-2,1},{.45,-145,-120,-2,1},{.55,-140,-110,-2,1},{.7,-142,-115,-2,1},{1,0,0,0,0}};
     final Svg svg;
-    private final Refs refs;
+    private final RigPose rig;
     private final Svg.Node head,body,legs,left,right,foreL,foreR,eyeL,eyeR,browL,browR,mouth;
     private final Svg.Node[] lips;
     private final ArrayList<Svg.Node> reflections=new ArrayList<>();
@@ -38,16 +35,22 @@ final class Sprite {
     int viseme; float shape=48;
     String letter="";
     private final double speed,amp,step,floatAmplitude,wave;
-    private final Map<String,Double> pose=new HashMap<>(), target=new HashMap<>();
+    private final double[] pose,sampled,transitionFrom;
+    private double[] target,forcedPose;
+    private String forced="";
+    private boolean transitionPending;
+    private double transitionAt=Double.NEGATIVE_INFINITY;
+    private Performance directions;
     private double last=-1,blinkUntil,nextBlink=2000,nextLook=1500,lookEnd,lookToX,lookToY,lookX,lookY;
     private String micro="",script="";
     private double microAt,microDuration,microAmplitude,scriptAt,nextMicro=4000+random()*3000;
-    private Performance.Cue beat;
+    private Performance.Cue beat,leavingBeat;
+    private double beatTime,beatGain,leavingTime,leavingGain;
     private double sceneTime=-1;
     private boolean onClock;
 
     Sprite(Refs refs,JSONObject def) {
-        this.refs=refs;
+        rig=refs.rig;pose=rig.rest();sampled=rig.rest();transitionFrom=rig.rest();target=rig.rest();
         try (InputStream in=refs.open("characters/"+def.optString("svg"))) {svg=new Svg(in);}
         catch(IOException e){throw new IllegalArgumentException(e);}
         body=need("body"); left=need("arm-l");right=need("arm-r");legs=svg.get("legs");
@@ -76,7 +79,6 @@ final class Sprite {
         lips=human?new Svg.Node[]{svg.get("levre-creux"),svg.get("levre-haut"),svg.get("levre-bas"),svg.get("bouche-dents"),svg.get("bouche-langue")}:null;
         double[] m=STYLES.getOrDefault(style.optString("style"),STYLES.get("fluide"));
         speed=style.optDouble("vitesseIdle",1)*m[0];amp=style.optDouble("amplitudeBras",1)*m[1];step=m[2];floatAmplitude=m[3];wave=m[4];
-        expression("neutre",1,"",0);
     }
     private Svg.Node need(String id) {Svg.Node n=svg.get(id);if(n==null)throw new IllegalArgumentException("Pièce SVG manquante : "+id);return n;}
     private static float[] pivot(JSONObject o,String k,float x,float y){JSONArray a=o.optJSONArray(k);return a==null?new float[]{x,y}:new float[]{(float)a.optDouble(0,x),(float)a.optDouble(1,y)};}
@@ -98,33 +100,46 @@ final class Sprite {
         return (float)copySign(cent/100,n);
     }
     private static float q(double n){return Math.round(n*4)/4f;}
-    private double v(String name){return pose.get(name);}
-    void expression(String id,double force,String mix,double weight){
-        JSONObject a=object(refs.expressions,id),b=object(refs.expressions,mix);
-        double f=clamp(force,0,1.25),p=b.length()==0?0:clamp(weight,0,.5),pal=clamp((f-.56)/.08,0,1); pal*=pal*(3-2*pal);
-        for(Iterator<String> it=refs.neutral.keys();it.hasNext();) {
-            String k=it.next();double n=refs.neutral.optDouble(k),va=a.optDouble(k,n),vb=b.optDouble(k,n);
-            double value=n+(LIMBS.contains(k)?(va-n)*pal:(va+(vb-va)*p-n)*f);
-            if(human&&LIMBS.contains(k)){double lim=k.startsWith("arm")?50:70;value=clamp(value*.6,-lim,lim);}
-            if(k.equals("r"))value=clamp(value,6,15);if(k.equals("lid"))value=clamp(value,.15,1);if(k.equals("w"))value=clamp(value,20,64);
-            target.put(k,value);
-        }
+    private double v(String name){
+        double value=rig.value(pose,name);
+        if(human&&(name.startsWith("arm")||name.startsWith("fore"))){double lim=name.startsWith("arm")?50:70;return clamp(value*.6,-lim,lim);}
+        return value;
     }
-    void direct(Performance.Cue cue,double sourceTime) {
-        if(reduced)cue=null;
-        if(cue!=null&&beat!=cue){micro="";script="";}
-        beat=cue;sceneTime=sourceTime;
+    void expression(String id,double force,String mix,double weight){target=rig.resolve(id,force,mix,weight);}
+    void direct(Performance directions,double sourceTime,String forced) {
+        if(!this.forced.equals(forced)){
+            this.forced=forced;forcedPose=forced.isEmpty()?null:rig.resolve(forced,1,"",0);transitionPending=true;
+        }
+        if(this.directions!=null&&directions==null)transitionPending=true; // release on Stop
+        this.directions=directions;sceneTime=sourceTime;
     }
     private double step(double a){return step==0?a:round(a/step)*step;}
     void tick(double t){
         double dt=last<0?0:clamp(t-last,0,100);
-        boolean clock=sceneTime>=0;
-        if(clock||last<0||onClock)pose.putAll(target);
-        else for(String n:target.keySet()){double a=1-exp(-dt/(LIMBS.contains(n)?190:110));pose.put(n,v(n)+(target.get(n)-v(n))*a);}
+        boolean clock=sceneTime>=0,scripted=clock&&directions!=null&&forcedPose==null;
+        double[] goal=forcedPose==null?target:forcedPose;
+        if(scripted){directions.sample(sceneTime,sampled);goal=sampled;}
+        if(transitionPending){
+            transitionPending=false;
+            // Only a live UI change (forced expression or Stop) uses wall time. Authored
+            // poses always come from the source clock, including when paused or seeking.
+            if(last>=0){
+                System.arraycopy(pose,0,transitionFrom,0,pose.length);transitionAt=t;
+                leavingBeat=beat;leavingTime=beatTime;leavingGain=beatGain;
+            }
+        }
+        double blend=RigPose.ease((t-transitionAt)/RigPose.GLIDE_MS);
+        if(blend<1)RigPose.mix(transitionFrom,goal,blend,pose);
+        else if(clock||last<0)System.arraycopy(goal,0,pose,0,pose.length);
+        else rig.idle(pose,goal,dt);
+        if(clock&&!onClock){micro="";script="";}
+        beat=scripted&&!reduced?directions.gesture(sceneTime):null;beatTime=sceneTime;beatGain=blend;
+        if(beat==null&&blend<1&&!reduced){beat=leavingBeat;beatTime=leavingTime;beatGain=leavingGain*(1-blend);}
+        if(blend==1)leavingBeat=null;
         onClock=clock;last=t;
         double k=(reduced?.25:1)*gain,sk=human?.55:1;
         double rb=0,rd=0,rgx=0,rgy=0,rhr=0,rhy=0,tilt=0,lidDrop=0;
-        double s,gazeX,gazeY;boolean blink;
+        double s,gazeX,gazeY,blink;
         if(clock){
             // Sample breathing, gaze and blinking at the requested audio time as well as the cue.
             // Dropped frames, waiting in Pause and backward seeks cannot shift the performance.
@@ -133,27 +148,28 @@ final class Sprite {
             double at=1800+variation(slot)*1450,glance=(since-at+1150)/850;
             double e=reduced||glance<0||glance>1?0:sin(glance*PI);
             gazeX=(variation(slot+19)-.5)*6*e;gazeY=(variation(slot+43)-.5)*3*e;
-            blink=!reduced&&since>=at&&since<at+112;
+            blink=reduced?0:RigPose.ease((since-at)/50)*RigPose.ease((at+112-since)/62);
         }else {
             phase+=dt/1000*speed*v("tempo");s=phase;talkSmooth+=(talk-talkSmooth)*(1-exp(-dt/250));
             if(t>nextBlink){blinkUntil=t+120;nextBlink=t+120+(random()<.12?170:2500+random()*3000);}
             if(t>nextLook&&!reduced){lookToX=talk>.5?4.5:(random()-.5)*6;lookToY=talk>.5?1:(random()-.5)*3;lookEnd=t+450+random()*700;nextLook=lookEnd+2200+random()*3500;}
             double ar=1-exp(-dt/70);lookX+=((t<lookEnd?lookToX:0)-lookX)*ar;lookY+=((t<lookEnd?lookToY:0)-lookY)*ar;
-            gazeX=lookX;gazeY=lookY;blink=t<blinkUntil;
+            gazeX=lookX;gazeY=lookY;blink=t<blinkUntil?1:0;
         }
         double gx=0,gy=0,jump=0,waveHand=0,shakeHand=0,armL=0,armR=0,elbowLeft=0,elbowRight=0;
-        double u=beat==null?1:(sceneTime-beat.at)/beat.length;
+        double u=beat==null?1:(beatTime-beat.at)/beat.length;
         if(beat!=null&&u>=0&&u<1){
-            double e=Math.sin(u*PI)*k*sk*beat.strength,tail=(1-u)*k*sk*beat.strength,side=beat.side;
+            double envelope=beat.envelope(beatTime)*beatGain,intensity=envelope*k*sk;
+            double e=sin(u*PI)*intensity*beat.strength,tail=(1-u)*intensity*beat.strength,side=beat.side;
             switch(beat.motion){
                 case "hoche": gy=sin(u*3*PI)*5*tail;break;
                 case "hoche_lent": rhr=sin(u*2*PI)*9*tail;gy=sin(u*2*PI)*6*tail;break;
                 case "secoue": gx=sin(u*6*PI)*5*tail;break;
                 case "dodeline": rhr=sin(u*3*PI)*9*tail;gy=sin(u*2*PI)*2*tail;break;
                 case "tremble": gx=sin(u*14*PI)*3*tail;break;
-                case "coucou": waveHand=min(1,sin(u*PI)*1.65)*min(1,beat.strength+.2);shakeHand=sin(u*9*PI)*21*sk;break;
-                case "sursaut_fort": jump=-sin(u*PI)*15*k*sk;break;
-                case "sursaut_double": jump=-abs(sin(u*2*PI))*10*k*sk;break;
+                case "coucou": waveHand=min(1,sin(u*PI)*1.65)*min(1,beat.strength+.2)*envelope;shakeHand=sin(u*9*PI)*21*sk;break;
+                case "sursaut_fort": jump=-sin(u*PI)*15*intensity;break;
+                case "sursaut_double": jump=-abs(sin(u*2*PI))*10*intensity;break;
                 case "sursaut": jump=-9*e;rb=-7*e;break;
                 case "indique": rgx=5*e;rhr=4*e;armR=-55*e;elbowRight=-39*e;tilt=5*e;break;
                 case "observe": rgx=4.7*e;rgy=2*e;rhr=4*e;rhy=2*e; break;
@@ -185,7 +201,7 @@ final class Sprite {
         double dx=sin(s*1.1)*wave*k+sin(t*.055)*tr;
         double dy=-(sin(s*.9)+1)*floatAmplitude*k-abs(sin(s*3.2))*v("bounce")*k+jump+cos(t*.047)*tr*.4+rd;
         if(abs(dx)+abs(dy)<=.004){dx=0;dy=0;}
-        double lean=(abs(v("lean"))>.02?v("lean")*sk:0)+tilt;
+        double lean=v("lean")*sk+tilt;
         body.reset().preTranslate(f(dx),f(dy));body.transform.preTranslate(f(sway),f(v("bodyY")-breath*1.3));rotate(body.transform,lean,hip);
         if(legs!=null){legs.reset().preTranslate(f(dx),f(dy));legs.transform.preRotate(f(sway*.8),120,354);}
         double hr=v("headR")+rhr+sin(s*1.1)*max(v("sway"),2.5*sk)*k+sin(s*2.1)*1.3*talk*k*sk;
@@ -223,7 +239,7 @@ final class Sprite {
             float xm=fixed2(xBase+wBase/2-width/2),ym=fixed2(yBase+hBase/2+v("my")-height/2),r=fixed2(min(6,min(width,height)/2));
             mouth.path().addRoundRect(xm,ym,xm+fixed2(width),ym+fixed2(height),r,r,Path.Direction.CW);
         }
-        double sy=blink?.15:clamp(v("lid")-lidDrop,.15,1),eyex=v("gx")+gazeX+sin(s*.55)*1.3*k+sin(s*1.5)*.6*k+rgx+scriptedLook;
+        double lid=clamp(v("lid")-lidDrop,.15,1),sy=lid+(.15-lid)*blink,eyex=v("gx")+gazeX+sin(s*.55)*1.3*k+sin(s*1.5)*.6*k+rgx+scriptedLook;
         double eyey=v("gy")+gazeY+cos(s*.45)*.8*k+rgy;
         for(Svg.Node eye:new Svg.Node[]{eyeL,eyeR}){
             eye.reset().preTranslate(f(eyex),f(eyey)); if(sy<=.995)eye.transform.preScale(1,f(sy),0,(float)eyeY);
@@ -252,9 +268,9 @@ final class Sprite {
             else if("rjg".indexOf(c)>=0){round=.35;stretch=.15;}
             else if("mbp".indexOf(c)<0){round=.1;stretch=.1;}
         }
-        round=clamp(max(round,pose.getOrDefault("rond",0d)),0,1);
+        round=clamp(max(round,v("rond")),0,1);
         double g=max(0,q(gap)),w=q(hw)*(1-round*.28+stretch*.12),hi=g*.35,lo=g*.65,xl=q(x)-w,xr=q(x)+w;
-        double yc=q(y),corner=yc+q(clamp(pose.getOrDefault("sourire",0d),-1,1)*min(5,w*.28)),bow=2.6*(1-stretch*.5);
+        double yc=q(y),corner=yc+q(clamp(v("sourire"),-1,1)*min(5,w*.28)),bow=2.6*(1-stretch*.5);
         path(lips[0],g>=.4,xl,corner,x,y+hi*1.1,xr,corner,x,(yc+lo)*1.02+lo*.28,xl,corner);
         path(lips[1],true,xl,corner,x-w*.42,yc-bow,x,yc-bow+bow*.22,x+w*.42,yc-bow,xr,corner,x,y+hi*1.1,xl,corner);
         path(lips[2],true,xl,corner,x,y+lo*1.5+2,xr,corner,x,y+lo*1.1,xl,corner);

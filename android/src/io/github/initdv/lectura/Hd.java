@@ -149,9 +149,12 @@ final class Hd implements AutoCloseable {
     private void remember(String key,float[] pcm){
         float[] prev=l1.put(key,pcm);l1Bytes+=4L*(pcm.length-(prev==null?0:prev.length));while(l1Bytes>8*1024*1024&&l1.size()>1){String first=l1.keySet().iterator().next();l1Bytes-=4L*l1.remove(first).length;}}
     private float[] phrase(JSONObject v,String text,JSONObject config)throws Exception {
-        String id=key("SHA-1","phrase-3|"+v.optString("id")+"|"+text);float[] out=l1.get(id);if(out!=null)return out;
-        File f=new File(phrases,id+".f32");if(f.length()>0&&f.length()%4==0&&f.length()<64*1024*1024){try(InputStream in=new FileInputStream(f)){
-            byte[] raw=Refs.read(in,64*1024*1024);out=new float[raw.length/4];ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(out);
+        boolean estelle=pack(v)==VoicePacks.ESTELLE;
+        String id=key("SHA-1",(estelle?"phrase-mimi-4|":"phrase-3|")+v.optString("id")+"|"+text);float[] out=l1.get(id);if(out!=null)return out;
+        File f=new File(phrases,id+".f32");long bytes=f.length();
+        int stride=estelle?Mimi.SAMPLES_PER_LATENT*4:4,limit=estelle?Mimi.MAX_FRAMES*stride:64*1024*1024;
+        if(bytes>0&&bytes%stride==0&&bytes<=limit){try(InputStream in=new FileInputStream(f)){
+            byte[] raw=Refs.read(in,limit);out=new float[raw.length/4];ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(out);
             f.setLastModified(System.currentTimeMillis());remember(id,out);return out;
         }catch(IOException e){f.delete();}}
         ensureLoaded(v);
@@ -165,8 +168,13 @@ final class Hd implements AutoCloseable {
         for(float sample:out)if(!Float.isFinite(sample))throw new IOException("La voix a produit un signal non fini.");
         if(out.length*4L>64*1024*1024)throw new IOException("Phrase trop longue pour la synthèse Lectura HD.");
         remember(id,out);
-        try(FileOutputStream data=new FileOutputStream(f)){ByteBuffer b=ByteBuffer.allocate(16384).order(ByteOrder.LITTLE_ENDIAN);for(float x:out){b.putFloat(x);if(!b.hasRemaining()){data.write(b.array());b.clear();}}
-            if(b.position()>0)data.write(b.array(),0,b.position());}catch(IOException e){f.delete();}
+        File part=new File(phrases,f.getName()+".part");
+        try {
+            try(FileOutputStream data=new FileOutputStream(part)){ByteBuffer b=ByteBuffer.allocate(16384).order(ByteOrder.LITTLE_ENDIAN);for(float x:out){b.putFloat(x);if(!b.hasRemaining()){data.write(b.array());b.clear();}}
+                if(b.position()>0)data.write(b.array(),0,b.position());}
+            Files.move(part.toPath(),f.toPath(),StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
+        }catch(IOException ignored){ /* The cache is optional; keep the complete samples in memory. */ }
+        finally{part.delete();}
         prune(phrases,".f32",Integer.MAX_VALUE,PHRASE_LIMIT);return out;
     }
     private static void prune(File dir,String extension,int count,long bytes){
@@ -195,12 +203,14 @@ final class Hd implements AutoCloseable {
     Synthesis synth(String text,String id,int cps,Progress progress)throws Exception {
         if(text.length()>SpeechPlan.MAX_TEXT)throw new IOException("Texte trop long pour la synthèse.");
         JSONObject v=voice(id);if(!installed(v))throw new IOException("Voix HD non installée.");
-        String key=key("SHA-256","rendu-3|"+id+"|"+cps+"|"+text);File wav=new File(whole,key+".wav"),json=new File(whole,key+".json");
-        JSONObject config=pack(v)==null?Library.readJson(cfg(v)):null;
-        int rate=config==null?24000:object(config,"audio").optInt("sample_rate",22050);
+        VoicePacks.Spec spec=pack(v);boolean estelle=spec==VoicePacks.ESTELLE;
+        String key=key("SHA-256",(estelle?"rendu-mimi-4|":"rendu-3|")+id+"|"+cps+"|"+text);
+        File wav=new File(whole,key+".wav"),json=new File(whole,key+".json");
+        JSONObject config=spec==null?Library.readJson(cfg(v)):null;
+        int rate=estelle?Pocket.RATE:config==null?24000:object(config,"audio").optInt("sample_rate",22050);
         List<SpeechPlan.Fragment> plan=SpeechPlan.plan(text,"fr",object(pronunciation,"fr"));
         Synthesis saved=VoiceRender.cached(wav,json,plan,rate,progress);if(saved!=null)return saved;
-        Synthesis result=VoiceRender.render(whole,wav,json,plan,rate,cps,w->phrase(v,w,config),progress);
+        Synthesis result=VoiceRender.render(whole,wav,json,plan,rate,cps,estelle,w->phrase(v,w,config),progress);
         prune(whole,".wav",6,Pcm.MAX_BYTES);return result;
     }
     @Override public void close(){

@@ -270,7 +270,13 @@ public final class DeviceChecks extends Instrumentation {
         int a=end-rate*13/100,b=end-rate*4/100;
         require(crossings(raised,a,b)>crossings(audio,a,b)&&raised.length==audio.length&&raised[onset+100]==audio[onset+100],
             "Montée locale seulement, sans raccourcir ni toucher l’attaque");
-        return "8 durées exactes dans le PCM, règle du maximum et 320 → 256 ms à 1,25× ; question à durée constante ; offsets, abréviations, nombres et source intacte";
+        float[] hot=audio.clone();for(int i=0;i<hot.length;i++)hot[i]*=4; // A signal that would otherwise hit the PCM16 rails.
+        try(Pcm wave=VoiceRender.render(refs.context.getCacheDir(),null,null,SpeechPlan.plan("Tu viens ?","fr",lex),rate,28,true,
+                ignored->hot,(n,total)->{}).pcm){
+            require(wave.frames>=end-onset,"L’atténuation ne doit pas enlever d’échantillons");
+            int peak=estelleWave(wave);require(peak>21500,"Atténuation excessive : "+peak);
+        }
+        return "8 durées exactes, 320 → 256 ms à 1,25×, question à durée constante et source intacte ; WAV Estelle mono 24 kHz reconnu par Android, signal de test > 0 dBFS écrit avec 3 dB de marge";
     }
     private static int crossings(float[] w,int a,int b){int n=0;for(int i=a+1;i<b;i++)if(w[i-1]<0&&w[i]>=0)n++;return n;}
     private String performance(Refs refs)throws Exception {
@@ -280,7 +286,7 @@ public final class DeviceChecks extends Instrumentation {
         for(var ids=contexts.keys();ids.hasNext();){
             String id=ids.next(),sample=contexts.getJSONArray(id).getString(0);
             Script.Segment p=new Script.Segment(sample,0,sample.length(),Script.SPOKEN);p.to=p.speechEnd=1500;
-            Performance track=new Performance(List.of(p),mood);
+            Performance track=new Performance(List.of(p),mood,refs.rig);
             require(track.face(730).expr.equals(id),"Pose contextuelle "+id+" pour "+sample);
             gestures.add(mood.motion(id,0));gestures.add(mood.motion(id,1));poses++;
         }
@@ -288,31 +294,71 @@ public final class DeviceChecks extends Instrumentation {
         String text="Tu viens ce soir ? Bravo ! Regarde ici : c’est tout.\n$ echo jamais";
         var plan=SpeechPlan.plan(text,"fr",new JSONObject());var parts=new ArrayList<Script.Segment>();long at=0;
         for(var f:plan){var p=f.original;p.from=at;p.speechEnd=at+1000;at+=1000+f.pauseMs;p.to=at;parts.add(p);}
-        Performance directions=new Performance(parts,mood);
+        Performance directions=new Performance(parts,mood,refs.rig);
         require(directions.face(200).expr.equals("neutre")&&directions.face(910).expr.equals("pensif")
             &&directions.face(2310).expr.equals("enthousiaste"),"Question finale ou bravo hors de leur repère audio");
         require(directions.gesture(2775)!=null&&directions.gesture(2775).motion.equals("indique"),"Geste vers le terminal");
         var question=directions.gesture(1070);directions.gesture(3500);
         require(question!=null&&question==directions.gesture(1070),"La reprise/recherche doit retrouver exactement le même geste");
+        // Question starts at 835 ms. Check the full rig, not merely the selected expression name.
+        glide(refs.rig,directions,835,"neutre → pensif");
+        glide(refs.rig,directions,parts.get(1).from,"changement de phrase");
         for(String rig:List.of("robot_lectura","wend")){
             var sprite=new Sprite(refs,refs.character(rig));
-            Bitmap first=performanceFrame(sprite,directions,1070,1070);
-            Bitmap later=performanceFrame(sprite,directions,1070,37880); // paused
+            Bitmap before=performanceFrame(sprite,directions,835,835);
+            Bitmap first=performanceFrame(sprite,directions,995,995);
+            Bitmap after=performanceFrame(sprite,directions,1155,1155);
+            Bitmap later=performanceFrame(sprite,directions,995,37880); // paused in the middle of the glide
             Bitmap other=performanceFrame(sprite,directions,2320,37923); // forward seek
-            Bitmap seek=performanceFrame(sprite,directions,1070,37955); // backward seek
-            try{require(first.sameAs(later)&&first.sameAs(seek)&&!first.sameAs(other),"Dessin guidé par l’audio : "+rig);}
-            finally{first.recycle();later.recycle();other.recycle();seek.recycle();}
+            Bitmap seek=performanceFrame(sprite,directions,995,37955); // backward seek
+            try{require(first.sameAs(later)&&first.sameAs(seek)&&!first.sameAs(other)
+                &&!first.sameAs(before)&&!first.sameAs(after),"Images intermédiaires et déterminisme : "+rig);}
+            finally{before.recycle();first.recycle();after.recycle();later.recycle();other.recycle();seek.recycle();}
         }
+        interruptedGlide(refs.rig,mood);
         require(directions.gesture(parts.get(parts.size()-1).from+200)==null,"Geste vocal dans la commande silencieuse");
-        parts.get(0).expression="fier";Performance manual=new Performance(parts,new Mood(refs,"fr",words,true));
+        parts.get(0).expression="fier";Performance manual=new Performance(parts,new Mood(refs,"fr",words,true),refs.rig);
         require(manual.face(910).expr.equals("fier")&&manual.gesture(910)==null,"Priorité d'une pose manuelle");
-        Performance disabled=new Performance(parts,new Mood(refs,"fr",words,false));
+        parts.get(0).expression="auto";parts.get(1).expression="fier";
+        manual=new Performance(parts,new Mood(refs,"fr",words,true),refs.rig);
+        long border=parts.get(1).from;
+        Performance.Cue release=manual.gesture(border-1);
+        require(release!=null&&release.envelope(border-1)<.001&&manual.gesture(border)==null,"Relâchement avant une pose manuelle");
+        glide(refs.rig,manual,border,"transition vers une pose manuelle");
+        parts.get(1).expression="auto";
+        Performance disabled=new Performance(parts,new Mood(refs,"fr",words,false),refs.rig);
         require(disabled.gesture(2775)==null&&disabled.face(2310).expr.equals("neutre"),"Désactivation de la mise en scène auto");
-        return poses+" poses détectées par le contexte + neutre, "+gestures.size()+" mouvements dans la palette, mêmes pixels à repère audio égal après pause/saut (robot, Wend), priorité manuelle";
+        return poses+" poses détectées + neutre, "+gestures.size()+" mouvements ; fondu 320 ms pour tous les axes, continuité aux coupures, priorité manuelle, images intermédiaires identiques à repère audio égal après pause/saut (robot, Wend)";
+    }
+    private static void glide(RigPose rig,Performance p,long at,String name){
+        double[] start=rig.rest(),end=rig.rest(),sample=rig.rest(),before=rig.rest();
+        p.sample(at,start);p.sample(at+RigPose.GLIDE_MS,end);p.sample(at-.001,before);
+        require(Math.abs(rig.value(start,"headR")-rig.value(end,"headR"))>.1
+            &&Math.abs(rig.value(start,"foreR")-rig.value(end,"foreR"))>1,"Tête et avant-bras doivent changer : "+name);
+        for(double u:new double[]{.25,.5,.75}){
+            p.sample(at+u*RigPose.GLIDE_MS,sample);
+            for(int i=0;i<sample.length;i++){
+                double expected=start[i]+(end[i]-start[i])*u*u*(3-2*u);
+                require(Math.abs(start[i]-before[i])<.002&&Math.abs(sample[i]-expected)<1e-9,"Glissement de tout le rig : "+name+" / "+i+" / "+u);
+            }
+        }
+    }
+    private static void interruptedGlide(RigPose rig,Mood mood){
+        List<Script.Segment> parts=new ArrayList<>();
+        String[] ids={"neutre","pensif","surpris"};long[] times={0,500,600,1450};
+        for(int i=0;i<ids.length;i++){
+            Script.Segment p=new Script.Segment("Texte",0,5,Script.SPOKEN);
+            p.from=times[i];p.to=times[i+1];p.expression=ids[i];parts.add(p);
+        }
+        Performance p=new Performance(parts,mood,rig);
+        double[] at=rig.rest(),expected=rig.rest(),before=rig.rest(),after=rig.rest();
+        RigPose.mix(rig.rest(),rig.resolve("pensif",1,"",0),RigPose.ease(100d/RigPose.GLIDE_MS),expected);
+        p.sample(600,at);p.sample(599.999,before);p.sample(600.001,after);
+        require(Arrays.equals(at,expected),"Une pose interrompue doit repartir de la position atteinte");
+        for(int i=0;i<at.length;i++)require(Math.abs(before[i]-after[i])<.001,"Saut à la coupure d’une pose");
     }
     private static Bitmap performanceFrame(Sprite sprite,Performance directions,long audio,long wall) {
-        var p=directions.face(audio);sprite.expression(p.expr,p.strength,p.mix,p.weight);
-        sprite.direct(directions.gesture(audio),audio);sprite.quietMouth=true;sprite.tick(wall);
+        sprite.direct(directions,audio,"");sprite.quietMouth=true;sprite.tick(wall);
         Bitmap bitmap=Bitmap.createBitmap(240,380,Bitmap.Config.ARGB_8888);sprite.svg.fit(new Canvas(bitmap),0,0,240,380,true);return bitmap;
     }
     private JSONObject fixtures()throws Exception{
@@ -641,7 +687,7 @@ public final class DeviceChecks extends Instrumentation {
             a.dismiss();a.project.text=a.t("voix.exemple");a.render("scene");
             var kw=new Script.Keywords(a.refs,"fr",new JSONObject());List<Script.Segment> p=Script.timing(a.project.text,2000,1);
             a.reading=new Reading(a.project.text,p,kw,true,null,a.talk,null,a.project,1,()->{},code->{});
-            a.reading.performance=new Performance(p,new Mood(a.refs,"fr",kw,true));a.muted=true;a.reading.volume(0,true);a.reading.terminal.shown=a.project.text.length();
+            a.reading.performance=new Performance(p,new Mood(a.refs,"fr",kw,true),a.refs.rig);a.muted=true;a.reading.volume(0,true);a.reading.terminal.shown=a.project.text.length();
         }catch(Throwable e){setup.set(e);}});if(setup.get()!=null)throw new AssertionError(setup.get());
         try(Pcm pcm=Pcm.decode(wav,dir)){
             require(pcm.duration()>=1999,"Durée décodée WAV");
@@ -789,9 +835,10 @@ public final class DeviceChecks extends Instrumentation {
             waitFor("Fenêtre voix native au premier plan",()->a.isForeground&&a.hasWindowFocus(),15000);
             boolean automatic=id.equals("estelle");String text=automatic?"Tu veux venir ce soir ?\nBravo !":"Tu as aimé cette lecture ?\nMerci !";
             int cps=28;String label="Lectura HD · "+a.hd.voice(id).getString("nom");
+            if(automatic)seedPreviousEstelleCache(ctx,a.refs,text,cps);
             main(()->{
                 require(a.hd.installed(a.hd.voice(id)),"Pack absent après relance : "+id);
-                a.dismiss();Project p=new Project(a.db.settings);p.text=text;p.speed=1.25f;p.cps=cps;p.engine="auto";p.voice="";
+                a.dismiss();Project p=new Project(a.db.settings);p.text=text;p.speed=automatic?1:1.25f;p.cps=cps;p.engine="auto";p.voice="";
                 a.open(p);
                 if(!automatic)a.chooseVoice();
             });
@@ -802,16 +849,56 @@ public final class DeviceChecks extends Instrumentation {
             catch(AssertionError e){throw new AssertionError("Préparation "+id+" trop lente",e);}
             main(()->require(a.reading!=null&&a.synthesisVoice.equals(id),"Voix effective "+a.synthesisVoice+" ; "+a.journal.peekLast()));
             long startup=android.os.SystemClock.elapsedRealtime()-started;
+            if(automatic){
+                waitFor("Lecture Estelle à vitesse normale",()->a.reading.rate==1&&a.reading.time()>=250,10000);
+                main(()->{a.project.speed=1.25f;a.adjustRate();});
+            }
             JSONArray observed=sampleReading(a,dir,id,20000);
+            int[] peak={0};
             main(()->{
                 Reading r=a.reading;require(r.pcm!=null&&r.pcm.rate==24000&&r.rate==1.25&&r.ended&&r.text.equals(text)&&noNetwork(ctx),"Lecture native incomplète");
-                require(pcmPeak(r.pcm,0,(long)r.duration)>900,"Voix muette : "+id);
+                peak[0]=automatic?estelleWave(r.pcm):pcmPeak(r.pcm,0,(long)r.duration);
+                require(peak[0]>900,"Voix muette : "+id);
+                if(automatic)Files.copy(r.pcm.file.toPath(),new File(dir,"estelle-pcm24k.wav").toPath(),StandardCopyOption.REPLACE_EXISTING);
                 List<Script.Segment> parts=r.timeline.parts;
                 require(parts.size()==2&&parts.get(0).to-parts.get(0).speechEnd==560&&parts.get(1).to-parts.get(1).speechEnd==400,"Pauses du vrai PCM");
             });
             String cached=checkNewVoiceCache(ctx,id,text,cps);
-            return id+" à froid en avion, lecture à 1,25× (PCM 24 kHz), démarrage "+startup+" ms, "+observed.length()+" observations ; "+cached;
+            return id+" à froid en avion, "+(automatic?"1× puis ":"")+"1,25× (PCM 24 kHz), démarrage "+startup+" ms, "+observed.length()+" observations, pic "+peak[0]
+                +(automatic?"/32768, aucun écrêtage et anciens caches ignorés":"")+" ; "+cached;
         }finally{main(a::finish);}
+    }
+    private static int estelleWave(Pcm wav)throws Exception {
+        require(wav.channels==1&&wav.rate==Pocket.RATE&&Pcm.mono16Frames(wav.file,Pocket.RATE)==wav.frames,"En-tête WAV d’Estelle");
+        MediaExtractor decoder=new MediaExtractor();
+        try {
+            decoder.setDataSource(wav.file.getPath());MediaFormat format=decoder.getTrackFormat(0);
+            require(decoder.getTrackCount()==1&&"audio/raw".equals(format.getString(MediaFormat.KEY_MIME))
+                &&format.getInteger(MediaFormat.KEY_SAMPLE_RATE)==Pocket.RATE&&format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)==1
+                &&Math.abs(format.getLong(MediaFormat.KEY_DURATION)-1000*wav.duration())<1000,"Android ne lit pas le format/durée attendus : "+format);
+        }finally{decoder.release();}
+        int peak=pcmPeak(wav,0,(long)Math.ceil(wav.duration()));
+        require(peak<=Math.round(32768*VoiceRender.ESTELLE_PEAK),"PCM Estelle hors marge : "+peak);
+        return peak;
+    }
+    private static String oldKey(String algorithm,String input)throws Exception {
+        byte[] digest=java.security.MessageDigest.getInstance(algorithm).digest(input.getBytes(StandardCharsets.UTF_8));
+        StringBuilder out=new StringBuilder(digest.length*2);
+        for(byte b:digest)out.append(Character.forDigit((b&255)>>>4,16)).append(Character.forDigit(b&15,16));
+        return out.toString();
+    }
+    private static void seedPreviousEstelleCache(Context ctx,Refs refs,String text,int cps)throws Exception {
+        File phrases=Library.dir(ctx.getCacheDir(),"phrases"),whole=Library.dir(ctx.getCacheDir(),"synthese");
+        // Valid legacy cache keys and headers, but deliberately silent: neither layer may be reused.
+        for(var f:SpeechPlan.plan(text,"fr",Refs.object(refs.json("prononciation.json"),"fr"))){
+            String key=oldKey("SHA-1","phrase-3|estelle|"+f.spoken);
+            Files.write(new File(phrases,key+".f32").toPath(),new byte[Mimi.SAMPLES_PER_LATENT*Float.BYTES]);
+        }
+        String key=oldKey("SHA-256","rendu-3|estelle|"+cps+"|"+text);
+        try(RandomAccessFile file=new RandomAccessFile(new File(whole,key+".wav"),"rw")){
+            int size=Pocket.RATE*2*2;Pcm.header(file,1,Pocket.RATE,size);file.setLength(44L+size);
+        }
+        Library.writeJson(new File(whole,key+".json"),new JSONObject("{\"spans\":[[0,640,1200],[1200,1600,2000]]}"));
     }
     private String checkNewVoiceCache(Context ctx,String id,String text,int cps)throws Exception {
         File phraseDir=new File(ctx.getCacheDir(),"phrases");

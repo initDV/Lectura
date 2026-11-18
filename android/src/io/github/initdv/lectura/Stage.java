@@ -42,7 +42,6 @@ final class Stage extends FrameLayout {
     final Path clip=new Path();
     final ScreenText screenText;
     private final int radius;
-    private String expressionKey="";
     private Reading lastReading;
 
     Stage(MainActivity a,JSONObject def){
@@ -66,25 +65,18 @@ final class Stage extends FrameLayout {
     @Override protected void onDetachedFromWindow(){super.onDetachedFromWindow();removeCallbacks(singleClick);}
     void updatePose(double now){
         Reading r=a.reading;
-        if(r!=lastReading){lastReading=r;expressionKey="";screenText.reset();}
+        if(r!=lastReading){lastReading=r;screenText.reset();}
         if(r!=null&&!a.preparing){
             double ms=r.time(),cursor=r.chars(ms);r.terminal.shown=(int)cursor;
-            Script.Segment seg=r.timeline.at(ms);boolean speak=r.playing&&seg!=null&&seg.type==Script.SPOKEN;
-            boolean voicing=speak&&(seg.speechEnd<0||ms<seg.speechEnd);
-            Performance directions=r.performance;
-            Mood.Pose p=!a.forced.isEmpty()?new Mood.Pose(a.forced,1,"",0,0,""):
-                a.stopped||directions==null?new Mood.Pose("neutre",1,"",0,0,""):directions.face(ms);
-            long strength=Math.round(p.strength*40),mix=Math.round(p.weight*30);
-            String key=p.expr+"|"+strength+"|"+p.mix+"|"+mix;
-            if(!expressionKey.equals(key)){sprite.expression(p.expr,strength/40.,p.mix,mix/30.);expressionKey=key;}
-            sprite.direct(directions==null||a.stopped||!a.forced.isEmpty()?null:directions.gesture(ms),ms);
+            Script.Segment seg=r.timeline.at(ms);
+            long end=seg==null?0:seg.speechEnd<0?seg.to:seg.speechEnd;
+            boolean voicing=r.playing&&seg!=null&&seg.type==Script.SPOKEN&&ms<end;
+            sprite.direct(a.stopped?null:r.performance,ms,a.forced);
             sprite.viseme=voicing?r.viseme(ms,ms,cursor):0;sprite.shape=voicing?r.shape():48;
             sprite.letter=voicing?Reading.letterAt(r.text,cursor):"";sprite.quietMouth=!voicing;
-            sprite.talk=voicing?(sprite.viseme>0?1:.15):0;
+            sprite.talk=voicing?(sprite.viseme>0?1:.15)*RigPose.ease((ms-seg.from)/65)*RigPose.ease((end-ms)/85):0;
         }else{
-            sprite.direct(null,-1);sprite.quietMouth=false;sprite.viseme=0;sprite.shape=48;sprite.letter="";sprite.talk=0;
-            String expr=a.forced.isEmpty()?"neutre":a.forced;
-            if(!expressionKey.equals(expr)){sprite.expression(expr,1,"",0);expressionKey=expr;}
+            sprite.direct(null,-1,a.forced);sprite.quietMouth=false;sprite.viseme=0;sprite.shape=48;sprite.letter="";sprite.talk=0;
         }
         sprite.tick(now);
     }

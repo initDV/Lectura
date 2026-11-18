@@ -29,51 +29,22 @@ jobs:
           curl -fsSL --retry 2 'https://github.com/ByBrawe/Okuvia-models/releases/download/pocket-multilingual-preset-20261026/fr-pocket-tts-202610-preset.zip' -o "$d/estelle.zip"
           (cd "$d" && echo '6068d9e5fa2b91c92bda8a3d874c34a3f99799cd5bef45634644b4e37febf718  estelle.zip' | sha256sum -c && unzip -q estelle.zip)
           curl -fsSL --retry 2 'https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime/1.24.3/onnxruntime-1.24.3.jar' -o "$d/ort.jar"
-          # Inspect the deployed Mimi graph itself, not a different export of Pocket TTS.
-          if [[ $(uname -m) == x86_64 ]]; then
-            python3 -m pip install --user 'onnx==1.19.1'
-            python3 - "$d/models/mimi_decoder.onnx" <<'PY'
-          import collections
-          import sys
-          import onnx
-
-          graph = onnx.load(sys.argv[1]).graph
-          counts = collections.Counter(n.op_type for n in graph.node)
-          ops = ['ScatterElements', 'ScatterND', 'Mod', 'Range', 'Where']
-          print('::notice title=Attention Mimi::' + ', '.join(f'{op}={counts[op]}' for op in ops))
-          for node in graph.node:
-              if node.op_type in ('ScatterElements', 'ScatterND', 'Mod'):
-                  print(f'{node.name}: {node.op_type} {list(node.input)} -> {list(node.output)}')
-          PY
-          fi
-          cat > "$d/Check.java" <<'JAVA'
-          package io.github.initdv.lectura;
-          class Pcm {static void interrupted(){}}
-          public class Check {
-              public static void main(String[] a)throws Exception {
-                  long begin=System.nanoTime();
-                  try(Pocket p=new Pocket(new java.io.File(a[0]))) {
-                      for(String line:new String[]{"Tu veux venir ce soir ?","Bravo !","Bonjour, je m’appelle Estelle."}) {
-                          long t=System.nanoTime();float[] x=p.generate(line);float peak=0;
-                          for(float v:x){if(!Float.isFinite(v))throw new AssertionError("Non fini");peak=Math.max(peak,Math.abs(v));}
-                          if(peak<.01||x.length<10000||x.length>24000*15)throw new AssertionError("PCM : "+x.length+" / "+peak);
-                          System.out.printf("::notice title=PCM Estelle Linux %s::%s ; %d échantillons, pic %.3f, calcul %.2f s, total %.2f s%n",System.getProperty("os.arch"),line,x.length,peak,(System.nanoTime()-t)*1e-9,(System.nanoTime()-begin)*1e-9);
-                          if(line.endsWith("?")) {
-                              float[] shifted=x.clone();int end=x.length;
-                              while(end>1&&Math.abs(x[end-1])<.001)end--;
-                              boolean lift=QuestionPitch.lift(shifted,0,end,24000);
-                              int changed=0;
-                              for(int i=0;i<x.length;i++)if(x[i]!=shifted[i]){
-                                  if(i<end-12480||i>=end||!Float.isFinite(shifted[i]))throw new AssertionError("Montée hors de la fin voisée");
-                                  changed++;
-                              }
-                              if(lift!=(changed>0))throw new AssertionError("Montée sans modification du PCM");
-                              System.out.printf("::notice title=Contour de question Estelle::%s ; %d échantillons modifiés dans la fin, durée inchangée%n",lift?"Montée appliquée":"Finale laissée intacte",changed);
-                          }
-                      }
-                  }catch(Throwable e){System.out.println("::error title=Contrat Estelle::"+e.toString().replace("\n","%0A"));throw e;}
-              }
-          }
-          JAVA
-          javac -encoding UTF-8 -d "$d" android/src/io/github/initdv/lectura/{LocalUnigram,OrtLocal,Pocket,QuestionPitch}.java "$d/Check.java"
-          java -cp "$d:$d/ort.jar" io.github.initdv.lectura.Check "$d"
+          out="$RUNNER_TEMP/estelle-audio"
+          mkdir -p "$out"
+          javac -encoding UTF-8 -d "$d" android/src/io/github/initdv/lectura/{LocalUnigram,OrtLocal,Pocket,Mimi,QuestionPitch}.java android/tests/host/EstelleCheck.java
+          check=(java -Xmx128m -cp "$d:$d/ort.jar" io.github.initdv.lectura.EstelleCheck "$d" "$out")
+          "${check[@]}" prepare
+          # Each measurement starts a fresh process loading only the decoder, so the flow model
+          # and Java heap from latent generation cannot mask the difference in peak RSS.
+          for version in v28 v29; do
+            /usr/bin/time -f '%M KiB RSS max ; %e s' -o "$out/memoire-$version.txt" "${check[@]}" "$version"
+            echo "::notice title=Mémoire Mimi $(uname -m) $version::$(cat "$out/memoire-$version.txt")"
+          done
+          "${check[@]}" check
+          rm -f "$out"/*.f32
+          cp "$d"/MODEL_LICENSE.txt "$d"/VOICE_ATTRIBUTION.md "$out/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Estelle-${{ matrix.runner }}-PCM
+          path: ${{ runner.temp }}/estelle-audio
+          if-no-files-found: error

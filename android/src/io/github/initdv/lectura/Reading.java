@@ -29,6 +29,7 @@ final class Reading implements AutoCloseable {
     private double position;
     private long mark;
     private int pendingSeek=-1;
+    private float appliedRate=1;
     Reading(String text,List<Script.Segment> parts,Script.Keywords keywords, boolean silent,Pcm pcm,Talk talk,Voice voice,
             Project p,float baseRate,Runnable finish,Consumer<String> fail) throws IOException {
         this.text=text; this.silent=silent;this.pcm=pcm;this.baseRate=baseRate;this.finish=finish;
@@ -65,7 +66,7 @@ final class Reading implements AutoCloseable {
     }
     void play(){
         if(playing)return;if(ended)seek(0);playing=true;
-        if(queue!=null)queue.play();else if(player!=null){player.start();player.setPlaybackParams(new PlaybackParams().allowDefaults().setSpeed(rate).setPitch(1));}
+        if(queue!=null)queue.play();else if(player!=null){player.start();applyRate();}
         else mark=SystemClock.uptimeMillis();
     }
     void pause(){
@@ -82,10 +83,15 @@ final class Reading implements AutoCloseable {
         if(queue!=null)queue.setRate(speed);
         else {position=time();mark=SystemClock.uptimeMillis();}
         rate=speed/baseRate;
-        if(player!=null&&playing)player.setPlaybackParams(new PlaybackParams().allowDefaults().setSpeed(rate).setPitch(1));
+        if(player!=null&&playing)applyRate();
     }
-    void volume(float v,boolean muted){volume=v;if(player!=null)player.setVolume(muted?0:v,muted?0:v);
-        if(queue!=null){queue.volume=v;if(mute!=muted)queue.mute(muted);}mute=muted;}
+    private void applyRate(){
+        if(appliedRate==rate)return; // Leave the default, unmodified 1× mixer path on first playback.
+        player.setPlaybackParams(new PlaybackParams().allowDefaults().setSpeed(rate).setPitch(1));appliedRate=rate;
+    }
+    void volume(float v,boolean muted){volume=Float.isFinite(v)?Math.max(0,Math.min(1,v)):1;
+        if(player!=null)player.setVolume(muted?0:volume,muted?0:volume);
+        if(queue!=null){queue.volume=volume;if(mute!=muted)queue.mute(muted);}mute=muted;}
     int viseme(double time,double frame,double chars){
         if(!playing)return 0;
         // The requested seek position isn't yet playing. Don't analyse its future samples.

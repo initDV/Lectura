@@ -20,33 +20,54 @@ final class Performance {
         Map.entry("ciel",1120),Map.entry("relache",1040),Map.entry("apaise",1110),Map.entry("clin",680),
         Map.entry("tapote",720),Map.entry("sursaut_fort",490),Map.entry("sursaut_double",650));
     private static final Mood.Pose NEUTRAL=new Mood.Pose("neutre",1,"",0,0,"");
-    private final List<Track> tracks=new ArrayList<>();
+    private final RigPose rig;
+    private final double[] rest;
+    private final List<Face> faces=new ArrayList<>();
     private final List<Cue> gestures=new ArrayList<>();
 
     static final class Cue {
         final long at;final int length,side;final double strength;final String motion;
-        Cue(long at,String motion,double strength,int side){this.at=at;this.motion=motion;this.strength=strength;this.side=side;length=DURATIONS.getOrDefault(motion,0);}
+        private long until;
+        Cue(long at,String motion,double strength,int side,long until){
+            this.at=at;this.motion=motion;this.strength=strength;this.side=side;
+            length=DURATIONS.get(motion);this.until=Math.min(at+length,until);
+        }
+        double envelope(double time){
+            return RigPose.ease((time-at)/90)*RigPose.ease((until-time)/150);
+        }
+    }
+    private static final class Event {
+        final long at;final Mood.Pose target;
+        Event(long at,Mood.Pose target){this.at=at;this.target=target;}
     }
     private static final class Face {
-        final long at;final String id;final double force;
-        Face(long at,String id,double force){this.at=at;this.id=id;this.force=force;}
+        final Event event;final double[] from,to;
+        Face(Event event,double[] from,double[] to){this.event=event;this.from=from;this.to=to;}
+        void sample(double time,double[] out){RigPose.mix(from,to,RigPose.ease((time-event.at)/RigPose.GLIDE_MS),out);}
     }
-    private static final class Track {
-        final Script.Segment segment;final Mood.Analysis analysis;final List<Face> faces=new ArrayList<>();
-        Track(Script.Segment p,Mood.Analysis a){segment=p;analysis=a;}
-    }
-    Performance(List<Script.Segment> parts,Mood mood) {
-        int step=0;
-        for(Script.Segment p:parts) {
-            Mood.Analysis a=mood.summary(p);Track track=new Track(p,a);tracks.add(track);
-            if(!mood.auto()||a.manual||p.type!=Script.SPOKEN)continue;
+    Performance(List<Script.Segment> parts,Mood mood,RigPose rig) {
+        this.rig=rig;rest=rig.rest();
+        int step=0;long prevEnd=0;
+        List<Cue> candidates=new ArrayList<>();
+        long[] allowed=gestureEnds(parts,mood);
+        for(int index=0;index<parts.size();index++) {
+            Script.Segment p=parts.get(index);
+            if(p.from>=p.to)continue;
+            if(p.from>prevEnd)addFace(new Event(prevEnd,NEUTRAL));
+            prevEnd=p.to;
+            Mood.Analysis a=mood.summary(p);
             long end=p.speechEnd>=0?p.speechEnd:p.to;
-            long duration=end-p.from;if(duration<=0)continue;
+            long duration=end-p.from;
+            boolean automated=allowed[index]>p.from&&duration>0;
+            addFace(new Event(p.from,new Mood.Pose(a.expr,automated&&a.sentiment?Math.min(.46,a.force):a.force,
+                a.second,a.weight,0,"")));
+            if(!automated)continue;
+            List<Event> events=new ArrayList<>();long until=allowed[index];
             for(Mood.Moment x:a.moments) {
                 long at=offsetTime(p,end,x.pos);int seed=step++;
-                if(!x.emotion.isEmpty())track.faces.add(new Face(at,x.emotion,x.force));
+                if(!x.emotion.isEmpty())events.add(new Event(at,pose(a,x.emotion,x.force)));
                 String move=x.gesture.isEmpty()?mood.motion(x.emotion,seed):x.gesture;
-                addCue(at,move,x.emotion.isEmpty()?.68:Math.min(1.15,x.force),seed);
+                cue(candidates,at,move,x.emotion.isEmpty()?.68:Math.min(1.15,x.force),seed,until);
             }
             // These beats are attached to the end of the realized voice, not to a nominal reading rate.
             Matcher tail=TAIL.matcher(p.text);
@@ -65,25 +86,61 @@ final class Performance {
                 else if(punctuation.contains(";")&&duration>=680){gesture="hoche_lent";force=.46;}
                 else if(punctuation.contains(",")&&duration>=1050){gesture="hoche";force=.38;}
                 long at=Math.max(p.from,end-Math.min(165,duration/3));
-                if(!emotion.isEmpty())track.faces.add(new Face(at,emotion,force));
-                addCue(at,gesture,force,step++);
+                if(!emotion.isEmpty())events.add(new Event(at,pose(a,emotion,force)));
+                cue(candidates,at,gesture,force,step++,until);
             }else if(a.moments.isEmpty()&&duration>2500) {
-                addCue(p.from+duration/2,a.expr.equals("concentre")?"observe":"ouvre",.38,step++);
+                cue(candidates,p.from+duration/2,a.expr.equals("concentre")?"observe":"ouvre",.38,step++,until);
             }
-            track.faces.sort(Comparator.comparingLong(x->x.at));
+            events.sort(Comparator.comparingLong(x->x.at));
+            for(Event event:events)addFace(event);
+        }
+        addFace(new Event(prevEnd,NEUTRAL));
+        candidates.sort(Comparator.comparingLong(x->x.at));
+        for(Cue cue:candidates)addCue(cue);
+        for(int i=1;i<gestures.size();i++) {
+            Cue last=gestures.get(i-1);last.until=Math.min(last.until,gestures.get(i).at);
         }
     }
-    private void addCue(long at,String motion,double strength,int seed) {
-        if(motion.isEmpty()||!DURATIONS.containsKey(motion))return;
+    private static Mood.Pose pose(Mood.Analysis a,String id,double force){
+        String mix=a.second.equals(id)?a.expr:a.second;
+        return new Mood.Pose(id,force,mix.equals(id)?"":mix,Math.min(a.weight,.26),0,"");
+    }
+    private void addFace(Event event){
+        double[] goal=rig.resolve(event.target);
+        Face last=faces.isEmpty()?null:faces.get(faces.size()-1);
+        double[] start=rest;
+        if(last!=null){
+            // A key can interrupt a glide. Start from the value that would be drawn at this exact audio time.
+            if(event.at==last.event.at){start=last.from;faces.remove(faces.size()-1);}
+            else if(java.util.Arrays.equals(last.to,goal))return;
+            else {start=new double[rest.length];last.sample(event.at,start);}
+        }
+        faces.add(new Face(event,start,goal));
+    }
+    private static long[] gestureEnds(List<Script.Segment> parts,Mood mood){
+        long[] allowed=new long[parts.size()];
+        // Gestures may carry over into the next spoken phrase, but not across a gap, command or manual pose.
+        for(int i=parts.size()-1;i>=0;i--){
+            Script.Segment p=parts.get(i);
+            if(!mood.auto()||p.type!=Script.SPOKEN||mood.summary(p).manual){allowed[i]=p.from;continue;}
+            long next=i+1<parts.size()?parts.get(i+1).from:Long.MAX_VALUE;
+            allowed[i]=i+1<parts.size()&&next<=p.to&&allowed[i+1]>next?allowed[i+1]:p.to;
+        }
+        return allowed;
+    }
+    private static void cue(List<Cue> out,long at,String motion,double strength,int seed,long until){
+        if(at<until&&DURATIONS.containsKey(motion))out.add(new Cue(at,motion,strength,seed%2==0?1:-1,until));
+    }
+    private void addCue(Cue cue) {
         if(!gestures.isEmpty()) {
             // Leave time to read a gesture. A stronger beat can replace a weaker punctuation accent.
             Cue last=gestures.get(gestures.size()-1);
-            if(at-last.at<Math.min(380,last.length/2)) {
-                if(strength<=last.strength+.24)return;
+            if(cue.at<last.until&&cue.at-last.at<Math.min(380,last.length/2)) {
+                if(cue.strength<=last.strength+.24)return;
                 gestures.remove(gestures.size()-1);
             }
         }
-        gestures.add(new Cue(at,motion,strength,seed%2==0?1:-1));
+        gestures.add(cue);
     }
     private static long offsetTime(Script.Segment p,long to,int local) {
         double ratio;
@@ -95,32 +152,20 @@ final class Performance {
         // Offset is a grapheme-based estimate (the local engines don't emit word timestamps).
         return p.from+Math.min(Math.max(0,to-p.from-110),Math.round((to-p.from)*ratio));
     }
-    private Track track(double time) {
-        int lo=-1,hi=tracks.size()-1;
-        while(lo<hi){int m=(lo+hi+1)>>>1;if(tracks.get(m).segment.from<=time)lo=m;else hi=m-1;}
-        return lo<0?null:tracks.get(lo);
+    private Face key(double time){
+        int lo=-1,hi=faces.size()-1;
+        while(lo<hi){int m=(lo+hi+1)>>>1;if(faces.get(m).event.at<=time)lo=m;else hi=m-1;}
+        return lo<0?null:faces.get(lo);
     }
-    Mood.Pose face(double time) {
-        Track t=track(time);if(t==null||time>=t.segment.to)return NEUTRAL;
-        Mood.Analysis a=t.analysis;
-        if(t.faces.isEmpty())return new Mood.Pose(a.expr,a.force,a.second,a.weight,0,"");
-        Face last=null,previous=null;for(Face event:t.faces) {
-            if(event.at>time)break;previous=last;last=event;
-        }
-        if(last==null)return new Mood.Pose(a.expr,a.sentiment?Math.min(.46,a.force):a.force,"",0,0,"");
-        String mix=previous==null?a.second:previous.id;
-        double elapsed=time-last.at;
-        double transition=Math.max(0,1-elapsed/220);
-        double weight=previous==null?Math.min(a.weight,.26):.48*transition*transition;
-        double breath=Math.max(0,time-(t.segment.speechEnd>=0?t.segment.speechEnd:t.segment.to));
-        double force=last.force*(1-.24*Math.min(1,breath/530.));
-        return new Mood.Pose(last.id,force,mix.equals(last.id)?"":mix,weight,0,"");
+    Mood.Pose face(double time){Face key=key(time);return key==null?NEUTRAL:key.event.target;}
+    void sample(double time,double[] out){
+        Face key=key(time);
+        if(key==null)System.arraycopy(rest,0,out,0,out.length);
+        else key.sample(time,out);
     }
     Cue gesture(double time) {
-        Track t=track(time);
-        if(t==null||t.analysis.manual||t.segment.type!=Script.SPOKEN||time>=t.segment.to)return null;
         int lo=-1,hi=gestures.size()-1;
         while(lo<hi){int m=(lo+hi+1)>>>1;if(gestures.get(m).at<=time)lo=m;else hi=m-1;}
-        if(lo<0)return null;Cue pose=gestures.get(lo);return time<pose.at+pose.length?pose:null;
+        if(lo<0)return null;Cue pose=gestures.get(lo);return time<pose.until?pose:null;
     }
 }
