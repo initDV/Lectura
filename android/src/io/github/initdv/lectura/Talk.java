@@ -8,7 +8,13 @@ import android.os.SystemClock;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -52,6 +58,53 @@ final class Talk implements AutoCloseable {
         if(!ready||!local(voice)||tts.setVoice(voice)!=TextToSpeech.SUCCESS){l.error("voix");return;}
         tts.setSpeechRate(speed);tts.setPitch(Math.max(.05f,pitch));Bundle b=new Bundle();b.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME,volume);
         if(tts.speak(text,TextToSpeech.QUEUE_FLUSH,b,current)==TextToSpeech.ERROR)l.error("synthèse");
+    }
+    Hd.Synthesis render(File cache,String source,String lang,org.json.JSONObject lexicon,Voice voice,int cps,
+                        float pitch,Hd.Progress progress)throws Exception {
+        if(source.length()>SpeechPlan.MAX_TEXT)throw new IOException("Texte trop long pour la synthèse.");
+        return VoiceRender.render(cache,null,null,SpeechPlan.plan(source,lang,lexicon),24000,cps,
+            text->renderPhrase(cache,text,voice,pitch),progress);
+    }
+    private float[] renderPhrase(File cache,String text,Voice voice,float pitch)throws Exception {
+        Pcm.interrupted();
+        if(text.length()>TextToSpeech.getMaxSpeechInputLength())throw new IOException("Phrase trop longue pour la voix système.");
+        String id=UUID.randomUUID().toString();File file=File.createTempFile("systeme-",".wav",cache);
+        CompletableFuture<Void> synth=new CompletableFuture<>();
+        Listener callback=new Listener(){
+            @Override public void done(){synth.complete(null);}
+            @Override public void error(String code){synth.completeExceptionally(new IOException("Synthèse locale Android : "+code));}
+        };
+        try {
+            main.post(()->{
+                if(synth.isDone())return;
+                if(closed||!ready||!local(voice)||tts.setVoice(voice)!=TextToSpeech.SUCCESS){callback.error("voix locale indisponible");return;}
+                current=id;listener=callback;
+                tts.setSpeechRate(1);tts.setPitch(Math.max(.05f,pitch));
+                try{if(tts.synthesizeToFile(text,new Bundle(),file,id)!=TextToSpeech.SUCCESS)callback.error("fichier refusé");}
+                catch(RuntimeException e){synth.completeExceptionally(e);}
+            });
+            try{synth.get(30,TimeUnit.SECONDS);}
+            catch(InterruptedException e){Thread.currentThread().interrupt();Pcm.interrupted();throw e;}
+            catch(TimeoutException e){throw new IOException("Le moteur vocal local ne répond pas.",e);}
+            catch(ExecutionException e){throw new IOException(e.getCause().getMessage(),e.getCause());}
+            Pcm.interrupted();
+            try(Pcm pcm=Pcm.decode(file,cache)) {
+                if(pcm.frames>90L*pcm.rate)throw new IOException("Phrase système trop longue.");
+                short[] raw=new short[(int)pcm.frames*pcm.channels];pcm.read(0,raw,(int)pcm.frames);
+                float[] res=new float[(int)Math.round(pcm.frames*24000./pcm.rate)];
+                for(int i=0;i<res.length;i++) {
+                    double pos=i*pcm.rate/24000.;int j=Math.min((int)pcm.frames-1,(int)pos),k=Math.min((int)pcm.frames-1,j+1);
+                    float a=raw[pcm.channels*j],b=raw[pcm.channels*k];
+                    if(pcm.channels==2){a=(a+raw[pcm.channels*j+1])*.5f;b=(b+raw[pcm.channels*k+1])*.5f;}
+                    res[i]=(float)((a+(b-a)*(pos-j))/32768.);
+                }
+                return res;
+            }
+        }finally {
+            boolean running=!synth.isDone();synth.cancel(false);
+            main.post(()->{if(current.equals(id)){if(running)cancel();else{current="";listener=null;}}});
+            file.delete();
+        }
     }
     void cancel(){current="";listener=null;if(ready)tts.stop();}
     @Override public void close(){closed=true;cancel();tts.shutdown();}

@@ -1,0 +1,12 @@
+{
+  "fr": {
+    "sudo": "soudo", "linux": "linuxe", "github": "guit heub", "gitlab": "guit lab",
+    "api": "a pé i", "apis": "a pé i", "sdk": "esse dé ka", "cli": "cé elle i", "gui": "gé u i",
+    "apk": "a pé ka", "pwa": "pé double vé a", "pcm": "pé cé emme", "wav": "wave", "json": "djésonne",
+    "onnx": "onix", "url": "u erre elle", "http": "ache té té pé", "https": "ache té té pé esse",
+    "ssh": "esse esse ache", "ssl": "esse esse elle", "tcp": "té cé pé", "ip": "i pé", "dns": "dé enne esse",
+    "utf": "u té effe", "html": "ache té emme elle", "css": "cé esse esse", "sql": "esse ku elle",
+    "ram": "rame", "gpu": "gé pé u", "cpu": "cé pé u", "usb": "u esse bé", "pdf": "pé dé effe"
+  },
+  "en": {}
+}

@@ -36,7 +36,7 @@ final class Project {
     static Project fromJson(JSONObject o){
         if(o.optInt("version",1)>1)throw new IllegalArgumentException("Ce projet vient d'une version plus récente de Lectura (format "+o.optString("version")+"). Mets l'application à jour.");
         Project p=new Project(new JSONObject());String id=s(o,"id",p.id);if(!id.isEmpty())p.id=id;
-        p.title=cut(s(o,"titre",""),200);p.created=s(o,"creeLe",p.created);p.modified=s(o,"modifieLe",p.modified);p.text=s(o,"texte","").replaceAll("\\r\\n?","\n");
+        p.title=cut(s(o,"titre",""),200);p.created=s(o,"creeLe",p.created);p.modified=s(o,"modifieLe",p.modified);p.text=s(o,"texte","");
         p.character=s(o,"personnageId",p.character);if(p.character.equals("professor_1")||p.character.isEmpty())p.character="robot_lectura";else if(p.character.equals("robot"))p.character="robot_rouge";
         JSONObject t=object(o,"terminal"),r=object(o,"reglages"),a=object(o,"audio"),v=object(a,"voix");
         p.terminalTheme=s(t,"theme","sombre");p.font=s(t,"police","JetBrains Mono");p.fontSize=(int)bounded(t,"taille",18,12,40);p.cps=(int)bounded(t,"vitesseCps",28,5,120);

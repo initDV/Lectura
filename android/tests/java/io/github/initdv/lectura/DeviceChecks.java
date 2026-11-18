@@ -67,6 +67,7 @@ public final class DeviceChecks extends Instrumentation {
                 check("avion",()->airplane(ctx));
                 check("surfaces",()->surfaces(ctx));
                 check("fixtures",()->refsAndModels(refs));
+                check("prosodie-pcm",()->prosody(refs));
                 check("catalogue-et-reglages",()->fullAccess(ctx));
                 check("lips-reference",()->lipsReference(ctx,refs));
                 check("audio-importe",()->imported(ctx));
@@ -225,6 +226,42 @@ public final class DeviceChecks extends Instrumentation {
         require(!mood.summary(mixed).second.isEmpty()&&!mood.pose(mixed,mixed.text.length()).mix.isEmpty(),"Mélange d’émotions indisponible");
         return "43 rigs, 38 poses, mélange d’émotions, mots étendus/personnalisés, 8 cas G2P, 8 chronologies, SRT/VTT et projet v1";
     }
+    private String prosody(Refs refs)throws Exception {
+        JSONObject lex=Refs.object(refs.json("prononciation.json"),"fr");
+        String source="  ## Essai, voici : un test ; ça va. Tu viens ? Super ! On continue… Encore !\r\n$ echo x=2\r\n"
+            +"# commentaire\r\nM. Dupont lance `script.py` à 10:30 sur https://github.com : −3,14 € = 2% @dev & SQL + API.  ";
+        List<SpeechPlan.Fragment> plan=SpeechPlan.plan(source,"fr",lex);
+        int[] expected={140,200,240,320,360,400,480,560,560,560,200,320};
+        require(plan.size()==expected.length,"Nombre de fragments "+plan.size());
+        for(int i=0;i<plan.size();i++){
+            var f=plan.get(i);var p=f.original;
+            require(source.substring(p.start,p.end).equals(p.text)&&f.pauseMs==expected[i],"Pause ou offsets : "+p.text+" "+f.pauseMs);
+            if(p.cursor!=null){int last=p.start;for(int n:p.cursor){require(n>=last&&n<p.end,"Offset vocal hors du texte");last=n;}}
+        }
+        require(plan.get(4).question&&plan.get(8).spoken.isEmpty()&&plan.get(9).spoken.isEmpty(),"Question et commandes silencieuses");
+        require(plan.get(10).spoken.contains("script point py")&&plan.get(10).spoken.contains("dix heures trente")
+            &&plan.get(11).spoken.contains("moins trois virgule quatorze euros égale deux pour cent arobase dev et esse ku elle plus a pé i"),"Dictionnaire vocal et symboles : "+plan.get(11).spoken);
+        require(SpeechPlan.plan("Oui ?!… \n", "fr",lex).get(0).pauseMs==560,"Pause maximale et non cumulée");
+        Project orig=new Project(refs.defaults);orig.text=source;require(Project.fromJson(orig.json()).text.equals(source),"Source sauvegardée intacte");
+        int rate=24000;float[] audio=new float[rate];int onset=rate/10,end=rate*3/4;
+        for(int i=onset;i<end;i++)audio[i]=(float)(.3*Math.sin(2*Math.PI*150*(i-onset)/rate));
+        try(Pcm wave=VoiceRender.render(refs.context.getCacheDir(),null,null,plan,rate,28,ignored->audio,(n,total)->{}).pcm){
+            require(wave.rate==rate,"Fréquence du WAV");
+            for(int i=0;i<expected.length;i++){
+                Script.Segment p=plan.get(i).original;
+                require(p.to-p.speechEnd==expected[i],"Silence WAV différent : "+p.text+" "+(p.to-p.speechEnd));
+                require(pcmPeak(wave,p.speechEnd+1,p.to-1)==0,"Le PCM doit être nul dans le silence");
+            }
+            require((plan.get(3).original.to-plan.get(3).original.speechEnd)/1.25==256,"Pause à 1,25×");
+        }
+        int first=onset+50,last=end-1;float[] raised=audio.clone();
+        require(QuestionPitch.lift(raised,first,last,rate),"Montée non détectée sur voyelle de test");
+        int a=end-rate*13/100,b=end-rate*4/100;
+        require(crossings(raised,a,b)>crossings(audio,a,b)&&raised.length==audio.length&&raised[onset+100]==audio[onset+100],
+            "Montée locale seulement, sans raccourcir ni toucher l’attaque");
+        return "8 durées exactes dans le PCM, règle du maximum et 320 → 256 ms à 1,25× ; question à durée constante ; offsets, abréviations, nombres et source intacte";
+    }
+    private static int crossings(float[] w,int a,int b){int n=0;for(int i=a+1;i<b;i++)if(w[i-1]<0&&w[i]>=0)n++;return n;}
     private JSONObject fixtures()throws Exception{
         try(InputStream in=getContext().getAssets().open("fixtures.json")){
             return Refs.parse(new String(Refs.read(in,1000000),StandardCharsets.UTF_8));
@@ -462,6 +499,9 @@ public final class DeviceChecks extends Instrumentation {
             var test=fixtures().getJSONObject("lips");String text=test.getString("text");float speed=(float)test.getDouble("speed");
             main(()->{a.dismiss();Project p=new Project(a.db.settings);p.speed=speed;p.text=text;a.open(p);
                 a.selectVoice("webspeech",voice.get());a.launch(false);});
+            long begin=android.os.SystemClock.elapsedRealtime();
+            waitFor("Audio du moteur Android local",()->a.reading!=null&&a.reading.pcm!=null&&a.reading.playing,30000);
+            long startup=android.os.SystemClock.elapsedRealtime()-begin;
             JSONArray frames=sampleReading(a,ctx.getExternalFilesDir("verification"),"tts",20000);
             boolean command=false;
             for(int i=0,start=text.indexOf("$ "),end=text.indexOf('\n',start);i<frames.length();i++){
@@ -469,7 +509,7 @@ public final class DeviceChecks extends Instrumentation {
                 if(chars>=start&&chars<=end){command=true;require(frame.getInt(2)==0,"Visème pendant la commande");}
             }
             require(command,"La commande silencieuse n'a pas été affichée");
-            return "voix française locale "+voice.get()+", même texte et vitesse 1,25×, "+frames.length()+" observations jusqu'à la fin (commande muette)";
+            return "voix française locale "+voice.get()+", même texte et vitesse 1,25×, "+frames.length()+" observations PCM jusqu’à la fin (commande muette), démarrage ≈ "+startup+" ms";
         }finally{main(a::finish);}
     }
     private void shareGrant(MainActivity a,File media)throws Exception {
@@ -610,8 +650,8 @@ public final class DeviceChecks extends Instrumentation {
             try {
                 require(h.installed(two),"Un seul téléchargement pour les locuteurs MLS");
                 String sentence="Bonjour, voici les voix de Lectura.";
-                try(Pcm a=h.synth(sentence,"mls_f1",1,28,(n,total)->{}).pcm;
-                    Pcm b=h.synth(sentence,"mls_m1",1,28,(n,total)->{}).pcm){
+                try(Pcm a=h.synth(sentence,"mls_f1",28,(n,total)->{}).pcm;
+                    Pcm b=h.synth(sentence,"mls_m1",28,(n,total)->{}).pcm){
                     short[] x=new short[a.rate],y=new short[b.rate];
                     int m=a.read(0,x,x.length),n=b.read(0,y,y.length);
                     require(a.duration()>700&&b.duration()>700&&peak(x,m)>1000&&peak(y,n)>1000
@@ -682,7 +722,7 @@ public final class DeviceChecks extends Instrumentation {
             String text="Bonjour Lectura.\n$ echo\nTrès bien !";
             File synthesis;
             int head,first,last,command;
-            Hd.Synthesis reading=h.synth(text,"gilles",1,28,(a,b)->{});
+            Hd.Synthesis reading=h.synth(text,"gilles",28,(a,b)->{});
             try(Pcm f=reading.pcm){
                 require(f.frames>f.rate,"Synthèse ONNX vide");synthesis=f.file;
                 List<Script.Segment> parts=reading.segments;
@@ -695,7 +735,7 @@ public final class DeviceChecks extends Instrumentation {
                 command=pcmPeak(f,b.from+1,b.to-1); // Skip boundaries rounded to milliseconds.
                 require(command==0,"Commande Gilles non muette : pic "+command);
             }
-            try(Pcm cached=h.synth(text,"gilles",1,28,(a,b)->require(b==1,"Cache non réutilisé")).pcm){require(synthesis.equals(cached.file),"Cache Piper");}
+            try(Pcm cached=h.synth(text,"gilles",28,(a,b)->require(b==1,"Cache non réutilisé")).pcm){require(synthesis.equals(cached.file),"Cache Piper");}
             return "Gilles : téléchargement interrompu/repris, pics PCM des phrases "+first+"/"+last
                 +" (première seconde "+head+", commande "+command+", reprises après délai réseau : "+retries+"), cache ; modèle conservé pour le redémarrage en mode avion";
         }

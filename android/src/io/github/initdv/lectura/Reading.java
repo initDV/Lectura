@@ -74,6 +74,7 @@ final class Reading implements AutoCloseable {
     void seek(double ms){
         position=Math.max(0,Math.min(duration-1,ms));ended=false;mark=SystemClock.uptimeMillis();
         if(queue!=null)queue.seek((int)(position/duration*text.length()));
+        if(lip!=null)lip.reset();
         if(player!=null){pendingSeek=(int)position;player.seekTo(pendingSeek,MediaPlayer.SEEK_CLOSEST);}
     }
     void speed(float speed){
@@ -87,7 +88,10 @@ final class Reading implements AutoCloseable {
     int viseme(double time,double frame,double chars){
         if(!playing)return 0;
         // The requested seek position isn't yet playing. Don't analyse its future samples.
-        if(lip!=null)return lip.read(pendingSeek>=0?0:time);
+        if(lip!=null){Script.Segment span=timeline.at(time);
+            if(pendingSeek>=0||span!=null&&span.speechEnd>=0&&(span.type!=Script.SPOKEN||time>=span.speechEnd)){lip.reset();return 0;}
+            return lip.read(time);
+        }
         if(queue!=null)return speechViseme(frame,queue.speaking(),text,chars);
         int n=(int)(time/duration*text.length());
         return simulated(frame,n<text.length()?text.charAt(n):' ');

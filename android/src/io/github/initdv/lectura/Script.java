@@ -15,7 +15,7 @@ import static io.github.initdv.lectura.Refs.*;
 /** UTF-16 offsets match the .lectura model and the browser's timing. */
 final class Script {
     static final int VOICE_CPS=14;
-    static final int SPOKEN=0, COMMAND=1, COMMENT=2;
+    static final int SPOKEN=0, COMMAND=1, COMMENT=2, PAUSE=3;
     static final Pattern STRONG=Pattern.compile("(?<=[.!?…])[\\x09-\\x0d\\p{Z}\ufeff]+");
     static final Pattern LONG_SPLIT=Pattern.compile("[.!?…][\"'»)\\]]*\\s+|\\s+");
     static final Pattern TIME=Pattern.compile("(?:(\\d+):)?(\\d{1,2}):(\\d{2})[.,](\\d{1,3})\\s*-->\\s*(?:(\\d+):)?(\\d{1,2}):(\\d{2})[.,](\\d{1,3})");
@@ -32,7 +32,8 @@ final class Script {
     static final class Segment {
         final String text;
         final int start,end,type;
-        long from,to;
+        long from,to,speechEnd=-1;
+        int[] cursor;
         String expression="auto";
         Segment(String text,int start,int end,int type){this.text=text;this.start=start;this.end=end;this.type=type;}
         JSONObject json(int id){JSONObject o=new JSONObject();put(o,"id",id);put(o,"texte",text);put(o,"debutMs",from);put(o,"finMs",to);put(o,"expression",expression);return o;}
@@ -83,6 +84,13 @@ final class Script {
         return parts;
     }
     static void reportExpressions(List<Segment> parts,JSONArray previous){for(int i=0;i<parts.size();i++){JSONObject o=previous.optJSONObject(i);if(o!=null)parts.get(i).expression=o.optString("expression","auto");}}
+    static void reportExpressions(String text,List<Segment> parts,JSONArray previous){
+        List<Segment> saved=locate(text,previous,false);if(saved==null)return;
+        int i=0;for(Segment p:parts){
+            while(i<saved.size()&&saved.get(i).end<=p.start)i++;
+            if(i<saved.size()&&saved.get(i).start<p.end)p.expression=saved.get(i).expression;
+        }
+    }
     static List<Segment> locate(String text,JSONArray data,boolean checkTime){
         if(data.length()==0)return null;List<Segment> parts=new ArrayList<>();int pos=0;long last=-1;
         for(int i=0;i<data.length();i++){
@@ -99,9 +107,14 @@ final class Script {
         Timeline(String text,List<Segment> parts){this.parts=parts;total=text.length();duration=parts.isEmpty()?0:parts.get(parts.size()-1).to;}
         private int index(double v,boolean chars){int a=-1,b=parts.size()-1;while(a<b){int m=(a+b+1)>>>1;Segment p=parts.get(m);if((chars?p.start:p.from)<=v)a=m;else b=m-1;}return a;}
         Segment segment(int pos){return parts.isEmpty()?null:parts.get(Math.max(0,index(pos,true)));}
+        Segment at(double ms){int k=index(ms,false);return k<0?null:parts.get(k);}
         int charAt(double time){
             if(parts.isEmpty())return 0;if(time>=duration)return total;int k=index(time,false);if(k<0)return parts.get(0).start;
-            Segment p=parts.get(k);if(time>=p.to)return p.end;return (int)Math.floor(p.start+(p.end-p.start)*(time-p.from)/Math.max(1,p.to-p.from));
+            Segment p=parts.get(k);long end=p.speechEnd<0?p.to:p.speechEnd;
+            if(time>=end)return p.end;
+            double ratio=(time-p.from)/Math.max(1,end-p.from);
+            if(p.cursor!=null&&p.cursor.length>0){int i=Math.min(p.cursor.length-1,(int)(ratio*p.cursor.length));return p.cursor[i];}
+            int i=(int)Math.floor(p.start+(p.end-p.start)*ratio);return i>p.start&&Character.isLowSurrogate(p.text.charAt(i-p.start))?i-1:i;
         }
     }
     static void importSubtitles(String s,Project target){
@@ -173,16 +186,9 @@ final class Script {
         final List<Line> lines=new ArrayList<>();final Keywords keywords;
         int shown;
         Terminal(String s,Keywords k){
-            keywords=k;int pos=0;for(String l:s.split("\n",-1)){
-                int type=type(l);int begin=0;
-                if(type==SPOKEN&&l.length()>600){Matcher m=LONG_SPLIT.matcher(l);while(m.find()){
-                    int end=m.end()-1;if(end+1>=l.length())break;
-                    if(end-begin>=(".!?…".indexOf(l.charAt(m.start()))>=0?20:600)){
-                        lines.add(new Line(pos+begin,l.substring(begin,end),type,k));begin=end+1;
-                    }
-                }}
-                lines.add(new Line(pos+begin,l.substring(begin),type,k));pos+=l.length()+1;
-            }
+            keywords=k;Matcher breaks=Pattern.compile("\\r\\n|[\\r\\n]").matcher(s);int from=0;
+            while(breaks.find()){String line=s.substring(from,breaks.start());lines.add(new Line(from,line,type(line),k));from=breaks.end();}
+            String line=s.substring(from);lines.add(new Line(from,line,type(line),k));
         }
         int lineAt(int shown){int a=0,b=lines.size()-1;while(a<b){int m=(a+b+1)>>>1;if(lines.get(m).start<=shown)a=m;else b=m-1;}return a;}
     }

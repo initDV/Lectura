@@ -9,7 +9,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.RandomAccessFile;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
@@ -39,6 +38,7 @@ final class Hd implements AutoCloseable {
     final List<JSONObject> voices=new ArrayList<>();
     private final File models,phrases,whole;
     private final G2p g2p;
+    private final JSONObject pronunciation;
     private final Map<String,float[]> l1=new LinkedHashMap<>(16,.75f,true);
     private long l1Bytes;
     private Ort ort;
@@ -52,7 +52,7 @@ final class Hd implements AutoCloseable {
     Hd(Refs refs){
         Context context=refs.context;models=Library.dir(context.getFilesDir(),"models");phrases=Library.dir(context.getCacheDir(),"phrases");whole=Library.dir(context.getCacheDir(),"synthese");
         JSONArray data=array(refs.json("hd-voices.json"),"voices");
-        for(int i=0;i<data.length();i++)voices.add(data.optJSONObject(i));g2p=new G2p(refs.json("g2p.json"));
+        for(int i=0;i<data.length();i++)voices.add(data.optJSONObject(i));g2p=new G2p(refs.json("g2p.json"));pronunciation=refs.json("prononciation.json");
         try{catalogue=Library.readJson(new File(models,"index.json"));}catch(Exception ignored){try{catalogue=refs.json("hd-index.json");}catch(Exception ignored2){}}
     }
     static boolean supported(){try{Class.forName("ai.onnxruntime.OrtEnvironment",false,Hd.class.getClassLoader());return true;}catch(ClassNotFoundException e){return false;}}
@@ -128,7 +128,7 @@ final class Hd implements AutoCloseable {
     private void remember(String key,float[] pcm){
         float[] prev=l1.put(key,pcm);l1Bytes+=4L*(pcm.length-(prev==null?0:prev.length));while(l1Bytes>8*1024*1024&&l1.size()>1){String first=l1.keySet().iterator().next();l1Bytes-=4L*l1.remove(first).length;}}
     private float[] phrase(JSONObject v,String text,JSONObject config,float speed,int rate)throws Exception {
-        String id=key("SHA-1","v1|"+v.optString("id")+"|"+speed+"|"+text);float[] out=l1.get(id);if(out!=null)return out;
+        String id=key("SHA-1","v2|"+v.optString("id")+"|"+speed+"|"+text);float[] out=l1.get(id);if(out!=null)return out;
         File f=new File(phrases,id+".f32");if(f.length()>0&&f.length()%4==0&&f.length()<64*1024*1024){try(InputStream in=new FileInputStream(f)){
             byte[] raw=Refs.read(in,64*1024*1024);out=new float[raw.length/4];ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(out);
             f.setLastModified(System.currentTimeMillis());remember(id,out);return out;
@@ -147,43 +147,22 @@ final class Hd implements AutoCloseable {
         Arrays.sort(f,Comparator.comparingLong(File::lastModified).reversed());long size=0;
         for(int i=0;i<f.length;i++)if((size+=f[i].length())>bytes||i>=count){if(extension.equals(".wav"))new File(dir,f[i].getName().replace(".wav",".json")).delete();f[i].delete();}
     }
-    void prewarm(String text,String id,float speed)throws Exception {
-        JSONObject v=voice(id);if(!installed(v))return;JSONObject config=Library.readJson(cfg(v));int rate=object(config,"audio").optInt("sample_rate",22050),n=0;
-        for(Script.Segment p:Script.split(text)){Pcm.interrupted();if(p.type==Script.SPOKEN){phrase(v,p.text,config,speed,rate);if(++n>=5)break;}}
+    void prewarm(String text,String id)throws Exception {
+        JSONObject v=voice(id);if(!installed(v))return;
+        JSONObject config=Library.readJson(cfg(v));int rate=object(config,"audio").optInt("sample_rate",22050),n=0;
+        for(SpeechPlan.Fragment p:SpeechPlan.plan(text,"fr",object(pronunciation,"fr"))){
+            Pcm.interrupted();if(!p.spoken.isEmpty()){phrase(v,p.spoken,config,1,rate);if(++n>=2)break;}
+        }
     }
-    Synthesis synth(String text,String id,float speed,int cps,Progress progress)throws Exception {
-        if(text.length()>12000)throw new IOException("12000");
+    Synthesis synth(String text,String id,int cps,Progress progress)throws Exception {
+        if(text.length()>SpeechPlan.MAX_TEXT)throw new IOException("Texte trop long pour la synthèse.");
         JSONObject v=voice(id);if(!installed(v))throw new IOException("voix HD non installée");
-        String key=key("SHA-256","v1|"+id+"|"+speed+"|"+cps+"|"+text);File wav=new File(whole,key+".wav"),json=new File(whole,key+".json");
-        JSONObject config=Library.readJson(cfg(v));int rate=object(config,"audio").optInt("sample_rate",22050);if(rate<8000||rate>48000)throw new IOException("Fréquence Piper invalide.");
-        if(wav.length()>44&&json.isFile())try{List<Script.Segment> saved=Script.locate(text,array(Library.readJson(json),"segments"),true);
-            if(saved!=null){progress.update(1,1);return new Synthesis(new Pcm(wav,1,rate,(wav.length()-44)/2,false),saved);}}catch(Exception ignored){}
-        List<Script.Segment> parts=Script.split(text);if(parts.isEmpty())throw new IOException("Texte vide.");
-        File raw=File.createTempFile("piper-",".f32",whole),staging=File.createTempFile("piper-",".part",whole);
-        long frames=0;float peak=0;try{
-            try(RandomAccessFile out=new RandomAccessFile(raw,"rw")){
-                ByteBuffer b=ByteBuffer.allocate(16384).order(ByteOrder.LITTLE_ENDIAN);byte[] blank=new byte[16384];
-                for(int i=0;i<parts.size();i++){
-                    Pcm.interrupted();Script.Segment p=parts.get(i),next=i+1<parts.size()?parts.get(i+1):null;double pause=next==null?.15:text.substring(p.end,next.start).contains("\n")?.45:.22;
-                    p.from=Math.round(frames*1000./rate);long extra=Math.round(rate*pause/Math.max(.5,speed));progress.update(i,parts.size());
-                    if(p.type==Script.SPOKEN){float[] x=phrase(v,p.text,config,speed,rate);frames+=x.length;
-                        for(float value:x){peak=Math.max(peak,Math.abs(value));b.putFloat(value);if(!b.hasRemaining()){out.write(b.array());b.clear();}}
-                        if(b.position()>0){out.write(b.array(),0,b.position());b.clear();}
-                    }else extra+=Math.round(rate*(double)p.text.length()/(cps*speed));
-                    frames+=extra;if(4*frames>Pcm.MAX_BYTES)throw new IOException("Synthèse trop volumineuse.");long gap=extra*4;
-                    while(gap>0){int n=(int)Math.min(gap,blank.length);out.write(blank,0,n);gap-=n;}p.to=Math.round(frames*1000./rate);
-                }
-            }
-            float gain=peak>.001?Math.min(4,.9f/peak):1;
-            try(RandomAccessFile in=new RandomAccessFile(raw,"r");RandomAccessFile out=new RandomAccessFile(staging,"rw")){
-                Pcm.header(out,1,rate,frames*2);
-                ByteBuffer b=ByteBuffer.allocate(16384).order(ByteOrder.LITTLE_ENDIAN),dest=ByteBuffer.allocate(8192).order(ByteOrder.LITTLE_ENDIAN);
-                for(long pos=0;pos<frames;){Pcm.interrupted();int count=(int)Math.min(4096,frames-pos);in.readFully(b.array(),0,count*4);b.clear();dest.clear();
-                    for(int i=0;i<count;i++)dest.putShort(Pcm.sample(b.getFloat()*gain));out.write(dest.array(),0,count*2);pos+=count;}
-            }
-            Files.move(staging.toPath(),wav.toPath(),StandardCopyOption.REPLACE_EXISTING);Library.writeJson(json,put(new JSONObject(),"segments",Script.encode(parts)));
-            prune(whole,".wav",6,Long.MAX_VALUE);progress.update(parts.size(),parts.size());return new Synthesis(new Pcm(wav,1,rate,frames,false),parts);
-        }finally{raw.delete();staging.delete();}
+        String key=key("SHA-256","rendu-2|"+id+"|"+cps+"|"+text);File wav=new File(whole,key+".wav"),json=new File(whole,key+".json");
+        JSONObject config=Library.readJson(cfg(v));int rate=object(config,"audio").optInt("sample_rate",22050);
+        List<SpeechPlan.Fragment> plan=SpeechPlan.plan(text,"fr",object(pronunciation,"fr"));
+        Synthesis saved=VoiceRender.cached(wav,json,plan,rate,progress);if(saved!=null)return saved;
+        Synthesis result=VoiceRender.render(whole,wav,json,plan,rate,cps,w->phrase(v,w,config,1,rate),progress);
+        prune(whole,".wav",6,Pcm.MAX_BYTES);return result;
     }
     @Override public void close(){if(ort!=null){ort.close();ort=null;}loaded="";}
 

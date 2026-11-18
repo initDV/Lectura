@@ -113,9 +113,9 @@ public final class MainActivity extends Activity {
         try{db.draft(project);lastDraft=key;}catch(IOException ex){log("brouillon",ex);}}
     private void cancelPrewarm(){if(prewarmTimer!=null)handler.removeCallbacks(prewarmTimer);if(prewarm!=null)prewarm.cancel(true);}
     void changedText(){
-        cancelPrewarm();String text=project.text,id=project.voice;float rate=project.speed;
+        cancelPrewarm();String text=project.text,id=project.voice;
         if(!project.fileAudio&&project.engine.equals("piper")&&text.length()>=30&&text.length()<=12000&&hd.installed(hd.voice(id))){
-            prewarmTimer=()->prewarm=queue.submit(()->{try{hd.prewarm(text,id,rate);}catch(Exception ignored){}});handler.postDelayed(prewarmTimer,2000);
+            prewarmTimer=()->prewarm=queue.submit(()->{try{hd.prewarm(text,id);}catch(Exception ignored){}});handler.postDelayed(prewarmTimer,2000);
         }
     }
     void presentation(boolean yes){if(scene==null)return;hideKeyboard();scene.present(yes);if(yes)note(t("scene.presentationAide"),"info",3500);}
@@ -164,10 +164,10 @@ public final class MainActivity extends Activity {
     void copy(String desc,String text){getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText(desc,text));note(t("commun.copie"),"ok");}
     void hideKeyboard(){if(getCurrentFocus()!=null)getSystemService(InputMethodManager.class).hideSoftInputFromWindow(getCurrentFocus().getWindowToken(),0);}
 
-    private String signature(boolean silent){return Script.clean(project.text)+"\u0001"+silent+"|"+project.fileAudio+"|"+project.fileName+"|"+project.engine+"|"+project.voice+"|"+(project.engine.equals("piper")?project.speed:0)+"|"+project.cps;}
+    private String signature(boolean silent){return project.text+"\u0001"+silent+"|"+project.fileAudio+"|"+project.fileName+"|"+project.engine+"|"+project.voice+"|"+project.pitch+"|"+project.cps;}
     void launch(boolean silent){
         if(scene==null||preparing)return;if(reading!=null&&reading.playing&&!silent){reading.pause();playState();return;}
-        String text=Script.clean(project.text);if(text.trim().isEmpty()){note(t("scene.err.texteVide"),"warn");scene.edit.requestFocus();return;}
+        String text=project.text;if(text.trim().isEmpty()){note(t("scene.err.texteVide"),"warn");scene.edit.requestFocus();return;}
         String signature=signature(silent);
         if(exports.capturing()&&!silent){startPlaying();return;}
         if(exports.busy())return;
@@ -189,19 +189,24 @@ public final class MainActivity extends Activity {
                     decoded=Pcm.decode(audio,cache);segments=cfg.subtitles?Script.locate(text,cfg.segments,true):null;
                     if(segments==null)segments=Script.timing(text,decoded.duration(),0);
                 }else if(cfg.engine.equals("piper")){
-                    if(text.length()>12000)throw new IOException(t("voix.hd.err.tropLong","max",12000,"n",text.length()));
+                    if(text.length()>SpeechPlan.MAX_TEXT)throw new IOException(t("voix.hd.err.tropLong","max",SpeechPlan.MAX_TEXT,"n",text.length()));
                     if(!hd.installed(hd.voice(cfg.voice)))throw new IOException(t("voix.hd.err.manquant"));
-                    Hd.Synthesis syn=hd.synth(text,cfg.voice,cfg.speed,cps,(n,total)->handler.post(()->{
+                    Hd.Synthesis syn=hd.synth(text,cfg.voice,cps,(n,total)->handler.post(()->{
                         loadingText.setText(t("voix.hd.synthesePhrase","i",Math.min(n+1,total),"n",total));bar.setProgress((int)(1000*n/Math.max(1,total)));}));
-                    decoded=syn.pcm;segments=syn.segments;base=cfg.speed;
+                    decoded=syn.pcm;segments=syn.segments;
                 }
-                else {if(v==null)throw new IOException(t(localReady?"voix.err.aucune":"voix.err.absente"));base=cfg.speed;segments=Script.timing(text,Script.estimate(text,cfg.speed,cps),(double)Script.VOICE_CPS/cps);}
-                Script.reportExpressions(segments,cfg.segments);if(segments.isEmpty())throw new IOException(t("scene.err.texteVide"));
+                else {
+                    if(v==null)throw new IOException(t(localReady?"voix.err.aucune":"voix.err.absente"));
+                    Hd.Synthesis syn=talk.render(cache,text,lang,object(refs.json("prononciation.json"),lang),v,cps,cfg.pitch,
+                        (n,total)->handler.post(()->bar.setProgress((int)(1000*n/Math.max(1,total)))));
+                    decoded=syn.pcm;segments=syn.segments;
+                }
+                Script.reportExpressions(text,segments,cfg.segments);if(segments.isEmpty())throw new IOException(t("scene.err.texteVide"));
                 Mood m=new Mood(refs,lang,words,cfg.emotions);Pcm pcm=decoded;final float baseRate=base;final List<Script.Segment> parts=segments;
                 handler.post(()->{if(generation!=ticket||scene==null){if(pcm!=null)pcm.close();return;}try{
                     reading=new Reading(text,parts,words,silent,pcm,talk,v,cfg,baseRate,this::readingFinished,code->readingError(code));
                     mood=m;preparing=false;sig=signature;clearOverlay();reading.volume(volume(),muted);reading.speed(project.speed);
-                    if(silent)note(t("scene.apercuActif"),"info");startPlaying();
+                    if(silent)note(t("scene.apercuActif"),"info");if(isForeground)startPlaying();else playState();
                 }catch(Exception e){if(pcm!=null&&reading==null)pcm.close();sceneError(e);}});delivered=true;
             }catch(Exception e){handler.post(()->{if(ticket==generation)sceneError(e);});}finally{if(!delivered&&decoded!=null)decoded.close();}
         });
@@ -255,7 +260,7 @@ public final class MainActivity extends Activity {
         if(installed.isEmpty())choice(r,t("voix.hd.gerer"),"download",false,()->go("reglages"));
         for(JSONObject v:installed){String id=v.optString("id");choice(r,"Lectura HD · "+v.optString("nom"),"sparkle",!project.fileAudio&&project.engine.equals("piper")&&project.voice.equals(id),()->{dismiss();selectVoice("piper",id);});}
         ui.group(r,t("scene.voix.fichierTitre"),false);choice(r,project.fileAudio?voiceName():t("scene.voix.fichier"),"upload",project.fileAudio,()->{dismiss();pickAudio();});}
-    void selectVoice(String engine,String id){project.fileAudio=false;project.engine=engine;project.voice=id;db.set("moteurVoix",engine);db.set("voixId",id);if(scene!=null)scene.voice();cancelPrewarm();if(engine.equals("piper"))prewarm=queue.submit(()->{try{hd.prewarm("a",id,1);}catch(Exception ignored){}});}
+    void selectVoice(String engine,String id){project.fileAudio=false;project.engine=engine;project.voice=id;db.set("moteurVoix",engine);db.set("voixId",id);if(scene!=null)scene.voice();cancelPrewarm();if(engine.equals("piper"))prewarm=queue.submit(()->{try{hd.prewarm("Bonjour.",id);}catch(Exception ignored){}});}
     void pick(String mime,Consumer<Uri> onResult){Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime);request(intent,onResult);}
     void createFile(String mime,String name,Consumer<Uri> writer){request(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime).putExtra(Intent.EXTRA_TITLE,name),writer);}
     private void request(Intent intent,Consumer<Uri> callback){if(result!=null)return;result=callback;try{startActivityForResult(intent,73);}catch(Exception e){result=null;report("fichier",e);}}
@@ -294,10 +299,10 @@ public final class MainActivity extends Activity {
     void hdExample(String id,String text,float rate){
         boolean loading=hdListening!=null&&!hdListening.isDone();stopHdExample();if(loading)return;
         talk.cancel();int ticket=hdDemoGen;note(t("voix.hd.ecoute.chargement"),"info",8000);
-        hdListening=queue.submit(()->{try(HdResult r=new HdResult(hd.synth(text,id,rate,28,(now,total)->{}))){
+        hdListening=queue.submit(()->{try(HdResult r=new HdResult(hd.synth(text,id,28,(now,total)->{}))){
             File wav=r.synthesis.pcm.file;handler.post(()->{if(ticket!=hdDemoGen||!isForeground)return;
                 try{hdPlayer=new android.media.MediaPlayer();hdPlayer.setDataSource(wav.getPath());hdPlayer.setVolume(volume(),volume());
-                    hdPlayer.setOnCompletionListener(player->{player.release();if(hdPlayer==player)hdPlayer=null;});hdPlayer.setOnPreparedListener(android.media.MediaPlayer::start);hdPlayer.prepareAsync();
+                    hdPlayer.setOnCompletionListener(player->{player.release();if(hdPlayer==player)hdPlayer=null;});hdPlayer.setOnPreparedListener(player->{player.start();player.setPlaybackParams(new android.media.PlaybackParams().allowDefaults().setSpeed(rate).setPitch(1));});hdPlayer.prepareAsync();
                 }catch(Exception e){stopHdExample();report("voix-hd",e);}
             });
         }catch(Exception e){handler.post(()->{if(ticket==hdDemoGen)report("voix-hd",e);});}});
@@ -314,7 +319,7 @@ public final class MainActivity extends Activity {
         ui.pad(title,13,0);title.setMinHeight(ui.d(44.5f));ui.add(r,title,0);ui.gap(r,10);
         choice(r,t("editeur.enregistrer"),"save",false,()->{dismiss();try{project.recalc();db.save(project);lastDraft=project.json().toString();note(t("editeur.enregistre"),"ok");}catch(IOException e){report("projet",e);}});
         choice(r,t("nav.projets"),"folder",false,()->go("projets"));
-        choice(r,t("editeur.importerTexte"),"upload",false,()->{dismiss();pick("text/*",uri->{try{project.text=fileText(uri,2_000_000).replaceAll("\\r\\n?","\n").trim();if(project.title.isEmpty())project.title=fileName(uri).replaceFirst("\\.[^.]+$", "");
+        choice(r,t("editeur.importerTexte"),"upload",false,()->{dismiss();pick("text/*",uri->{try{project.text=fileText(uri,2_000_000);if(project.title.isEmpty())project.title=fileName(uri).replaceFirst("\\.[^.]+$", "");
             project.recalc();scene.edit.setText(project.text);}catch(Exception e){report("import",e);}});});
         choice(r,t("editeur.exporter"),"download",false,()->{dismiss();project.recalc();writeDoc("application/json",project.base()+".lectura",project.json().toString());});
         choice(r,t("editeur.importerSrt"),"upload",false,()->{
