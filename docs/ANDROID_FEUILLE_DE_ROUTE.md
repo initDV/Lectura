@@ -8,7 +8,7 @@ Périmètre : branche `arena/d2229c4f-lectura`, application native (`io.github.i
 | 1 — Parité | Comparaison des surfaces et parcours Android avec la référence web. Tout le catalogue est disponible sur Android ; la différence de politique d’accès et les voix système locales uniquement sont voulues. |
 | 2 — Texte → voix | Mise en œuvre native : fragments PCM, huit silences, prononciation et montée douce sur les questions. Le texte affiché n’est jamais nettoyé. |
 | 3 — Voix | `synthesizeToFile`, Estelle (priorité Auto), Kokoro sélectionnable, Siwis/Tom et voix système locales en secours. Les modèles restent hors de l’APK. |
-| 4 — Vérification | Passages instrumentés hors ligne puis en ligne, et test sur un téléphone réel pour ce que l’émulateur ne prouve pas. APK final et rapport seulement après vérifications, sans substitution silencieuse. |
+| 4 — Vérification | **APK d’essai v28 signé et publié** après la campagne Android 12 ci-dessous. Essai physique ARM64 et appréciation du jeu et des voix encore à faire. |
 
 ## Phase 0 — premier APK à clé permanente
 
@@ -90,7 +90,25 @@ Le rendu assemble du PCM mono à 1×, retire les bords silencieux déjà produit
 - **Jeu du personnage / E2** : 38 poses dont 37 détectées par des tournures et le contexte FR/EN. 28 mouvements associés à ces poses, et des accents explicites de salut, d’explication ou de silence. À la fin réellement prononcée, les questions hésitantes, curieuses ou sceptiques ont une expression distincte ; une réussite ne déclenche pas automatiquement une réaction de surprise. Les gestes peuvent commencer sur une estimation de la position d’un mot ; la fin des fragments PCM est mesurée. Pose et geste sont échantillonnés sur le temps lu, aussi pour la reprise, les sauts et la vidéo. Les poses manuelles et les animations réduites restent prioritaires.
 - **Limites connues** : préparation en fichier avant lecture, pas de mesure physique ARM64 ni de comparatif d’écoute demandé. La mémoire, la latence des longues scènes, l’intonation perçue et l’expressivité à l’écran restent à vérifier sur téléphone. Les notices et les deux tailles de pack figurent dans [le guide Android](../android/README.md).
 
-## Phase 4 — protocole pour le rapport final
+Le [contrôle PCM Linux ARM64 et x86_64](https://github.com/initDV/Lectura/actions/runs/44351287017) a exercé le port Java Estelle avec le pack épinglé et ONNX Runtime 1.24.3 sur les deux architectures. Sur « Tu veux venir ce soir ? », les deux exécutions ont généré 36 480 échantillons à 24 kHz. Le traitement de la finale a modifié 3 063 échantillons sur ARM64 et 3 782 sur x86_64, sans changer la durée ni l’attaque. Cette mesure complète le test de fréquence sur signal synthétique ; elle ne remplace ni un essai Android ARM64 ni une évaluation du naturel à l’écoute.
+
+## Phase 4 — APK d’essai v28 et résultats
+
+**[Télécharger le ZIP Android 12+](https://github.com/initDV/Lectura/actions/runs/44352577013/artifacts/14448758839)**, en extraire `Lectura.apk`, puis installer **par-dessus la v25 sans la désinstaller**. `versionCode` 28, build `47278ac`, [CI](https://github.com/initDV/Lectura/actions/runs/44352577013), [rapport et captures](https://github.com/initDV/Lectura/actions/runs/44352577013/artifacts/14448369668), [sources correspondantes](https://github.com/initDV/Lectura/actions/runs/44352577013/artifacts/14448133987). Certificat SHA-256 : `b6873c0f1a2f447163fb9af7e6f4181280b31fd1f5c45b0535993075b3dc7d8b`.
+
+| Contrôle | Résultat |
+|---|---|
+| Mise à jour 25 → 28 | Même certificat, `adb install -r`, brouillon, projet, audio, pose, terminal et réglages conservés. |
+| Installation et réseau | Aucun réseau en avion sur une installation vierge. Téléchargements explicites, empreintes vérifiées, reprise d’Estelle à 529 484 octets, installation de Kokoro. Pas de poids ONNX/preset dans l’APK. |
+| Relecture après arrêt du processus, sans réseau | Textes inédits, Estelle choisie en Auto et Kokoro choisi dans le sélecteur. Les deux ont produit du PCM 24 kHz à 1,25× ; environ 19,4 s et 44,4 s de préparation à froid sur cet émulateur x86_64. Cache WAV : 2 ms et 1 ms ; édition de la ponctuation finale en réutilisant le PCM de phrase : 187 ms et 100 ms. Ces temps, surtout à froid, varient et ne prédisent pas ceux d’un téléphone. |
+| Prosodie et bouche | 8 silences mesurés dans le WAV à 1×, 320 → 256 ms à 1,25× sur l’horloge de lecture, exceptions de nombres/fichiers, texte source intact, bouche fermée lors des pauses. Android eSpeak locale rendue en PCM ; Gilles/Piper et les deux locuteurs MLS du test restent utilisables. La référence v25 pour la voix système était le curseur de `speak`, pas un enregistrement de la sortie sonore. |
+| Jeu du personnage | 43 rigs, 38 poses, 28 mouvements dans la palette contextuelle. Images du robot et de Wend identiques au même repère audio après pause/saut, différentes à un autre repère ; priorité manuelle. La mesure n’est pas un avis sur l’expressivité. |
+| Exports et interface | Tutoriel, menu, vitesses, WAV, SRT/VTT, PNG 1080×1920, MP4 et WebM avec piste audio, MP3, MediaStore et partage. Le sélecteur de fichiers a été simulé ; codecs OEM non essayés. |
+| Comparaison en lecture seule | Pages `76713dcd32`, WAV et voix FR à 1,25×. MAE RVB sur scène/menu/tutoriel : 1,83 / 6,22 / 2,98. `main`, les sources de la PWA et le déploiement Pages restent inchangés. |
+
+Les binaires ONNX et Sherpa pour ARM64 et x86_64 ont été contrôlés dans l’APK. Une synthèse Estelle sur **Linux ARM64** ne vérifie pas les bibliothèques Android sur le téléphone. Les performances, le naturel des deux voix et la synchronisation image/son perçue restent à évaluer sur appareil.
+
+### Essai sur téléphone
 
 1. Installer sur image propre ; mode avion avec Wi-Fi et données réellement coupés. Tutoriel, scènes et 43 personnages, 38 expressions, navigation, fichiers locaux, écran/PNG, `.lectura`, voix système **locale installée** et relance avec données conservées. Une voix réseau n’est pas une voix disponible hors ligne ; sans voix système locale fournie par l’appareil, n’annoncer une voix hors ligne qu’après installation HD ou système. Vérifier les messages plutôt que basculer de moteur en secret.
 2. En ligne : télécharger une voix, interrompre à une taille non nulle, reprendre en vérifiant les octets et intégrer une seconde voix ; tester champs de choix/écoute. Redémarrer puis répéter en avion avec voix et fichier téléchargés. Tester encore les deux types de voix à vitesse différente, transport, texte spécial et pauses, absence d’activation et sorties compatibles.
