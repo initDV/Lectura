@@ -10,23 +10,13 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.security.AlgorithmParameters;
-import java.security.KeyFactory;
-import java.security.Signature;
-import java.security.spec.ECGenParameterSpec;
-import java.security.spec.ECParameterSpec;
-import java.security.spec.ECPoint;
-import java.security.spec.ECPublicKeySpec;
-import java.math.BigInteger;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import static io.github.initdv.lectura.Refs.*;
-import static io.github.initdv.lectura.Features.PRO_ENABLED;
 
 /** Web-compatible project model; blobs remain private and are never included in .lectura. */
 final class Project {
@@ -73,12 +63,9 @@ final class Project {
     }
     String base(){String base=ascii(title);return base.isEmpty()?"projet":base;}
     static String ascii(String s){return java.text.Normalizer.normalize(s,java.text.Normalizer.Form.NFD).replaceAll("[\\u0300-\\u036f]","").replaceAll("[^A-Za-z0-9]+","-").replaceAll("^-+|-+$","").toLowerCase(java.util.Locale.ROOT);}
-    int typingCps(){return PRO_ENABLED?cps:Script.TYPE_CPS;}
-    boolean usesSubtitleTiming(){return PRO_ENABLED&&subtitles;}
     List<Script.Segment> recalc(){
-        // Saved projects keep their original timings. Only usesSubtitleTiming() may apply them to playback.
         List<Script.Segment> s=subtitles?Script.locate(text,segments,true):null;
-        if(s==null){subtitles=false;s=Script.timing(text,fileAudio&&duration>0?duration:Script.estimate(text,speed,typingCps()),fileAudio?0:.5);Script.reportExpressions(s,segments);segments=Script.encode(s);}return s;
+        if(s==null){subtitles=false;s=Script.timing(text,fileAudio&&duration>0?duration:Script.estimate(text,speed,cps),fileAudio?0:.5);Script.reportExpressions(s,segments);segments=Script.encode(s);}return s;
     }
     private static String cut(String s,int n){return s.length()>n?s.substring(0,n):s;}
     private static String s(JSONObject o,String k,String d){Object v=o.opt(k);return v instanceof String?(String)v:d;}
@@ -92,10 +79,14 @@ final class Library {
     Library(Refs refs){
         Context c=refs.context;files=c.getFilesDir();projects=dir(files,"projects");audio=dir(files,"audio");
         prefs=c.getSharedPreferences("lectura",Context.MODE_PRIVATE);settings=Refs.merge(refs.defaults,PrefsJson(prefs.getString("settings","{}")));
-        if(settings.optString("idInstallation").isEmpty())set("idInstallation",UUID.randomUUID().toString());
+        // Drop obsolete activation fields on update without touching user projects or media.
+        boolean changed=settings.has("licence")||settings.has("idInstallation");
+        settings.remove("licence");settings.remove("idInstallation");
+        if(changed)saveSettings();
     }
     String locale(){return settings.optString("langue").equals("en")?"en":"fr";}
-    void set(String key,Object v){put(settings,key,v);prefs.edit().putString("settings",settings.toString()).apply();}
+    void set(String key,Object v){put(settings,key,v);saveSettings();}
+    private void saveSettings(){prefs.edit().putString("settings",settings.toString()).apply();}
     static JSONObject PrefsJson(String s){try{return parse(s);}catch(IllegalArgumentException e){return new JSONObject();}}
     static File dir(File base,String sub){File f=new File(base,sub);if(!f.exists()&&!f.mkdirs())throw new IllegalStateException("Stockage : "+sub);return f;}
     File audio(Project p){return new File(audio,storageKey(p)+".audio");}
@@ -114,21 +105,5 @@ final class Library {
     static JSONObject readJson(File f) throws IOException {try(FileInputStream in=new AtomicFile(f).openRead()){return parse(new String(Refs.read(in,8_000_000),StandardCharsets.UTF_8));}}
     static void writeJson(File f,JSONObject o) throws IOException {
         AtomicFile atomic=new AtomicFile(f);FileOutputStream out=atomic.startWrite();try{out.write(o.toString().getBytes(StandardCharsets.UTF_8));atomic.finishWrite(out);}catch(IOException e){atomic.failWrite(out);throw e;}
-    }
-    static String verify(String license,String installation,JSONObject jwk){
-        if(license.length()>16000)return "format";
-        String[] parts=license.trim().split("\\.",-1);if(parts.length!=2||parts[0].isEmpty()||parts[1].isEmpty())return "format";
-        Base64.Decoder b=Base64.getUrlDecoder();byte[] data,signature;
-        try{data=b.decode(parts[0]);signature=b.decode(parts[1]);}catch(IllegalArgumentException e){return "format";}
-        if(signature.length!=64)return "signature";
-        try{
-            AlgorithmParameters p=AlgorithmParameters.getInstance("EC");p.init(new ECGenParameterSpec("secp256r1"));
-            ECPoint pt=new ECPoint(new BigInteger(1,b.decode(jwk.optString("x"))),new BigInteger(1,b.decode(jwk.optString("y"))));
-            Signature sig=Signature.getInstance("SHA256withECDSA");sig.initVerify(KeyFactory.getInstance("EC").generatePublic(new ECPublicKeySpec(pt,p.getParameterSpec(ECParameterSpec.class))));
-            sig.update(data);byte[] x=new BigInteger(1,java.util.Arrays.copyOfRange(signature,0,32)).toByteArray(),y=new BigInteger(1,java.util.Arrays.copyOfRange(signature,32,64)).toByteArray();
-            java.nio.ByteBuffer der=java.nio.ByteBuffer.allocate(x.length+y.length+6);der.put((byte)48).put((byte)(x.length+y.length+4)).put((byte)2).put((byte)x.length).put(x).put((byte)2).put((byte)y.length).put(y);
-            if(!sig.verify(der.array()))return "signature";
-        }catch(java.security.GeneralSecurityException e){return "signature";}
-        try{return installation.equals(parse(new String(data,StandardCharsets.UTF_8)).optString("installId"))?"":"installation";}catch(IllegalArgumentException e){return "format";}
     }
 }

@@ -1,8 +1,7 @@
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { lipsFixture } from './lips.mjs';
-import { generateKeyPairSync, sign } from 'node:crypto';
-import { NOMS_PRO } from '../../src/modules/expressions.js';
+import { NOMS } from '../../src/modules/expressions.js';
 import { parseSubtitles, cuesToProject, toSrt, toVtt } from '../../src/modules/subtitles.js';
 import { phonemiser } from '../../src/modules/voice/g2p_fr.js';
 import { autoTiming, estimateDurationMs, Timeline } from '../../src/modules/timeline.js';
@@ -24,13 +23,8 @@ const fixtures = { phrases: texts.map(t=>[t, phonemiser(t)]), timeline: texts.ma
 const vtt = 'WEBVTT\n\n00:00.500 --> 00:02.000 line:50%\n<i>Bonjour</i>, Lectura.\n\n00:02.500 --> 00:04.000\nDeuxième ligne.\n';
 const cues = cuesToProject(parseSubtitles(vtt));
 fixtures.subtitles = { vtt, text: cues.texte, srt: toSrt(cues.segments), exported: toVtt(cues.segments) };
-fixtures.proExpressions = NOMS_PRO.length;
-const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-const payload = Buffer.from(JSON.stringify({ installId:'lectura-ci', issuedAt:'2026-01-01T00:00:00Z' }));
-fixtures.licence = {
-  public: publicKey.export({format:'jwk'}),
-  key: `${payload.toString('base64url')}.${sign('sha256', payload, {key: privateKey, dsaEncoding: 'ieee-p1363'}).toString('base64url')}`,
-};
+fixtures.characters = JSON.parse(await readFile(new URL('../../characters/index.json', import.meta.url), 'utf8')).personnages;
+fixtures.expressions = NOMS;
 const { data, wav } = lipsFixture();
 fixtures.lips = data;
 await writeFile(process.argv[2], JSON.stringify(fixtures));

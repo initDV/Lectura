@@ -41,8 +41,8 @@ final class Reading implements AutoCloseable {
             player.setOnSeekCompleteListener(ignored->pendingSeek=-1);
             player.setOnErrorListener((ignored,w,e)->{playing=false;fail.accept("audio "+w+"/"+e);return true;});
         }else{
-            player=null;lip=null;duration=Math.max(1,silent?text.length()*1000./p.typingCps():timeline.duration);
-            queue=silent?null:new Talk.Queue(talk,voice,text,p.typingCps(),p.speed,p.pitch,this::complete,code->{playing=false;fail.accept(code);});
+            player=null;lip=null;duration=Math.max(1,silent?text.length()*1000./p.cps:timeline.duration);
+            queue=silent?null:new Talk.Queue(talk,voice,text,p.cps,p.speed,p.pitch,this::complete,code->{playing=false;fail.accept(code);});
         }
         rate=p.speed/baseRate;
     }
@@ -84,10 +84,10 @@ final class Reading implements AutoCloseable {
     }
     void volume(float v,boolean muted){volume=v;if(player!=null)player.setVolume(muted?0:v,muted?0:v);
         if(queue!=null){queue.volume=v;if(mute!=muted)queue.mute(muted);}mute=muted;}
-    int viseme(double time,double frame,double chars,boolean pro){
+    int viseme(double time,double frame,double chars){
         if(!playing)return 0;
         // The requested seek position isn't yet playing. Don't analyse its future samples.
-        if(lip!=null)return lip.read(pendingSeek>=0?0:time,pro);
+        if(lip!=null)return lip.read(pendingSeek>=0?0:time);
         if(queue!=null)return speechViseme(frame,queue.speaking(),text,chars);
         int n=(int)(time/duration*text.length());
         return simulated(frame,n<text.length()?text.charAt(n):' ');

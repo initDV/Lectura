@@ -35,19 +35,21 @@ final class Talk implements AutoCloseable {
             @Override public void onError(String id,int code){event(id,l->l.error(String.valueOf(code)));}
         });
     }
+    static boolean local(Voice v){return v!=null&&!v.isNetworkConnectionRequired()
+        &&!v.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED);}
     List<Voice> voices(String lang){
-        List<Voice> out=new ArrayList<>();if(ready&&tts.getVoices()!=null)for(Voice v:tts.getVoices())if(v.getLocale().getLanguage().equals(lang)&&!v.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED))out.add(v);
-        out.sort(Comparator.comparing(Voice::isNetworkConnectionRequired).thenComparing(Voice::getName));return out;
+        List<Voice> out=new ArrayList<>();var voices=ready?tts.getVoices():null;
+        if(voices!=null)for(Voice v:voices)if(local(v)&&v.getLocale().getLanguage().equals(lang))out.add(v);
+        out.sort(Comparator.comparing(Voice::getName));return out;
     }
     Voice choose(String lang,String id){
         List<Voice> voices=voices(lang);for(Voice v:voices)if(v.getName().equals(id))return v;
-        Voice def=ready?tts.getDefaultVoice():null;if(def!=null&&voices.contains(def)&&!def.isNetworkConnectionRequired())return def;
-        for(Voice v:voices)if(!v.isNetworkConnectionRequired())return v;
+        Voice def=ready?tts.getDefaultVoice():null;if(def!=null&&voices.contains(def))return def;
         return voices.isEmpty()?null:voices.get(0);
     }
     void speak(String text,Voice voice,float speed,float pitch,float volume,Listener l){
         cancel();current=UUID.randomUUID().toString();listener=l;
-        if(!ready||tts.setVoice(voice)!=TextToSpeech.SUCCESS){l.error("voix");return;}
+        if(!ready||!local(voice)||tts.setVoice(voice)!=TextToSpeech.SUCCESS){l.error("voix");return;}
         tts.setSpeechRate(speed);tts.setPitch(Math.max(.05f,pitch));Bundle b=new Bundle();b.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME,volume);
         if(tts.speak(text,TextToSpeech.QUEUE_FLUSH,b,current)==TextToSpeech.ERROR)l.error("synthèse");
     }

@@ -23,14 +23,13 @@ import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONObject;
 import static io.github.initdv.lectura.Refs.*;
-import static io.github.initdv.lectura.Features.PRO_ENABLED;
 
 /** Scene composition and clock-coupled sprite/terminal, shared with the capture renderer. */
 final class Stage extends FrameLayout {
     final MainActivity a; final Ui ui; final Project project; final Sprite sprite;final Decor decor;
     final JSONObject term;
     final String title;
-    final boolean pro, reduced;
+    final boolean reduced;
     final int background;
     boolean masked, presenting, recording;
     final long initial=SystemClock.uptimeMillis();
@@ -49,12 +48,12 @@ final class Stage extends FrameLayout {
     private Reading lastReading;
 
     Stage(MainActivity a,JSONObject def){
-        super(a);this.a=a;ui=a.ui;project=a.project;pro=a.hasPro();reduced=a.reduced();
+        super(a);this.a=a;ui=a.ui;project=a.project;reduced=a.reduced();
         decor=new Decor(object(a.db.settings,"decor"));background=color(project.background);
-        JSONObject ts=object(a.refs.themes,"terminal");JSONObject t=ts.optJSONObject(PRO_ENABLED?project.terminalTheme:"sombre");term=t==null?object(ts,"sombre"):t;
-        termFont=PRO_ENABLED&&project.font.equals("Système")?Typeface.MONOSPACE:ui.mono(400);
+        JSONObject ts=object(a.refs.themes,"terminal");JSONObject t=ts.optJSONObject(project.terminalTheme);term=t==null?object(ts,"sombre"):t;
+        termFont=project.font.equals("Système")?Typeface.MONOSPACE:ui.mono(400);
         title=a.db.settings.optString("titreTerminal");radius=Math.round(ui.radiusLg);
-        sprite=new Sprite(a.refs,def);sprite.rich=pro;sprite.reduced=reduced||a.db.settings.optBoolean("reduireAnimations");
+        sprite=new Sprite(a.refs,def);sprite.reduced=reduced||a.db.settings.optBoolean("reduireAnimations");
         sprite.gain=project.motion.equals("calme")?.6:project.motion.equals("vif")?1.3:1;
         face=new Face();screenText=new ScreenText();addView(face,ui.fp(Ui.MATCH,Ui.MATCH,Gravity.TOP));
         menu=ui.iconButton("menu",a.t("scene.menu"),ui.mutedText,20,a::menu);addView(menu,ui.fp(44,44,Gravity.TOP|Gravity.LEFT));
@@ -82,7 +81,7 @@ final class Stage extends FrameLayout {
             if(!expressionKey.equals(key)){sprite.expression(p.expr,p.strength,p.mix,p.weight);expressionKey=key;}
             if(seg!=current){current=seg;rank=0;if(speak&&!r.terminal.keywords.find(seg.text).isEmpty())sprite.gesture("",now);}
             if(r.playing&&rank!=p.rank){if(p.rank>rank&&!p.gesture.isEmpty())sprite.gesture(p.gesture,now);rank=p.rank;}
-            sprite.viseme=speak?r.viseme(ms,now,cursor,pro):0;sprite.shape=speak?r.shape():48;sprite.letter=Reading.letterAt(r.text,cursor);
+            sprite.viseme=speak?r.viseme(ms,now,cursor):0;sprite.shape=speak?r.shape():48;sprite.letter=Reading.letterAt(r.text,cursor);
             sprite.talk=speak?(sprite.viseme>0?1:.15):0;
         }else{sprite.viseme=0;sprite.letter="";sprite.talk=0;sprite.expression("neutre",1,"",0);}
         sprite.tick(now);
@@ -98,7 +97,6 @@ final class Stage extends FrameLayout {
             c.save();c.scale(ui.density,ui.density);round(c,0,0,w,h,radius,background);
             decor.screen(c,left,h);c.save();c.clipRect(0,0,left,h);sprite.svg.fit(c,2,0,left-4,h,true);c.restore();
             drawWindow(c,left,0,w-left,h,now);
-            if(!pro){style(ui.font(600),11.52f,0x80b0b0b8);c.drawText("Lectura",14,h-8-paint.descent(),paint);}
             if(recording){round(c,50,10,111,36,99,0xcc0d0d12);paint.setColor(ui.danger);c.drawCircle(65,23,5,paint);
                 style(ui.font(700),12.8f,0xffff8a8a);c.drawText("REC",76,baseline(paint,23),paint);}
             c.restore();
@@ -144,7 +142,6 @@ final class Stage extends FrameLayout {
         sprite.svg.draw(c,(left-sprite.svg.box[2]*factor)/2+6*s,h-sprite.svg.box[3]*factor-10*s,factor);
         Reading r=a.reading;
         if(r!=null)exportTerminal(c,r.terminal,left,0,w-left,h,s,frozen,now);
-        if(!pro){style(ui.mono(600),Math.round(15*s),0x8cb0b0b8);c.drawText("Lectura",w-30*s-paint.measureText("Lectura"),h-26*s,paint);}
     }
     private void exportTerminal(Canvas c,Script.Terminal text,float bx,float by,float bw,float bh,float s,boolean frozen,double now){
         float pad=14*s,r=20*s,bar=38*s,x=bx+pad*.4f,y=by+pad,w=bw-pad*1.4f,h=bh-2*pad;

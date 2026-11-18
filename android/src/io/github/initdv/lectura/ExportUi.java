@@ -19,7 +19,6 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import static io.github.initdv.lectura.Features.PRO_ENABLED;
 
 /** Record/stop/download workflow and the private « Mes vidéos » library. */
 final class ExportUi implements AutoCloseable {
@@ -43,9 +42,8 @@ final class ExportUi implements AutoCloseable {
     boolean capturing(){return active()&&origin>0;}
     boolean busy(){return recording!=null;}
     void toggle(){
-        if(!PRO_ENABLED||finishing)return;
+        if(finishing)return;
         if(recording!=null){stop();return;}
-        if(!a.hasPro()){a.note(t("pro.requis.video"),"info");return;}
         if(a.reading==null||a.preparing){a.note(t("scene.err.rienACapturer"),"info");return;}
         Reading reading=a.reading;Stage stage=a.stage;
         if(reading.playing)reading.pause();reading.seek(0);reading.terminal.shown=0;a.playState();
@@ -143,7 +141,6 @@ final class ExportUi implements AutoCloseable {
     }
     private void share(Uri uri,String name){if(closed||!a.isForeground)return;try{SharedMedia.share(a,uri,name);}catch(Exception e){a.report("partage",e);}}
     void library(){
-        if(!PRO_ENABLED)return;
         LinearLayout r=a.sheet(t("mv.titre"));try{
             var files=movies.list();if(files.isEmpty()){u.add(r,u.small(t("mv.vide")),0);return;}
             DateTimeFormatter time=DateTimeFormatter.ofPattern(a.db.locale().equals("en")?"MM/dd/yyyy, HH:mm:ss":"dd/MM/yyyy HH:mm:ss").withZone(ZoneId.systemDefault());

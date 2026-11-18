@@ -35,7 +35,7 @@ final class Sprite {
     private final float[] shoulderL,shoulderR,elbowL,elbowR,neck,hip,browPivotL,browPivotR;
     private final double eyeY,rBase,wBase,hBase,xBase,yBase,cx,cy,halfWidth,maxOpening;
     private final boolean human;
-    boolean reduced,rich;
+    boolean reduced;
     double gain=1,talk,phase,talkSmooth;
     int viseme; float shape=48;
     String letter="";
@@ -170,7 +170,7 @@ final class Sprite {
         double ml=0,mr=0,mfl=0,mfr=0;
         if(!micro.isEmpty()) {double m=(t-microAt)/microDuration,a=microAmplitude*sin(m*PI)*k;
             if(m>=0&&m<1)switch(micro){case "arms":ml=a;mr=-a;break;case "shoulderL":ml=a;break;case "shoulderR":mr=-a;break;case "elbowL":mfl=a;break;case "elbowR":mfr=-a;break;default:break;}}
-        double g=t<armEnd?sin(PI*(1-(armEnd-t)/700))*(rich?42:24)*k:0;
+        double g=t<armEnd?sin(PI*(1-(armEnd-t)/700))*42*k:0;
         double amount=(human?12:7)*talkSmooth*k*amp*v("swing"),el=v("armL"),fl=v("foreL");
         double al=el+(24-el)*waveHand+step(sin(s*(human?.85:1.3))*amount+(gestureArm<0?g:0))+ml;
         double aa=-v("armR")+step(-sin(s*(human?.7:1.1)+1)*amount-(gestureArm>0?g:0))+mr+scriptedArm;
@@ -178,7 +178,7 @@ final class Sprite {
         double aFr=-v("foreR")+step(-sin(s*1.2)*amount*.8-(gestureArm>0?g*.9:0))+mfr+scriptedFore;
         for(Svg.Node n:new Svg.Node[]{left,right}){n.reset().preTranslate(f(dx),f(dy));n.transform.preTranslate(0,f(v("bodyY")));rotate(n.transform,lean,hip);}
         rotate(left.transform,al,shoulderL);rotate(right.transform,aa,shoulderR);rotate(foreL.reset(),aFl,elbowL);rotate(foreR.reset(),aFr,elbowR);
-        double h=max(VIS[max(0,min(3,viseme))],v("h")),w=v("w")*(rich?shape/48:1);
+        double h=max(VIS[max(0,min(3,viseme))],v("h")),w=v("w")*(shape/48);
         if(human)drawLips(cx+v("gx")*.2,cy+v("my"),halfWidth*(w/48),h*(maxOpening/19));
         else if(mouth.kind.equals("rect")){
             // character.js rounds each SVG attribute, after computing the centre and corner radius.

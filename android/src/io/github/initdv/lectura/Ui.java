@@ -127,14 +127,13 @@ final class Ui {
         TextView h=text(section.toUpperCase(java.util.Locale.ROOT),12.8f,mutedText,700);h.setLetterSpacing(.06f);
         LinearLayout.LayoutParams size=lp(MATCH,16);size.topMargin=d(14);size.bottomMargin=d(bottom);p.addView(h,size);
     }
-    View choice(String name,String id,boolean selected,boolean pro,Runnable action){
+    View choice(String name,String id,boolean selected,Runnable action){
         LinearLayout r=row();r.setMinimumHeight(d(44));r.setBackground(touch(0,12,selected?violet:0,selected?1:0));pad(r,11,5);
         r.setClipChildren(false);if(id!=null){r.addView(icon(id,20,selected?white:text),lp(20,20));gap(r,10);}
         TextView t=text(name,15,selected?white:text,400);line(t,22.5f);
         Paint.FontMetricsInt m=t.getPaint().getFontMetricsInt();int extra=Math.max(0,d(22.5f)-(m.descent-m.ascent));
         t.setPadding(0,extra/2,0,extra-extra/2);grow(r,t);
-        if(pro){gap(r,10);r.addView(badge("PRO",c("accent-2"),0xff1a0b33));}r.setSelected(selected);r.setContentDescription(name);click(r,action);return r;
+        r.setSelected(selected);r.setContentDescription(name);click(r,action);return r;
     }
-    TextView badge(String name,int color,int ink){TextView t=text(name,11.2f,ink,700);t.setLetterSpacing(.035f);t.setBackground(shape(color,99,color,1));pad(t,9,0);t.setMinHeight(d(22.8f));return t;}
     View art(Svg svg,float alpha){View v=new View(a){@Override protected void onDraw(Canvas c){svg.fit(c,0,0,getWidth(),getHeight(),false);}};v.setAlpha(alpha);v.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);return v;}
 }

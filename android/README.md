@@ -2,10 +2,17 @@
 
 Application Android native (`io.github.initdv.lectura`), à partir d’Android 12 (API 31).
 L’APK n’embarque ni navigateur ni copie du site : vues et dessin Android, voix de
-l’appareil ou Piper/ONNX natif, codecs Android pour la vidéo. Rien n’est envoyé à
-un serveur par Lectura lors d’une lecture locale ou d’un export. La première
-installation d’une voix HD et les voix Android signalées « en ligne » nécessitent
-une connexion.
+l’appareil ou Piper/ONNX natif, codecs Android pour la vidéo.
+
+Tous les parcours sont accessibles dès l’installation, sans compte, achat ni clé
+produit : 43 personnages, 38 poses, personnalisation du terminal et des mots-clés,
+sous-titres SRT/VTT, capture PNG et export vidéo avec « Mes vidéos ».
+
+Internet sert uniquement à télécharger les modèles Lectura HD à la demande,
+depuis le catalogue Pages. Après téléchargement, choisis la voix HD dans la scène :
+la synthèse et la lecture fonctionnent en mode avion. Une voix Android locale déjà
+installée ou un fichier audio importé fonctionne également sans réseau. Lectura ne
+propose pas les voix système qui nécessitent Internet.
 
 ## Installer un APK de test
 
@@ -27,10 +34,10 @@ Les anciens APK de test ont des certificats différents. Si Android refuse un
 remplacement, **ne désinstalle pas l’application actuelle** pour contourner ce
 refus : tu perdrais son stockage privé. Teste le premier APK de la nouvelle série
 sur un émulateur ou un autre appareil. Les APK suivants de la série utilisent
-la même clé. Les fichiers publiés par l’utilisateur hors de l’app restent externes.
-
-Le Pro reste désactivé (`PRO_ENABLED = false`) ; son code et ses ressources sont
-conservés. La signature APK n’est pas liée aux licences Pro.
+la même clé. Si tu as installé la version permanente 21, installe la mise à jour
+par-dessus, sans désinstaller. Les anciens champs d’activation sont supprimés à
+l’ouverture, sans modifier les projets ni les médias. La signature APK et les notices
+MIT/OFL/LGPL des composants sont conservées.
 
 ## Compiler
 
@@ -73,9 +80,14 @@ synthétique connu ; ils ne prétendent pas vérifier une app tierce ou tous les
 codecs de tous les téléphones. Les vérifications visuelles ne sont pas un test
 d’égalité : consulter les captures et les métriques.
 
-Sur un téléphone : ouvrir le même projet sur les deux surfaces ; comparer l’aperçu,
-la lecture d’un fichier, une voix Android et une voix Piper installée. Avec une
-licence Pro valide, enregistrer en 16:9 et 9:16, couper le son d’écoute et accélérer
-pendant l’enregistrement, puis contrôler le MP4 (image + son), le MP3, « Mes vidéos »,
-la galerie et l’envoi à un destinataire de test. Le WebM dépend des encodeurs
-installés et de l’application qui le reçoit.
+La CI teste une installation vierge en mode avion et un redémarrage après
+un téléchargement réel. Si l’APK précédent est disponible, elle exerce aussi
+`adb install -r` avec un brouillon, un projet, un WAV et des réglages préexistants.
+
+Sur un téléphone : télécharge une voix dans **Réglages → Lectura HD**, puis coupe
+le Wi‑Fi et les données en activant le mode avion. Relance Lectura, sélectionne
+la voix HD dans la scène et lis un nouveau texte. Essaie aussi une voix système
+locale et un fichier audio. Dans **Menu**, après avoir lancé la scène, tu peux
+choisir le format 16:9 ou 9:16 et enregistrer la vidéo. La vidéo contient le son d’un
+fichier audio ou d’une voix HD ; le moteur système direct ne fournit pas sa piste
+à l’enregistreur. Le format vidéo dépend des encodeurs disponibles sur l’appareil.

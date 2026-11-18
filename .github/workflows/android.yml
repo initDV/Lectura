@@ -103,8 +103,8 @@ jobs:
         with:
           name: Lectura-Android-API31+
           github-token: ${{ github.token }}
-          # Compare to the last APK sent for the Android test unless another run is specified.
-          run-id: ${{ inputs.predecessor_run || '44295570195' }}
+          # v21 is the first delivered APK signed with the permanent certificate.
+          run-id: ${{ inputs.predecessor_run || '44329414529' }}
           path: ${{ runner.temp }}/lectura-predecessor
       - name: Comparer les certificats de signature
         id: certificates
@@ -123,12 +123,26 @@ jobs:
             old=$(fingerprint "$previous")
             test -n "$old"
             echo "Précédent : $old" >> "$LECTURA_REPORT/apk-certificates.txt"
-            if [[ "$current" == "$old" ]]; then
-              echo '::notice title=Signature de mise à jour::Même certificat que l’APK précédent.'
-            else
-              echo "::warning title=Pas une mise à jour::Certificats différents. Ancien SHA-256 $old ; nouveau SHA-256 $current. Ne pas désinstaller l’ancienne application."
+            if [[ "$current" != "$old" ]]; then
+              echo '::error title=Pas une mise à jour::Les deux APK n’ont pas le même certificat.'
+              exit 1
             fi
-            rm -f -- "$previous"
+            aapt="$ANDROID_HOME/build-tools/37.0.0/aapt2"
+            metadata() { "$aapt" dump badging "$1" | sed -n '1p'; }
+            previous_info=$(metadata "$previous")
+            new_info=$(metadata "$RUNNER_TEMP/Lectura.apk")
+            version() { sed -n "s/.*versionCode='\([0-9][0-9]*\)'.*/\1/p" <<< "$1"; }
+            before=$(version "$previous_info"); after=$(version "$new_info")
+            if [[ $previous_info != "package: name='io.github.initdv.lectura' "* || $new_info != "package: name='io.github.initdv.lectura' "* || -z $before || -z $after ]] || ((after <= before)); then
+              echo '::error title=Pas une mise à jour::Identifiant d’application différent ou versionCode non croissant.'
+              exit 1
+            fi
+            echo "::notice title=Signature de mise à jour::Même certificat, versionCode $before → $after."
+            printf 'versionCode précédent : %s\nversionCode nouveau : %s\n' "$before" "$after" >> "$LECTURA_REPORT/apk-certificates.txt"
+            echo "LECTURA_PREDECESSOR_APK=$previous" >> "$GITHUB_ENV"
+          else
+            echo '::warning title=APK de référence indisponible::Mise à jour en place non testée.'
+            echo 'Précédent : artifact indisponible' >> "$LECTURA_REPORT/apk-certificates.txt"
           fi
       - name: Sources correspondantes et notices Android
         run: |
@@ -185,7 +199,7 @@ jobs:
           echo "LECTURA_TEST_TTS_APK=$RUNNER_TEMP/espeak.apk" >> "$GITHUB_ENV"
       - name: Test Android 12
         id: android_checks
-        timeout-minutes: 10
+        timeout-minutes: 16
         env:
           LECTURA_REPORT: ${{ runner.temp }}/lectura-report
         run: |

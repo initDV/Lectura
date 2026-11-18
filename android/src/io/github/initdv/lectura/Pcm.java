@@ -99,7 +99,7 @@ final class Lip {
     int shape=48;
     Lip(Pcm p){pcm=p;samples=new short[N*p.channels];for(int i=0;i<N;i++)window[i]=.42-.5*Math.cos(2*Math.PI*i/N)+.08*Math.cos(4*Math.PI*i/N);}
     void reset(){env=0;level=0;}
-    int read(double ms,boolean pro){
+    int read(double ms){
         // AnalyserNode reads the latest samples, never the samples after the current playhead.
         long end=Math.min(pcm.frames,Math.max(0,(long)(ms*pcm.rate/1000))),start=Math.max(0,end-N);
         int count=(int)(end-start),prefix=N-count,n=0;
@@ -108,12 +108,12 @@ final class Lip {
             int sample=i-prefix;
             double a=sample<0||sample>=n?0:pcm.channels==1?samples[sample]/32768.:(samples[sample*2]+samples[sample*2+1])/65536.;
             double x=Math.max(-128,Math.min(127,Math.floor(a*128)))/128;sum+=x*x;
-            if(pro){int j=Integer.reverse(i)>>>22;real[j]=a*window[i];imag[j]=0;}
+            int j=Integer.reverse(i)>>>22;real[j]=a*window[i];imag[j]=0;
         }
         double rms=Math.sqrt(sum/N);env=rms>env?rms:env*.85+rms*.15;peak=Math.max(.03,Math.max(env,peak*.9995));double x=env/peak;
         while(level<3&&x>(level==0?.12:level==1?.40:.70))level++;
         while(level>0&&x<(level==1?.08:level==2?.34:.64))level--;
-        shape=48;if(pro)bands();return level;
+        shape=48;bands();return level;
     }
     private void bands(){
         for(int l=2;l<=N;l*=2){double angle=-2*Math.PI/l,c=Math.cos(angle),s=Math.sin(angle);

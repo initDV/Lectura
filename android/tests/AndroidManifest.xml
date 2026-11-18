@@ -4,4 +4,5 @@
     <activity android:name="io.github.initdv.lectura.ShareReceiver" android:exported="true" />
   </application>
   <instrumentation android:name="io.github.initdv.lectura.DeviceChecks" android:targetPackage="io.github.initdv.lectura" />
+  <instrumentation android:name="io.github.initdv.lectura.UpgradeChecks" android:targetPackage="io.github.initdv.lectura" />
 </manifest>

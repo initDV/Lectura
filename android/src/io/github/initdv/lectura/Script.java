@@ -11,11 +11,10 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import static io.github.initdv.lectura.Refs.*;
-import static io.github.initdv.lectura.Features.PRO_ENABLED;
 
 /** UTF-16 offsets match the .lectura model and the browser's timing. */
 final class Script {
-    static final int VOICE_CPS=14, TYPE_CPS=28;
+    static final int VOICE_CPS=14;
     static final int SPOKEN=0, COMMAND=1, COMMENT=2;
     static final Pattern STRONG=Pattern.compile("(?<=[.!?…])[\\x09-\\x0d\\p{Z}\ufeff]+");
     static final Pattern LONG_SPLIT=Pattern.compile("[.!?…][\"'»)\\]]*\\s+|\\s+");
@@ -131,9 +130,9 @@ final class Script {
         final Map<String,Integer> colors=new LinkedHashMap<>();
         final Map<String,String> exact=new LinkedHashMap<>(),lower=new LinkedHashMap<>();
         final Pattern regex;
-        Keywords(Refs refs,String lang,boolean pro,JSONObject custom){
+        Keywords(Refs refs,String lang,JSONObject custom){
             JSONObject base=refs.json("data/keywords_"+lang+".json");JSONObject cats=object(base,"categories"),rules=object(base,"regles");
-            Dictionary d=new Dictionary();d.add(cats); if(PRO_ENABLED&&pro){d.add(object(refs.json("data/keywords_fr_pro.json"),"categories"));d.add(custom);}
+            Dictionary d=new Dictionary();d.add(cats);d.add(object(refs.json("data/keywords_fr_extended.json"),"categories"));d.add(custom);
             boolean whole=rules.optBoolean("motsEntiers",true),ignore=!rules.optBoolean("sensibleCasse"),multi=rules.optBoolean("expressionsMultiMots",true);
             for(String cat:d.words.keySet()){
                 colors.put(cat,d.inks.getOrDefault(cat,0xffe6edf3));

@@ -1,11 +1,11 @@
 # Lectura Android — suivi de la version finale
 
-Périmètre : branche `arena/d2229c4f-lectura`, application native (`io.github.initdv.lectura`, pas de WebView), `PRO_ENABLED = false` à toutes les étapes. La référence reste le code web [`39e4295`](https://github.com/initDV/Lectura/commit/39e429522cc715aeda6ce0db9d3eb5690ba1f2fd) et [GitHub Pages](https://initdv.github.io/Lectura/) en lecture seule. Ni déploiement ni fusion. Aucune suppression des fonctions, assets ou données Pro.
+Périmètre : branche `arena/d2229c4f-lectura`, application native (`io.github.initdv.lectura`, pas de WebView), sans comptes ni activation produit, avec les 43 personnages, les 38 poses et tous les exports accessibles. La référence reste le code web [`39e4295`](https://github.com/initDV/Lectura/commit/39e429522cc715aeda6ce0db9d3eb5690ba1f2fd) et [GitHub Pages](https://initdv.github.io/Lectura/) en lecture seule. Ni déploiement ni fusion. Les données des projets restent compatibles ; seuls les anciens champs d’activation Android sont retirés. Internet sert uniquement au téléchargement des modèles de voix demandé par l’utilisateur.
 
 | Phase | État et critère de livraison |
 |---|---|
 | 0 — Signature | **Livrée** : [APK signé permanent](https://github.com/initDV/Lectura/actions/runs/44329414529/artifacts/14438028918), build `70b1ff2`, `versionCode` 21. [CI et instrumentation API 31 réussies](https://github.com/initDV/Lectura/actions/runs/44329414529). Aucun repli sur une clé de débogage. |
-| 1 — Parité | Inventaire de départ ci-dessous. Comparer les surfaces et les parcours visibles, corriger les écarts hors Pro, puis compiler, nettoyer, committer et livrer l’APK signé et son rapport. |
+| 1 — Parité | Comparaison des surfaces et parcours Android avec la référence web. Tout le catalogue est disponible sur Android ; la différence de politique d’accès et les voix système locales uniquement sont voulues. |
 | 2 — Texte → voix | Durées et règles de symboles validées avec les exceptions ci-dessous. Pas encore implémentées ; le nouveau flux de voix reste Android seul. |
 | 3 — Voix | `synthesizeToFile` approuvé pour cette phase avec mesure de l’alignement de la bouche avant/après ; Kokoro reste une étude sans ajout. Aucun changement de moteur ou de catalogue à ce stade. |
 | 4 — Vérification | Passages instrumentés hors ligne puis en ligne, et test sur un téléphone réel pour ce que l’émulateur ne prouve pas. APK final et rapport seulement après vérifications, sans substitution silencieuse. |
@@ -16,7 +16,7 @@ Empreinte SHA-256 du **certificat**, vérifiée par la CI sur l’APK final et �
 
 Sur l’émulateur Android 12 : installation, tutoriel/lecture/commandes, WAV importé, voix système FR, synthèse Piper et Pro désactivé contrôlés. [Rapport et captures](https://github.com/initDV/Lectura/actions/runs/44329414529/artifacts/14438761976) ; [sources correspondantes](https://github.com/initDV/Lectura/actions/runs/44329414529/artifacts/14437678702). Sur Pages, le WAV commun a passé ; la voix système Chromium n’a pas été testée sur ce run (moteur Linux indisponible). Pas d’essai sur téléphone réel ni de mise à jour entre deux installations permanentes à ce stade.
 
-## Phase 1 — Parité à contrôler (Pro désactivé)
+## Phase 1 — Parité et accès intégral Android
 
 Point de départ : [run API 31/Pages `44304526156`](https://github.com/initDV/Lectura/actions/runs/44304526156), avant la clé permanente. Le [rapport précédent](ANDROID_BOUCHE_PRO.md) distingue les rejeux déterministes des lectures réelles. La campagne ne vaut pas validation de tous les parcours : elle sert de référence pour les tests suivants.
 
@@ -24,19 +24,21 @@ Point de départ : [run API 31/Pages `44304526156`](https://github.com/initDV/Le
 |---|---|---|
 | Premier lancement, tutoriel, navigation | Premier écran, « Passer », quatre destinations de base testés | Trois étapes FR/EN, exemple, retour, focus, portrait/paysage et persistance après relance |
 | Scène et terminal | Capture FR 390 × 780 ; œil, curseur et lecture | Décor, repères, texte et boutons, gestes, masquage, chacun des réglages de taille/titre/décor, états clavier/insets et petite fenêtre |
-| 32 personnages de base | Vignettes de base présentes, 11 Pro absents ; 43 rigs dessinés en instrumentation interne | Sélection et rendu en scène pour chaque base, remplacement Robot sans altération de l’ID Pro importé, transitions et sauvegarde |
-| 4 expressions de base + Auto | Poses Pro exclues de l’interface et du moteur | `neutre`, `content`, `concentre`, `surpris`, manuel/par phrase/Auto, raccourci `E`, mouvement et clignements |
-| Menu, plein écran, présentation, raccourcis | Menu FR et destinations, aperçu silencieux, œil ; contrôle de refus `R` | Liste et ordre hors Pro, étiquettes, états/alertes, bouton et touches/touchers autorisés, visibilité de l’état réseau |
-| Projets & exports gratuits | Format `.lectura` v1 testable et menu présent | Titre, brouillon, nouveau/exemple, enregistrement/réouverture/suppression ; imports `.txt`/`.md` et `.lectura`, réouverture d’un véritable export `.lectura` via le sélecteur. Ni vidéo/MP3 ni sous-titres publics. |
-| Capture PNG | Commande visible avec Pro désactivé, pas de validation de fichier par le test `pro` | Refus avant préparation ; exporter et relire le fichier, comparer la scène, le texte et le filigrane ; 1080×1920 portrait / 1280×720 paysage |
+| 43 personnages | 43 rigs de la référence, tous sélectionnables | Contrôler le rendu et la persistance pour chaque rig, y compris les 11 auparavant masqués |
+| 38 expressions + Auto | Poses, gestes et mélanges, mots-clés étendus et personnalisés | Contrôler chaque pose manuelle/par phrase/Auto, raccourci `E`, mouvement et clignements |
+| Menu, plein écran, présentation, raccourcis | Menu FR et destinations, aperçu silencieux, œil ; enregistrement accessible par menu et `R` | Ordre, états/alertes, raccourcis et indication réseau FR/EN |
+| Projets | Format `.lectura` v1 et stockage inchangés | Titre, brouillon, nouveau/exemple, enregistrement/réouverture/suppression ; imports `.txt`/`.md` et `.lectura` via le sélecteur |
+| Capture PNG | Native, sans filigrane | Refus avant préparation ; relire le fichier, comparer scène et texte ; 1080×1920 portrait / 1280×720 paysage |
+| SRT/VTT | Import et export natifs, timecodes sur fichier audio | Import/export dans les deux formats, mêmes cues et horodatages, invalidation des repères si le texte change |
+| Export vidéo / audio | Enregistrement et « Mes vidéos » accessibles, 16:9 et 9:16 | Codec et piste vérifiés, partage et stockage natifs ; son du WAV/Piper, pas de piste système avec le moteur direct |
 | Transport | Démarrer, pause, reprise, arrêt, vitesse, lecture de WAV, muet | Toutes les commandes et vitesses, déplacements, fin, volume/muet et interruption/reprise, raccourcis et progression cohérents |
-| Voix système | FR locale eSpeak avec texte de contrôle ; Web Speech FR local avec le même texte | Choix de voix, réglages/écoute, mémoire du choix, cas voix absente, locale et réseau ; moteurs différents, pas d’égalité de timbre garantie |
+| Voix système | FR locale eSpeak avec texte de contrôle ; Web Speech FR local avec le même texte | Choix de voix, réglages/écoute, mémoire du choix, cas voix locale absente, restriction aux voix locales installées ; moteurs différents, pas d’égalité de timbre garantie |
 | Voix HD | Piper Gilles et 2 locuteurs MLS ; interruption/reprise de téléchargement, PCM et cache observés | Catalogue, installation, choix, écoute et suppression ; toutes les voix en phase 3. Les modèles partagés MLS ne doivent être installés qu’une fois. |
 | Fichier audio | WAV parlé, import natif, animation, pause et recherche | Sélecteur système, identité du fichier après relance, erreurs, formats courants ; décodage selon les codecs présents |
-| Réglages / À propos | Accès FR ; pas d’invite Pro ; aide HD de base | FR/EN, thèmes de l’app, décor, émotions, réglages audio, aide/attributions, retour scène, réinitialisations sans perte non demandée |
-| Aucun accès Pro | Refus route/spectre/poses/terminal Pro, import avec métadonnées, vidéos et raccourci `R` | Répéter les essais et ajouter navigation directe, import premium, persistance et tous les exports disponibles. Garder les fichiers et le code Pro. |
+| Réglages / À propos | Aide HD, choix du terminal et édition de mots-clés accessibles | FR/EN, thèmes de l’app, décor, émotions, réglages audio, aide/attributions, retour scène, réinitialisations sans perte non demandée |
+| Pas de compte ni de clé | Sans route ou offre commerciale, ni vérification locale ou réseau | Installation vierge en avion, upgrade depuis v21, réglages FR/EN et notices légales conservées |
 
-Comparaison à faire avec le même texte/projet, rythme, thème, langue et orientation. Ne pas compter comme écart inattendu les entrées retirées par `PRO_ENABLED = false`. Sur le dernier run, l’erreur RVB moyenne brute du menu incluait ces rangées retirées (6,90/255) ; il faut isoler les contrôles communs. Android fournit le sélecteur de fichiers, les barres et le clavier natifs à la place de ceux du navigateur : comparer l’action et la sortie, pas prétendre que ces surfaces système sont identiques. Écarts de rendu à mesurer et à expliquer (texte rasterisé, insets, phase d’animation), pas à cacher.
+Comparaison à faire avec le même texte/projet, rythme, thème, langue et orientation. Isoler les contrôles communs des entrées qui diffèrent volontairement, notamment l’activation web et les exports ouverts dans le menu Android. Android fournit le sélecteur de fichiers, les barres et le clavier natifs à la place de ceux du navigateur : comparer l’action et la sortie, pas prétendre que ces surfaces système sont identiques. Écarts de rendu à mesurer et à expliquer (texte rasterisé, insets, phase d’animation), pas à cacher.
 
 ## Phase 2 — pauses et symboles validés, pas encore appliqués
 
@@ -74,6 +76,6 @@ Dictionnaire prévu : fichier UTF-8 versionné côté Android, par langue, avec 
 
 ## Phase 4 — protocole pour le rapport final
 
-1. Installer sur image propre ; mode avion avec Wi-Fi et données réellement coupés. Tutoriel, scènes et 32 personnages, 4 expressions, navigation, fichiers locaux, écran/PNG, `.lectura`, voix système **locale installée** et relance avec données conservées. Une voix réseau n’est pas une voix disponible hors ligne ; sans voix système locale fournie par l’appareil, n’annoncer une voix hors ligne qu’après installation HD ou système. Vérifier les messages plutôt que basculer de moteur en secret.
-2. En ligne : télécharger une voix, interrompre à une taille non nulle, reprendre en vérifiant les octets et intégrer une seconde voix ; tester champs de choix/écoute. Redémarrer puis répéter en avion avec voix et fichier téléchargés. Tester encore les deux types de voix à vitesse différente, transport, texte spécial et pauses, pro inaccessible, sorties compatibles.
-3. Mettre à jour **entre deux APK à clé permanente** et contrôler signature, version croissante, brouillon, projet, voix, identifiant et exports existants. Pour toute différence ou test non fait (OEM/codec, voix, sélecteur), consigner raison, variante, build PWA/Android et preuve, sans l’estimer comme « passé ».
+1. Installer sur image propre ; mode avion avec Wi-Fi et données réellement coupés. Tutoriel, scènes et 43 personnages, 38 expressions, navigation, fichiers locaux, écran/PNG, `.lectura`, voix système **locale installée** et relance avec données conservées. Une voix réseau n’est pas une voix disponible hors ligne ; sans voix système locale fournie par l’appareil, n’annoncer une voix hors ligne qu’après installation HD ou système. Vérifier les messages plutôt que basculer de moteur en secret.
+2. En ligne : télécharger une voix, interrompre à une taille non nulle, reprendre en vérifiant les octets et intégrer une seconde voix ; tester champs de choix/écoute. Redémarrer puis répéter en avion avec voix et fichier téléchargés. Tester encore les deux types de voix à vitesse différente, transport, texte spécial et pauses, absence d’activation et sorties compatibles.
+3. Mettre à jour **entre deux APK à clé permanente** et contrôler signature, version croissante, brouillon, projet, voix et exports existants. Pour toute différence ou test non fait (OEM/codec, voix, sélecteur), consigner raison, variante, build PWA/Android et preuve, sans l’estimer comme « passé ».

@@ -26,7 +26,7 @@ final class HdPanel {
             LinearLayout sheet=a.sheet(t("voix.hd.choisir"));
             for(String gender:new String[]{"F","M"}){
                 u.group(sheet,t(gender.equals("F")?"voix.hd.feminin":"voix.hd.masculin"),gender.equals("F"));
-                for(JSONObject x:a.hd.voices)if(x.optString("nom").contains(" · "+gender+" · "))a.choice(sheet,x.optString("nom")+(a.hd.installed(x)?" ✓":""),null,x==choice,false,()->{
+                for(JSONObject x:a.hd.voices)if(x.optString("nom").contains(" · "+gender+" · "))a.choice(sheet,x.optString("nom")+(a.hd.installed(x)?" ✓":""),null,x==choice,()->{
                     a.dismiss();a.stopHdExample();choice=x;a.hdChoice=x.optString("id");render();});
             }
         });u.add(root,select,6);u.enable(select,!pending,.5f);

@@ -13,6 +13,31 @@ report_failure() {
     exit "$code"
 }
 trap report_failure EXIT
+package=io.github.initdv.lectura
+instrument() {
+    local phase="$1" class="$2" rc=0 check_log="$LECTURA_REPORT/android-$1.txt"
+    shift 2
+    adb shell am force-stop "$package"
+    timeout 330 adb shell am instrument -w -r "$@" "$package.tests/$package.$class" | tee "$check_log" || rc=$?
+    cat "$check_log" >> "$LECTURA_REPORT/android-checks.txt"
+    while IFS= read -r result; do
+        local level=notice
+        result=${result%$'\r'};result=${result//%/%25}
+        if [[ $result == LECTURA_ERROR* ]]; then level=error; fi
+        printf '::%s file=docs/ANDROID_PARITE.md,title=API 31 · %s::%s\n' "$level" "$phase" "${result:0:1400}"
+    done < <(grep -E '^LECTURA_(OK|ERROR|SKIP)' "$check_log" || true)
+    if ((rc)) || grep -q 'LECTURA_ERROR' "$check_log" || ! grep -q '^LECTURA_COMPLETE' "$check_log"; then
+        local summary
+        summary=$(tail -c 1100 "$check_log" | tr '\r\n' ' ')
+        printf '::error title=Instrumentation Android · %s::Code de retour %s ; %s\n' "$phase" "$rc" "${summary//%/%25}"
+        return 1
+    fi
+}
+no_radios() {
+    adb shell cmd connectivity airplane-mode enable
+    adb shell svc wifi disable
+    adb shell svc data disable
+}
 export PATH="$ANDROID_HOME/platform-tools:$PATH"
 export ANDROID_USER_HOME=${RUNNER_TEMP:-${TMPDIR:-/tmp}}/lectura-android
 export ANDROID_AVD_HOME=$ANDROID_USER_HOME/avd
@@ -53,9 +78,6 @@ for ((i=0;i<150;i++)); do
         adb shell settings put secure immersive_mode_confirmations confirmed
         adb shell input keyevent KEYCODE_WAKEUP
         adb shell wm dismiss-keyguard
-        adb install -r "$1"
-        adb install -r "$2"
-        adb shell pm clear io.github.initdv.lectura
         tts=()
         if [[ -n ${LECTURA_TEST_TTS_APK:-} ]]; then
             adb install -r "$LECTURA_TEST_TTS_APK"
@@ -76,25 +98,38 @@ for ((i=0;i<150;i++)); do
             tts=(-e espeak true)
         fi
         adb logcat -c
-        instrument=0
-        timeout 330 adb shell am instrument -w -r -e hd true "${tts[@]}" io.github.initdv.lectura.tests/io.github.initdv.lectura.DeviceChecks | tee "$LECTURA_REPORT/android-checks.txt" || instrument=$?
+        no_radios
+        : > "$LECTURA_REPORT/android-checks.txt"
+        failures=0
+        if [[ -n ${LECTURA_PREDECESSOR_APK:-} ]]; then
+            adb install "$LECTURA_PREDECESSOR_APK" | tee -a "$log"
+            adb install "$2" | tee -a "$log"
+            instrument avant-mise-a-jour UpgradeChecks -e mode seed || failures=1
+            adb install -r "$1" | tee -a "$log" # No uninstall or clear between these two tests.
+            instrument apres-mise-a-jour UpgradeChecks || failures=1
+        else
+            adb install "$1" | tee -a "$log"
+            adb install "$2" | tee -a "$log"
+        fi
+        adb shell pm clear "$package" | tee -a "$log"
+        instrument installation-en-avion DeviceChecks -e mode clean "${tts[@]}" || failures=1
+        adb shell cmd connectivity airplane-mode disable
+        adb shell svc wifi enable
+        adb shell svc data enable
+        if instrument telechargement DeviceChecks -e mode download; then
+            no_radios
+            instrument redemarrage-en-avion DeviceChecks -e mode offline-hd || failures=1
+        else
+            failures=1
+        fi
         adb logcat -d -s AndroidRuntime:E Lectura:E > "$LECTURA_REPORT/android-errors.txt"
-        while IFS= read -r result; do
-            result=${result%$'\r'};result=${result//%/%25}
-            level=notice
-            if [[ $result == LECTURA_ERROR* ]]; then level=error; fi
-            printf '::%s file=docs/ANDROID_PARITE.md,title=Vérification API 31::%s\n' "$level" "${result:0:1400}"
-        done < <(grep -E '^LECTURA_(OK|ERROR|SKIP)' "$LECTURA_REPORT/android-checks.txt" || true)
         adb pull /sdcard/Android/data/io.github.initdv.lectura/files/verification "$LECTURA_REPORT/device" || true
         mv "$LECTURA_REPORT"/device/android-*.png "$LECTURA_REPORT/" 2>/dev/null || true
-        summary=$(tail -c 1100 "$LECTURA_REPORT/android-checks.txt" | tr '\r\n' ' ')
-        if ((instrument)) || grep -q 'LECTURA_ERROR' "$LECTURA_REPORT/android-checks.txt" || ! grep -q '^LECTURA_COMPLETE' "$LECTURA_REPORT/android-checks.txt"; then
-            printf '::error title=Instrumentation Android::Code de retour %s ; %s\n' "$instrument" "${summary//%/%25}"
+        if ((failures)); then
             logline=$(head -c 1700 "$LECTURA_REPORT/android-errors.txt" | tr '\r\n' ' ')
             printf '::error file=docs/ANDROID_PARITE.md,title=Contrôles natifs::%s\n' "${logline//%/%25}"
-            exit 1
         fi
-        exit 0
+        exit "$failures"
     fi
     if ! kill -0 "$emu" 2>/dev/null; then exit 1; fi
     sleep 2

@@ -40,7 +40,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import static io.github.initdv.lectura.Refs.*;
-import static io.github.initdv.lectura.Features.PRO_ENABLED;
 
 public final class MainActivity extends Activity {
     Refs refs;Ui ui;Library db;Project project;
@@ -48,7 +47,6 @@ public final class MainActivity extends Activity {
     LinearLayout toasts;
     ScenePage scene;Stage stage;Screens screens;Reading reading;Mood mood;Talk talk;Hd hd;ExportUi exports;
     String route="scene",forced="",sig="",lastDraft="";
-    private boolean licensed;
     boolean muted,preparing,stopped=true,isForeground,fullscreen;
     final Handler handler=new Handler(Looper.getMainLooper());
     final ExecutorService queue=Executors.newSingleThreadExecutor();
@@ -62,7 +60,7 @@ public final class MainActivity extends Activity {
     Runnable backModal,modalCleanup;
 
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);refs=new Refs(this);db=new Library(refs);hd=new Hd(refs);refreshLicense();project=db.draft();ui=new Ui(this,refs);exports=new ExportUi(this);
+        super.onCreate(state);refs=new Refs(this);db=new Library(refs);hd=new Hd(refs);project=db.draft();ui=new Ui(this,refs);exports=new ExportUi(this);
         getWindow().setDecorFitsSystemWindows(false);getWindow().setStatusBarColor(0);getWindow().setNavigationBarColor(0);
         getWindow().setNavigationBarContrastEnforced(false);getWindow().setStatusBarContrastEnforced(false);
         root=new FrameLayout(this);root.setOnApplyWindowInsetsListener((v,i)->{
@@ -85,8 +83,6 @@ public final class MainActivity extends Activity {
         if(modal!=null){Runnable r=backModal;dismiss();if(r!=null)r.run();}
         else if(stage!=null&&stage.presenting)presentation(false);else if(fullscreen)fullscreen();else if(!route.equals("scene"))go("scene");else super.onBackPressed();
     }
-    void refreshLicense(){String key=db.settings.optString("licence");licensed=PRO_ENABLED&&!key.isEmpty()&&Library.verify(key,db.settings.optString("idInstallation"),refs.json("license-key.json")).isEmpty();}
-    boolean hasPro(){return PRO_ENABLED&&licensed;}
     boolean reduced(){return !android.animation.ValueAnimator.areAnimatorsEnabled();}
     boolean online(){ConnectivityManager cm=getSystemService(ConnectivityManager.class);return cm.getActiveNetwork()!=null;}
     float volume(){return (float)db.settings.optDouble("volume",1);}
@@ -94,7 +90,6 @@ public final class MainActivity extends Activity {
     String t(String key,Object... data){return refs.label(db.locale(),key,data);}
     void go(String name){draft();render(name);}
     void render(String name){
-        if(!PRO_ENABLED&&name.equals("pro"))name="scene";
         dismiss();hideKeyboard();if(fullscreen&&!name.equals("scene"))fullscreen();disposeScene();ui.theme(db.settings.optString("themeApp","actuel"));
         root.setBackgroundColor(ui.bg);content.removeAllViews();route=name;
         int light=android.graphics.Color.luminance(ui.bg)>.5?WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS:0;
@@ -102,9 +97,8 @@ public final class MainActivity extends Activity {
         if(bars!=null)bars.setSystemBarsAppearance(light,WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
         if(name.equals("scene")){
             JSONObject d=refs.character(project.character);
-            if(d==null||!hasPro()&&d.optBoolean("pro")){
-                if(d==null)note(t("scene.persoIntrouvable","id",project.character),"warn");
-                else if(PRO_ENABLED)note(t("scene.persoPro","nom",d.optString("nom")),"warn");
+            if(d==null){
+                note(t("scene.persoIntrouvable","id",project.character),"warn");
                 d=refs.character("robot_lectura");
             }
             stage=new Stage(this,d);scene=new ScenePage(this,stage);content.addView(scene.scroll,ui.fp(Ui.MATCH,Ui.MATCH,Gravity.TOP));
@@ -153,8 +147,8 @@ public final class MainActivity extends Activity {
     void dismiss(){backModal=null;if(modalCleanup!=null){Runnable clean=modalCleanup;modalCleanup=null;clean.run();}if(modal!=null){root.removeView(modal);modal=null;content.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);}
         if(isForeground&&exports!=null)handler.post(exports::foreground);
     }
-    void choice(LinearLayout r,String title,String icon,boolean selected,boolean pro,Runnable fn){ui.add(r,ui.choice(title,icon,selected,pro,fn),4);}
-    void choose(String title,List<String> names,int selected,Consumer<Integer> fn){LinearLayout r=sheet(title);for(int i=0;i<names.size();i++){int p=i;choice(r,names.get(i),null,i==selected,false,()->{dismiss();fn.accept(p);});}}
+    void choice(LinearLayout r,String title,String icon,boolean selected,Runnable fn){ui.add(r,ui.choice(title,icon,selected,fn),4);}
+    void choose(String title,List<String> names,int selected,Consumer<Integer> fn){LinearLayout r=sheet(title);for(int i=0;i<names.size();i++){int p=i;choice(r,names.get(i),null,i==selected,()->{dismiss();fn.accept(p);});}}
     void confirm(String title,Runnable fn){LinearLayout r=sheet(t("commun.oui"));ui.add(r,ui.p(title),4);LinearLayout row=ui.row();row.setGravity(Gravity.RIGHT);ui.add(r,row,12);
         row.addView(ui.button(t("commun.annuler"),null,this::dismiss));ui.gap(row,10);row.addView(ui.button(t("commun.oui"),null,true,false,()->{dismiss();fn.run();}));}
     void note(String m,String type){note(m,type,4500);}
@@ -170,7 +164,7 @@ public final class MainActivity extends Activity {
     void copy(String desc,String text){getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText(desc,text));note(t("commun.copie"),"ok");}
     void hideKeyboard(){if(getCurrentFocus()!=null)getSystemService(InputMethodManager.class).hideSoftInputFromWindow(getCurrentFocus().getWindowToken(),0);}
 
-    private String signature(boolean silent){return Script.clean(project.text)+"\u0001"+silent+"|"+project.fileAudio+"|"+project.fileName+"|"+project.engine+"|"+project.voice+"|"+(project.engine.equals("piper")?project.speed:0)+"|"+project.typingCps();}
+    private String signature(boolean silent){return Script.clean(project.text)+"\u0001"+silent+"|"+project.fileAudio+"|"+project.fileName+"|"+project.engine+"|"+project.voice+"|"+(project.engine.equals("piper")?project.speed:0)+"|"+project.cps;}
     void launch(boolean silent){
         if(scene==null||preparing)return;if(reading!=null&&reading.playing&&!silent){reading.pause();playState();return;}
         String text=Script.clean(project.text);if(text.trim().isEmpty()){note(t("scene.err.texteVide"),"warn");scene.edit.requestFocus();return;}
@@ -181,18 +175,18 @@ public final class MainActivity extends Activity {
             if(stopped||reading.ended)reading.seek(0);startPlaying();return;}
         if(!silent&&!project.fileAudio&&!project.engine.equals("piper")&&!talk.ready&&!talk.failure){note(t("scene.prep.ressources"),"info");return;}
         cancelPrewarm();hideKeyboard();content.requestFocus();if(reading!=null){reading.close();reading=null;}stopped=true;preparing=true;playState();
-        int ticket=++generation;Project cfg=Project.fromJson(project.json());String lang=db.locale();boolean hasPro=hasPro();
+        int ticket=++generation;Project cfg=Project.fromJson(project.json());String lang=db.locale();
         JSONObject personal=object(db.settings,"motsPerso");Voice v=!silent&&!cfg.fileAudio&&!cfg.engine.equals("piper")?talk.choose(lang,cfg.voice):null;
         boolean localReady=talk.ready;File audio=db.audio(project),cache=getCacheDir();
         LinearLayout loading=sceneOverlay(t("scene.prep.titre"));TextView loadingText=ui.small(t("scene.prep.ressources"));ui.add(loading,loadingText,5);
         android.widget.ProgressBar bar=new android.widget.ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);bar.setMax(1000);ui.add(loading,bar,12);
         preparation=queue.submit(()->{
             Pcm decoded=null;boolean delivered=false;try{
-                int cps=cfg.typingCps();
-                Script.Keywords words=new Script.Keywords(refs,lang,hasPro,personal);List<Script.Segment> segments;float base=1;
+                int cps=cfg.cps;
+                Script.Keywords words=new Script.Keywords(refs,lang,personal);List<Script.Segment> segments;float base=1;
                 if(silent)segments=Script.timing(text,text.length()*1000./cps,1);
                 else if(cfg.fileAudio){if(!audio.isFile())throw new IOException(t("scene.err.sansAudio"));
-                    decoded=Pcm.decode(audio,cache);segments=cfg.usesSubtitleTiming()?Script.locate(text,cfg.segments,true):null;
+                    decoded=Pcm.decode(audio,cache);segments=cfg.subtitles?Script.locate(text,cfg.segments,true):null;
                     if(segments==null)segments=Script.timing(text,decoded.duration(),0);
                 }else if(cfg.engine.equals("piper")){
                     if(text.length()>12000)throw new IOException(t("voix.hd.err.tropLong","max",12000,"n",text.length()));
@@ -203,7 +197,7 @@ public final class MainActivity extends Activity {
                 }
                 else {if(v==null)throw new IOException(t(localReady?"voix.err.aucune":"voix.err.absente"));base=cfg.speed;segments=Script.timing(text,Script.estimate(text,cfg.speed,cps),(double)Script.VOICE_CPS/cps);}
                 Script.reportExpressions(segments,cfg.segments);if(segments.isEmpty())throw new IOException(t("scene.err.texteVide"));
-                Mood m=new Mood(refs,lang,words,hasPro,cfg.emotions);Pcm pcm=decoded;final float baseRate=base;final List<Script.Segment> parts=segments;
+                Mood m=new Mood(refs,lang,words,cfg.emotions);Pcm pcm=decoded;final float baseRate=base;final List<Script.Segment> parts=segments;
                 handler.post(()->{if(generation!=ticket||scene==null){if(pcm!=null)pcm.close();return;}try{
                     reading=new Reading(text,parts,words,silent,pcm,talk,v,cfg,baseRate,this::readingFinished,code->readingError(code));
                     mood=m;preparing=false;sig=signature;clearOverlay();reading.volume(volume(),muted);reading.speed(project.speed);
@@ -234,7 +228,7 @@ public final class MainActivity extends Activity {
     void readingFinished(){stopped=true;playState();exports.naturalEnd();}
     void playState(){exports.mark(false);if(scene!=null)scene.update();if(reading!=null&&reading.playing)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}
     void seek(int ms){if(reading==null)return;double now=reading.time();if(reading.ended)stopped=false;reading.seek(now+ms);playState();exports.mark(true);}
-    void nextExpression(){List<String> ids=new ArrayList<>();ids.add("");refs.expressions.keys().forEachRemaining(id->{if(!id.equals("neutre")&&(hasPro()||!object(refs.expressions,id).optBoolean("pro")))ids.add(id);});
+    void nextExpression(){List<String> ids=new ArrayList<>();ids.add("");refs.expressions.keys().forEachRemaining(id->{if(!id.equals("neutre"))ids.add(id);});
         forced=ids.get((ids.indexOf(forced)+1)%ids.size());note(t("scene.expression")+" : "+t("expr."+(forced.isEmpty()?"auto":forced)),"info",1800);}
     @Override public boolean dispatchKeyEvent(KeyEvent e){
         if(e.getAction()==KeyEvent.ACTION_DOWN&&e.getKeyCode()==KeyEvent.KEYCODE_ESCAPE&&modal!=null){onBackPressed();return true;}
@@ -245,7 +239,7 @@ public final class MainActivity extends Activity {
                 case KeyEvent.KEYCODE_P:presentation(!stage.presenting);return true;case KeyEvent.KEYCODE_M:muted=!muted;adjustVolume();return true;
                 case KeyEvent.KEYCODE_F:fullscreen();return true;case KeyEvent.KEYCODE_E:nextExpression();return true;
                 case KeyEvent.KEYCODE_ESCAPE:presentation(false);return true;
-                case KeyEvent.KEYCODE_S:capturePng();return true;case KeyEvent.KEYCODE_R:if(PRO_ENABLED){record();return true;}break;
+                case KeyEvent.KEYCODE_S:capturePng();return true;case KeyEvent.KEYCODE_R:record();return true;
                 default:break;}
         }return super.dispatchKeyEvent(e);
     }
@@ -256,11 +250,11 @@ public final class MainActivity extends Activity {
     }
     void chooseVoice(){LinearLayout r=sheet(t("scene.voix.choisir"));ui.group(r,t("scene.voix.systeme"),true);List<Voice> voices=talk.voices(db.locale());
         if(voices.isEmpty())ui.add(r,ui.small(t("voix.err.aucune")),0);
-        for(Voice voice:voices)choice(r,voice.getName()+(voice.isNetworkConnectionRequired()?" · "+t("voix.enLigne"):""),"voice",!project.fileAudio&&project.engine.equals("webspeech")&&project.voice.equals(voice.getName()),false,()->{dismiss();selectVoice("webspeech",voice.getName());});
+        for(Voice voice:voices)choice(r,voice.getName(),"voice",!project.fileAudio&&project.engine.equals("webspeech")&&project.voice.equals(voice.getName()),()->{dismiss();selectVoice("webspeech",voice.getName());});
         ui.group(r,t("voix.hd.titre"),false);List<JSONObject> installed=installedHd();
-        if(installed.isEmpty())choice(r,t("voix.hd.gerer"),"download",false,false,()->go("reglages"));
-        for(JSONObject v:installed){String id=v.optString("id");choice(r,"Lectura HD · "+v.optString("nom"),"sparkle",!project.fileAudio&&project.engine.equals("piper")&&project.voice.equals(id),false,()->{dismiss();selectVoice("piper",id);});}
-        ui.group(r,t("scene.voix.fichierTitre"),false);choice(r,project.fileAudio?voiceName():t("scene.voix.fichier"),"upload",project.fileAudio,false,()->{dismiss();pickAudio();});}
+        if(installed.isEmpty())choice(r,t("voix.hd.gerer"),"download",false,()->go("reglages"));
+        for(JSONObject v:installed){String id=v.optString("id");choice(r,"Lectura HD · "+v.optString("nom"),"sparkle",!project.fileAudio&&project.engine.equals("piper")&&project.voice.equals(id),()->{dismiss();selectVoice("piper",id);});}
+        ui.group(r,t("scene.voix.fichierTitre"),false);choice(r,project.fileAudio?voiceName():t("scene.voix.fichier"),"upload",project.fileAudio,()->{dismiss();pickAudio();});}
     void selectVoice(String engine,String id){project.fileAudio=false;project.engine=engine;project.voice=id;db.set("moteurVoix",engine);db.set("voixId",id);if(scene!=null)scene.voice();cancelPrewarm();if(engine.equals("piper"))prewarm=queue.submit(()->{try{hd.prewarm("a",id,1);}catch(Exception ignored){}});}
     void pick(String mime,Consumer<Uri> onResult){Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime);request(intent,onResult);}
     void createFile(String mime,String name,Consumer<Uri> writer){request(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime).putExtra(Intent.EXTRA_TITLE,name),writer);}
@@ -291,7 +285,7 @@ public final class MainActivity extends Activity {
         android.graphics.Bitmap b=android.graphics.Bitmap.createBitmap(w,h,android.graphics.Bitmap.Config.ARGB_8888);stage.exportDraw(new android.graphics.Canvas(b),w,h,true,0);
         String name=project.base()+"-"+Instant.now().toString().substring(0,19).replaceAll("[:T]","-")+".png";
         createFile("image/png",name,uri->{try(java.io.OutputStream output=getContentResolver().openOutputStream(uri,"wt")){if(output==null||!b.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output))throw new IOException("Capture impossible.");note(t("scene.captureOk"),"ok");}catch(Exception e){report("capture",e);}finally{b.recycle();}});}
-    void record(){if(PRO_ENABLED)exports.toggle();}
+    void record(){exports.toggle();}
     void recordFrame(double now){exports.frame(now);}
     void renderRoute(String name){screens=new Screens(this,name);}
     List<JSONObject> installedHd(){return hd.installed();}
@@ -318,29 +312,35 @@ public final class MainActivity extends Activity {
         LinearLayout r=sheet(t("scene.menu"));ui.menuGroup(r,t("menu.projet"),6);
         EditText title=ui.field(project.title,t("editeur.sansTitre"),false,200,s->project.title=s);title.setContentDescription(t("editeur.titreProjet"));
         ui.pad(title,13,0);title.setMinHeight(ui.d(44.5f));ui.add(r,title,0);ui.gap(r,10);
-        choice(r,t("editeur.enregistrer"),"save",false,false,()->{dismiss();try{project.recalc();db.save(project);lastDraft=project.json().toString();note(t("editeur.enregistre"),"ok");}catch(IOException e){report("projet",e);}});
-        choice(r,t("nav.projets"),"folder",false,false,()->go("projets"));
-        choice(r,t("editeur.importerTexte"),"upload",false,false,()->{dismiss();pick("text/*",uri->{try{project.text=fileText(uri,2_000_000).replaceAll("\\r\\n?","\n").trim();if(project.title.isEmpty())project.title=fileName(uri).replaceFirst("\\.[^.]+$", "");
+        choice(r,t("editeur.enregistrer"),"save",false,()->{dismiss();try{project.recalc();db.save(project);lastDraft=project.json().toString();note(t("editeur.enregistre"),"ok");}catch(IOException e){report("projet",e);}});
+        choice(r,t("nav.projets"),"folder",false,()->go("projets"));
+        choice(r,t("editeur.importerTexte"),"upload",false,()->{dismiss();pick("text/*",uri->{try{project.text=fileText(uri,2_000_000).replaceAll("\\r\\n?","\n").trim();if(project.title.isEmpty())project.title=fileName(uri).replaceFirst("\\.[^.]+$", "");
             project.recalc();scene.edit.setText(project.text);}catch(Exception e){report("import",e);}});});
-        choice(r,t("editeur.exporter"),"download",false,false,()->{dismiss();project.recalc();writeDoc("application/json",project.base()+".lectura",project.json().toString());});
-        if(PRO_ENABLED){
-            choice(r,t("editeur.importerSrt"),"upload",false,!hasPro(),()->{dismiss();if(!hasPro()){note(t("pro.requis.sousTitres"),"info");return;}pick("*/*",uri->{try{Script.importSubtitles(fileText(uri,500000),project);scene.edit.setText(project.text);note(t("editeur.sousTitresImportes","n",project.segments.length()),"ok");}catch(Exception e){report("sous-titres",e);}});});
-            for(String format:new String[]{"srt","vtt"})choice(r,t(format.equals("srt")?"menu.exporterSrt":"menu.exporterVtt"),"download",false,!hasPro(),()->{
-                dismiss();if(!hasPro()){note(t("pro.requis.sousTitres"),"info");return;}if(project.text.trim().isEmpty()){note(t("scene.err.texteVide"),"warn");return;}writeDoc(format.equals("srt")?"application/x-subrip":"text/vtt",project.base()+"."+format,Script.subtitles(project.recalc(),format.equals("vtt")));});
-        }
-        ui.menuGroup(r,t("menu.scene"),2);choice(r,t("scene.apercuSansSon"),"eye",false,false,()->{dismiss();launch(true);});
-        choice(r,t("scene.capture"),"camera",false,false,()->{dismiss();capturePng();});
-        if(PRO_ENABLED)choice(r,t(exports.active()?"scene.arreterEnregistrement":"scene.enregistrer"),exports.active()?"stop":"record",false,!hasPro(),()->{dismiss();record();});
-        choice(r,t("scene.pleinEcran"),"fullscreen",false,false,()->{dismiss();fullscreen();});
-        if(PRO_ENABLED){
-            ui.add(r,ui.p(t("scene.format")),8);
-            List<String> formats=db.locale().equals("en")?List.of("Landscape 16:9 (YouTube)","Portrait 9:16 (TikTok)"):
-                List.of("Paysage 16:9 (YouTube)","Vertical 9:16 (TikTok)");
-            TextView f=ui.button(formats.get(db.settings.optString("formatVideo").equals("16:9")?0:1),"chevron",()->choose(t("scene.format"),formats,db.settings.optString("formatVideo").equals("16:9")?0:1,i->{db.set("formatVideo",i==0?"16:9":"9:16");menu();}));ui.add(r,f,6);
-        }
+        choice(r,t("editeur.exporter"),"download",false,()->{dismiss();project.recalc();writeDoc("application/json",project.base()+".lectura",project.json().toString());});
+        choice(r,t("editeur.importerSrt"),"upload",false,()->{
+            dismiss();pick("*/*",uri->{try{
+                Script.importSubtitles(fileText(uri,500000),project);
+                open(project); // Reprepare even if the new cues contain the same text with different times.
+                note(t("editeur.sousTitresImportes","n",project.segments.length()),"ok");
+            }catch(Exception e){report("sous-titres",e);}});
+        });
+        for(String format:new String[]{"srt","vtt"})choice(r,t(format.equals("srt")?"menu.exporterSrt":"menu.exporterVtt"),"download",false,()->{
+            dismiss();if(project.text.trim().isEmpty()){note(t("scene.err.texteVide"),"warn");return;}
+            writeDoc(format.equals("srt")?"application/x-subrip":"text/vtt",project.base()+"."+format,Script.subtitles(project.recalc(),format.equals("vtt")));
+        });
+        ui.menuGroup(r,t("menu.scene"),2);choice(r,t("scene.apercuSansSon"),"eye",false,()->{dismiss();launch(true);});
+        choice(r,t("scene.capture"),"camera",false,()->{dismiss();capturePng();});
+        choice(r,t(exports.active()?"scene.arreterEnregistrement":"scene.enregistrer"),exports.active()?"stop":"record",false,()->{dismiss();record();});
+        choice(r,t("scene.pleinEcran"),"fullscreen",false,()->{dismiss();fullscreen();});
+        ui.add(r,ui.p(t("scene.format")),8);
+        List<String> formats=db.locale().equals("en")?List.of("Landscape 16:9 (YouTube)","Portrait 9:16 (TikTok)"):
+            List.of("Paysage 16:9 (YouTube)","Vertical 9:16 (TikTok)");
+        int format=db.settings.optString("formatVideo").equals("16:9")?0:1;
+        ui.add(r,ui.button(formats.get(format),"chevron",()->choose(t("scene.format"),formats,format,i->{db.set("formatVideo",i==0?"16:9":"9:16");menu();})),6);
         ui.menuGroup(r,t("menu.avance"),2);
-        if(PRO_ENABLED)choice(r,t("menu.mesVideos"),"video",false,false,()->{dismiss();movies();});
-        String[] ids={"personnages","reglages","pro","apropos"},icons={"smile","settings","star","info"};for(int i=0;i<ids.length;i++){String id=ids[i];if(PRO_ENABLED||!id.equals("pro"))choice(r,t("nav."+id),icons[i],false,false,()->go(id));}
+        choice(r,t("menu.mesVideos"),"video",false,()->{dismiss();movies();});
+        String[] ids={"personnages","reglages","apropos"},icons={"smile","settings","info"};
+        for(int i=0;i<ids.length;i++){String id=ids[i];choice(r,t("nav."+id),icons[i],false,()->go(id));}
         ui.add(r,ui.small("● "+t(online()?"net.enLigne":"net.horsLigne")),14);
     }
     void movies(){exports.library();}
