@@ -2,8 +2,8 @@ name: Lectura Android
 
 on:
   push:
-    branches: ['arena/**', main]
-    paths: ['android/**', '.github/workflows/android.yml', 'characters/**', 'data/**', 'fonts/**', 'icons/**', 'src/**', 'tools/fetch_voice.mjs']
+    branches: ['arena/d2229c4f-lectura']
+    paths: ['android/**', '.github/workflows/android.yml']
   workflow_dispatch:
     inputs:
       predecessor_run:
@@ -20,9 +20,22 @@ concurrency:
 
 jobs:
   android:
+    if: github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura'
     runs-on: ubuntu-24.04
+    environment: android-signing
     steps:
+      - name: Exiger la signature permanente
+        env:
+          SIGNING_READY: ${{ secrets.LECTURA_KEYSTORE_B64 != '' && secrets.LECTURA_STORE_PASS != '' && 'yes' || 'no' }}
+          LECTURA_SIGNING_CERT_SHA256: ${{ vars.LECTURA_SIGNING_CERT_SHA256 }}
+        run: |
+          if [[ "$SIGNING_READY" != yes || ! "$LECTURA_SIGNING_CERT_SHA256" =~ ^[0-9A-Fa-f]{64}$ ]]; then
+            echo '::error title=Signature permanente non configurée::Ajouter les deux secrets et l’empreinte du certificat dans android-signing (voir android/README.md). Aucun APK ne sera produit.'
+            exit 1
+          fi
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -60,8 +73,22 @@ jobs:
           await writeFile(`${out}/lips-spoken.wav`, synth.FS.readFile('fixture.wav'));
           JS
           echo "LECTURA_TEST_SPEECH_WAV=$RUNNER_TEMP/lips-spoken.wav" >> "$GITHUB_ENV"
-      - name: Compiler l’APK, vérifier sa signature
-        run: LECTURA_BUILD="${GITHUB_SHA:0:8}" LECTURA_TEST_APK="$RUNNER_TEMP/LecturaTests.apk" bash android/build.sh "$RUNNER_TEMP/Lectura.apk"
+      - name: Compiler et signer avec le certificat permanent
+        env:
+          LECTURA_KEYSTORE_B64: ${{ secrets.LECTURA_KEYSTORE_B64 }}
+          LECTURA_STORE_PASS: ${{ secrets.LECTURA_STORE_PASS }}
+          LECTURA_SIGNING_CERT_SHA256: ${{ vars.LECTURA_SIGNING_CERT_SHA256 }}
+          LECTURA_KEY_ALIAS: ${{ vars.LECTURA_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          signing=$(mktemp -d "$RUNNER_TEMP/lectura-signing.XXXXXXXX")
+          trap 'rm -rf -- "$signing"' EXIT
+          export LECTURA_KEYSTORE="$signing/lectura.p12"
+          printf '%s' "$LECTURA_KEYSTORE_B64" | base64 --decode > "$LECTURA_KEYSTORE"
+          unset LECTURA_KEYSTORE_B64
+          LECTURA_BUILD="${GITHUB_SHA:0:8}" LECTURA_VERSION_CODE="$GITHUB_RUN_NUMBER" \
+            LECTURA_TEST_APK="$RUNNER_TEMP/LecturaTests.apk" bash android/build.sh "$RUNNER_TEMP/Lectura.apk"
       - name: Récupérer l’APK à mettre à jour
         continue-on-error: true
         uses: actions/download-artifact@v4
@@ -72,6 +99,7 @@ jobs:
           run-id: ${{ inputs.predecessor_run || '44295570195' }}
           path: ${{ runner.temp }}/lectura-predecessor
       - name: Comparer les certificats de signature
+        id: certificates
         env:
           LECTURA_REPORT: ${{ runner.temp }}/lectura-report
         run: |
@@ -94,11 +122,6 @@ jobs:
             fi
             rm -f -- "$previous"
           fi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Lectura-Android-API31+
-          path: ${{ runner.temp }}/Lectura.apk
-          if-no-files-found: error
       - name: Sources correspondantes et notices Android
         run: |
           mkdir -p "$RUNNER_TEMP/lectura-sources"
@@ -153,6 +176,7 @@ jobs:
           "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify "$RUNNER_TEMP/espeak.apk"
           echo "LECTURA_TEST_TTS_APK=$RUNNER_TEMP/espeak.apk" >> "$GITHUB_ENV"
       - name: Test Android 12
+        id: android_checks
         timeout-minutes: 10
         env:
           LECTURA_REPORT: ${{ runner.temp }}/lectura-report
@@ -161,15 +185,20 @@ jobs:
           ls -l android/tests
           bash android/tests/emulator.sh "$RUNNER_TEMP/Lectura.apk" "$RUNNER_TEMP/LecturaTests.apk"
       - name: Comparer les surfaces de l’application
-        if: always()
+        if: always() && steps.android_checks.outcome != 'skipped' && steps.android_checks.outcome != ''
         env:
           LECTURA_REPORT: ${{ runner.temp }}/lectura-report
         run: |
           python3 -m pip install --user pillow
           python3 android/tests/compare.py
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && steps.certificates.outcome == 'success'
         with:
           name: Lectura-comparaison
           path: ${{ runner.temp }}/lectura-report
           if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lectura-Android-API31+
+          path: ${{ runner.temp }}/Lectura.apk
+          if-no-files-found: error

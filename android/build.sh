@@ -2,6 +2,12 @@
 # SDK officiel + JDK, aucun Gradle ni daemon. Le dossier de travail est temporaire, hors dépôt.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+check=0
+if [[ ${1:-} == --check ]]; then check=1; shift; fi
+if (( $# > 1 || (check && $#) )); then
+  echo 'Usage : android/build.sh [chemin.apk] ou android/build.sh --check' >&2
+  exit 2
+fi
 SDK=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 BT=${ANDROID_BUILD_TOOLS:-${SDK:+$SDK/build-tools/37.0.0}}
 PLATFORM=${ANDROID_JAR:-${SDK:+$SDK/platforms/android-37.0/android.jar}}
@@ -15,10 +21,39 @@ D8=${D8:-$BT/d8}
 AAPT2=${AAPT2:-$BT/aapt2}
 ZIPALIGN=${ZIPALIGN:-$BT/zipalign}
 APKSIGNER=${APKSIGNER:-$BT/apksigner}
-OUTPUT=$(realpath -m "${1:-android/build/Lectura.apk}")
+version=${LECTURA_VERSION_CODE:-1}
+if [[ ! $version =~ ^[1-9][0-9]{0,9}$ ]] || ((version > 2100000000)); then
+  echo 'LECTURA_VERSION_CODE invalide (entier de 1 à 2100000000).' >&2
+  exit 2
+fi
+if ((!check)); then
+  : "${LECTURA_KEYSTORE:?Keystore permanent requis ; voir android/README.md.}"
+  : "${LECTURA_STORE_PASS:?Mot de passe du keystore permanent requis.}"
+  : "${LECTURA_SIGNING_CERT_SHA256:?Empreinte publique du certificat permanent requise.}"
+  KEYSTORE=$(realpath -e -- "$LECTURA_KEYSTORE")
+  [[ -f $KEYSTORE && -r $KEYSTORE ]] || { echo 'Keystore illisible.' >&2; exit 2; }
+  case "$KEYSTORE" in "$PWD"/*) echo 'Garder le keystore hors du dépôt.' >&2; exit 2;; esac
+  expected=${LECTURA_SIGNING_CERT_SHA256,,}
+  [[ $expected =~ ^[a-f0-9]{64}$ ]] || { echo 'Empreinte SHA-256 de certificat invalide.' >&2; exit 2; }
+  alias=${LECTURA_KEY_ALIAS:-lectura}
+  store_pass=$LECTURA_STORE_PASS
+  key_pass=${LECTURA_KEY_PASS:-$store_pass}
+  # Ne transmettre les mots de passe qu’aux outils qui ouvrent le keystore.
+  unset LECTURA_STORE_PASS LECTURA_KEY_PASS
+  actual=$(LECTURA_STORE_PASS="$store_pass" "$KEYTOOL" -exportcert -keystore "$KEYSTORE" \
+    -storepass:env LECTURA_STORE_PASS -alias "$alias" | sha256sum)
+  [[ ${actual%% *} == "$expected" ]] || { echo 'Certificat du keystore différent du certificat permanent attendu.' >&2; exit 1; }
+  OUTPUT=$(realpath -m "${1:-android/build/Lectura.apk}")
+  if [[ -n ${LECTURA_TEST_APK:-} ]]; then
+    TEST_OUTPUT=$(realpath -m "$LECTURA_TEST_APK")
+    [[ $TEST_OUTPUT != "$OUTPUT" ]] || { echo 'Sorties application et instrumentation identiques.' >&2; exit 2; }
+  fi
+else
+  unset LECTURA_STORE_PASS LECTURA_KEY_PASS
+fi
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/lectura-build.XXXXXXXX")
 trap 'rm -rf -- "$WORK"' EXIT
-mkdir -p "$WORK"/{classes,dex,res} "$(dirname "$OUTPUT")"
+mkdir -p "$WORK"/{classes,dex,res}
 node android/assets.mjs "$WORK/assets" "$WORK/res"
 cp -r android/res/. "$WORK/res/"
 if [[ -v LECTURA_HD_INDEX ]]; then cp "$LECTURA_HD_INDEX" "$WORK/assets/hd-index.json"; fi
@@ -50,7 +85,8 @@ cp src/vendor/lamejs/LICENSE "$WORK/assets/LAME-notice.txt"
 cp android/licenses/COMPOSANTS.md "$WORK/assets/COMPOSANTS-ANDROID.md"
 "$AAPT2" compile --dir "$WORK/res" -o "$WORK/res.zip"
 "$AAPT2" link -I "$PLATFORM" --manifest android/AndroidManifest.xml \
-  --min-sdk-version 31 --target-sdk-version 37 -A "$WORK/assets" -o "$WORK/resources.apk" "$WORK/res.zip"
+  --min-sdk-version 31 --target-sdk-version 37 --version-code "$version" --replace-version \
+  -A "$WORK/assets" -o "$WORK/resources.apk" "$WORK/res.zip"
 find android/src -name '*.java' | sort > "$WORK/sources"
 LAME_REV=582bbba6a12f981b984d8fb9e1874499fed85675
 if [[ -v LECTURA_LAME_SRC ]]; then
@@ -84,20 +120,7 @@ with zipfile.ZipFile(w/'resources.apk', 'a', zipfile.ZIP_DEFLATED) as z:
         z.write(f, 'lib/' + str(f.relative_to(w/'ort/jni')))
 PY
 "$ZIPALIGN" -f 4 "$WORK/resources.apk" "$WORK/aligned.apk"
-KEYSTORE=${LECTURA_KEYSTORE:-${HOME}/.android/debug.keystore}
-export LECTURA_STORE_PASS=${LECTURA_STORE_PASS:-android}
-export LECTURA_KEY_PASS=${LECTURA_KEY_PASS:-$LECTURA_STORE_PASS}
-if [[ ! -f "$KEYSTORE" && ! -v LECTURA_KEYSTORE ]]; then
-  mkdir -p "$(dirname "$KEYSTORE")"
-  "$KEYTOOL" -genkeypair -storetype PKCS12 -keystore "$KEYSTORE" -storepass:env LECTURA_STORE_PASS \
-    -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Android Debug,O=Android,C=US'
-fi
-"$APKSIGNER" sign --ks "$KEYSTORE" --ks-key-alias "${LECTURA_KEY_ALIAS:-androiddebugkey}" \
-  --ks-pass env:LECTURA_STORE_PASS --key-pass env:LECTURA_KEY_PASS --v4-signing-enabled false \
-  --out "$OUTPUT" "$WORK/aligned.apk"
-"$APKSIGNER" verify --verbose "$OUTPUT"
-printf '\nAPK : %s\n' "$OUTPUT"
-if [[ -v LECTURA_TEST_APK ]]; then
+if ((check)) || [[ -n ${TEST_OUTPUT:-} ]]; then
   mkdir -p "$WORK"/{tests,assets-test,dex-test}
   node android/tests/fixtures.mjs "$WORK/assets-test/fixtures.json"
   if [[ -n ${LECTURA_TEST_SPEECH_WAV:-} ]]; then cp "$LECTURA_TEST_SPEECH_WAV" "$WORK/assets-test/lips-spoken.wav"; fi
@@ -123,8 +146,29 @@ with zipfile.ZipFile(w/'tests.apk', 'a', zipfile.ZIP_DEFLATED) as z:
         z.write(f, f.name)
 PY
   "$ZIPALIGN" -f 4 "$WORK/tests.apk" "$WORK/tests-aligned.apk"
-  "$APKSIGNER" sign --ks "$KEYSTORE" --ks-key-alias "${LECTURA_KEY_ALIAS:-androiddebugkey}" \
-    --ks-pass env:LECTURA_STORE_PASS --key-pass env:LECTURA_KEY_PASS --v4-signing-enabled false \
-    --out "$LECTURA_TEST_APK" "$WORK/tests-aligned.apk"
-  "$APKSIGNER" verify "$LECTURA_TEST_APK"
 fi
+if ((check)); then
+  echo 'Application et instrumentation compilées ; aucun APK produit (--check).'
+  exit 0
+fi
+
+sign_apk() {
+  local report digest
+  LECTURA_STORE_PASS="$store_pass" LECTURA_KEY_PASS="$key_pass" "$APKSIGNER" sign \
+    --ks "$KEYSTORE" --ks-key-alias "$alias" --ks-pass env:LECTURA_STORE_PASS \
+    --key-pass env:LECTURA_KEY_PASS --v4-signing-enabled false --out "$2" "$1"
+  report=$("$APKSIGNER" verify --verbose --print-certs "$2")
+  digest=$(awk '/certificate SHA-256 digest:/ {print $NF}' <<< "$report")
+  [[ $digest == "$expected" ]] || { echo 'Certificat de l’APK différent du certificat permanent attendu.' >&2; exit 1; }
+  printf '%s\n' "$report"
+}
+# Ne sortir aucun APK tant que toutes les signatures demandées ne sont pas vérifiées.
+sign_apk "$WORK/aligned.apk" "$WORK/app-signed.apk"
+if [[ -n ${TEST_OUTPUT:-} ]]; then
+  sign_apk "$WORK/tests-aligned.apk" "$WORK/tests-signed.apk"
+  mkdir -p -- "$(dirname "$TEST_OUTPUT")"
+  mv -fT -- "$WORK/tests-signed.apk" "$TEST_OUTPUT"
+fi
+mkdir -p -- "$(dirname "$OUTPUT")"
+mv -fT -- "$WORK/app-signed.apk" "$OUTPUT"
+printf '\nAPK : %s\n' "$OUTPUT"

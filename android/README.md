@@ -18,13 +18,19 @@ l’installation par le gestionnaire de fichiers. Autre possibilité :
 adb install -r Lectura.apk
 ```
 
-La signature de CI est une signature de **test**, pas la clé d’une future release.
-Deux exécutions sur des machines neuves peuvent produire des signatures différentes.
-Android refuse une mise à jour signée par une autre clé. Désinstaller efface les
-projets locaux, l’identifiant d’installation et les voix téléchargées : exporter
-les projets avant de le faire. Les fichiers déjà publiés dans la galerie restent
-hors du stockage privé. Aucune licence Pro du navigateur n’est transférée : une
-licence utilise l’identifiant affiché par l’installation Android.
+À partir de la phase 0, seuls les APK signés avec le **certificat permanent**
+sont publiés. Pour configurer la CI et sauvegarder ta clé, voir
+[la procédure de signature](../docs/ANDROID_SIGNATURE.md). GitHub ne permet pas
+de récupérer le contenu des secrets après les avoir enregistrés.
+
+Les anciens APK de test ont des certificats différents. Si Android refuse un
+remplacement, **ne désinstalle pas l’application actuelle** pour contourner ce
+refus : tu perdrais son stockage privé. Teste le premier APK de la nouvelle série
+sur un émulateur ou un autre appareil. Les APK suivants de la série utilisent
+la même clé. Les fichiers publiés par l’utilisateur hors de l’app restent externes.
+
+Le Pro reste désactivé (`PRO_ENABLED = false`) ; son code et ses ressources sont
+conservés. La signature APK n’est pas liée aux licences Pro.
 
 ## Compiler
 
@@ -37,15 +43,15 @@ Runtime Android 1.24.3 peut être fourni localement :
 export LECTURA_ORT_AAR=/chemin/onnxruntime-android-1.24.3.aar
 # Facultatif : catalogue réel Pages, seul le JSON sera incorporé à l'APK.
 export LECTURA_HD_INDEX=/chemin/models-index.json
-bash android/build.sh
+bash android/build.sh --check
 ```
 
-Sans `LECTURA_ORT_AAR`, l’APK est un contrôle de compilation hors ligne : le moteur
-HD est alors absent. Le catalogue de secours est interrogé à la demande ; aucun
-`.onnx` n’est incorporé. Pour une signature conservée entre builds, fournir
-`LECTURA_KEYSTORE`, `LECTURA_KEY_ALIAS`, `LECTURA_STORE_PASS` et `LECTURA_KEY_PASS`
-en environnement local, jamais dans Git. La clé de signature de l’APK et la clé
-ECDSA des licences Pro sont deux choses différentes.
+`--check` compile l’application et l’instrumentation sans signer ni laisser
+d’APK. Sans `LECTURA_ORT_AAR`, le moteur HD n’est pas compilé dans l’APK. Le
+catalogue de secours est interrogé à la demande ; aucun `.onnx` n’est incorporé.
+Pour produire l’APK, retirer `--check` et configurer la clé locale comme décrit
+dans [la procédure de signature](../docs/ANDROID_SIGNATURE.md). Aucun repli sur
+une clé de débogage.
 
 ### Recompiler avec le cœur LAME fourni ou modifié
 
