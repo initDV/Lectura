@@ -42,7 +42,8 @@ final class Talk implements AutoCloseable {
     Voice choose(String lang,String id){
         List<Voice> voices=voices(lang);for(Voice v:voices)if(v.getName().equals(id))return v;
         Voice def=ready?tts.getDefaultVoice():null;if(def!=null&&voices.contains(def)&&!def.isNetworkConnectionRequired())return def;
-        for(Voice v:voices)if(!v.isNetworkConnectionRequired())return v;return null;
+        for(Voice v:voices)if(!v.isNetworkConnectionRequired())return v;
+        return voices.isEmpty()?null:voices.get(0);
     }
     void speak(String text,Voice voice,float speed,float pitch,float volume,Listener l){
         cancel();current=UUID.randomUUID().toString();listener=l;

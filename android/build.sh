@@ -2,7 +2,6 @@
 # SDK officiel + JDK, aucun Gradle ni daemon. Le dossier de travail est temporaire, hors dépôt.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-ROOT=$PWD
 SDK=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 BT=${ANDROID_BUILD_TOOLS:-${SDK:+$SDK/build-tools/37.0.0}}
 PLATFORM=${ANDROID_JAR:-${SDK:+$SDK/platforms/android-37.0/android.jar}}
@@ -26,7 +25,16 @@ if [[ -v LECTURA_HD_INDEX ]]; then cp "$LECTURA_HD_INDEX" "$WORK/assets/hd-index
 if [[ -v LECTURA_ORT_AAR ]]; then
   unzip -p "$LECTURA_ORT_AAR" classes.jar > "$WORK/ort.jar"
   unzip -qo "$LECTURA_ORT_AAR" 'jni/*/*.so' -d "$WORK/ort"
-  unzip -p "$LECTURA_ORT_AAR" META-INF/LICENSE > "$WORK/assets/ONNX-LICENSE" 2>/dev/null || rm -f "$WORK/assets/ONNX-LICENSE"
+  # AARs may carry notices at their root or under META-INF. Preserve what the publisher ships.
+  python3 - "$LECTURA_ORT_AAR" "$WORK/assets" <<'PYNOTICE'
+import sys, zipfile
+from pathlib import Path
+with zipfile.ZipFile(sys.argv[1]) as aar:
+    for name in aar.namelist():
+        base = Path(name).name
+        if base and base.lower().startswith(('license', 'notice', 'thirdpartynotice', 'third-party-notice')):
+            (Path(sys.argv[2]) / ('ONNX-' + base)).write_bytes(aar.read(name))
+PYNOTICE
 fi
 # Décompresse le même WOFF2 (pas de substitution par une police système).
 python3 - "$WORK/assets" <<'PY'
@@ -37,6 +45,9 @@ font = TTFont('fonts/jetbrains-mono-latin.woff2', recalcTimestamp=False)
 font.flavor = None
 font.save(Path(sys.argv[1]) / 'jetbrains-mono.ttf')
 PY
+cp android/licenses/LGPL-2.1.txt "$WORK/assets/LAME-LGPL-2.1.txt"
+cp src/vendor/lamejs/LICENSE "$WORK/assets/LAME-notice.txt"
+cp android/licenses/COMPOSANTS.md "$WORK/assets/COMPOSANTS-ANDROID.md"
 "$AAPT2" compile --dir "$WORK/res" -o "$WORK/res.zip"
 "$AAPT2" link -I "$PLATFORM" --manifest android/AndroidManifest.xml \
   --min-sdk-version 31 --target-sdk-version 37 -A "$WORK/assets" -o "$WORK/resources.apk" "$WORK/res.zip"
@@ -50,7 +61,6 @@ else
   LAME_SRC="$WORK/lamejs-$LAME_REV/src/main/java"
 fi
 find "$LAME_SRC/mp3" "$LAME_SRC/mpg" -name '*.java' ! -name 'Main.java' ! -name 'LameTest.java' ! -name 'GetAudio.java' ! -name 'Parse.java' ! -name 'BRHist.java' | sort >> "$WORK/sources"
-cp src/vendor/lamejs/LICENSE "$WORK/assets/LAME-LICENSE"
 "$JAVAC" -encoding UTF-8 -source 11 -target 11 -classpath "$PLATFORM" -d "$WORK/classes" @"$WORK/sources"
 python3 - "$WORK" <<'PY'
 import sys, zipfile
@@ -88,7 +98,7 @@ fi
 "$APKSIGNER" verify --verbose "$OUTPUT"
 printf '\nAPK : %s\n' "$OUTPUT"
 if [[ -v LECTURA_TEST_APK ]]; then
-  mkdir -p "$WORK"/{tests,res-test,assets-test,dex-test}
+  mkdir -p "$WORK"/{tests,assets-test,dex-test}
   node android/tests/fixtures.mjs "$WORK/assets-test/fixtures.json"
   "$AAPT2" link -I "$PLATFORM" --manifest android/tests/AndroidManifest.xml \
     --min-sdk-version 31 --target-sdk-version 37 -A "$WORK/assets-test" -o "$WORK/tests.apk"

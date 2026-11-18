@@ -40,13 +40,13 @@ final class Ui {
     JSONObject tokens;
     int bg,surface,surface2,border,text,white,muted,mutedText,accent,accentText,violet,fill,danger,ok,warn,focus;
     float radius,radiusLg;
-    boolean uiMono;
+    String uiFamily;
     Ui(MainActivity a,Refs refs){this.a=a;this.refs=refs;density=a.getResources().getDisplayMetrics().density;}
     void theme(String id){
         JSONObject all=object(refs.themes,"app");tokens=merge(object(all,"actuel"),object(all,id));
         bg=c("bg");surface=c("surface");surface2=c("surface-2");border=c("border");text=c("text");white=c("text-strong");muted=c("muted");mutedText=c("muted-text");
         accent=c("accent");accentText=c("accent-text");violet=c("violet");fill=c("violet-fill");danger=c("danger");ok=c("ok");warn=c("warn");focus=c("focus");
-        radius=num("radius");radiusLg=num("radius-lg");uiMono=tokens.optString("font-ui").startsWith("'JetBrains");
+        radius=num("radius");radiusLg=num("radius-lg");String font=tokens.optString("font-ui");uiFamily=font.startsWith("'JetBrains")?"jetbrains":font.startsWith("Georgia")?"serif":font.startsWith("ui-monospace")?"monospace":"sans-serif";
     }
     int c(String key){return color(tokens,key);}float num(String key){return Float.parseFloat(tokens.optString(key,"0").replace("px",""));}
     int d(float x){return Math.round(x*density);} float f(float x){return x*density;}
@@ -63,7 +63,7 @@ final class Ui {
     GradientDrawable shape(int color,float r,int stroke,float width){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(f(r));if(width>0)g.setStroke(d(width),stroke);return g;}
     Drawable touch(int color,float r,int stroke,float width){return new RippleDrawable(ColorStateList.valueOf(Decor.alpha(accent,.15)),shape(color,r,stroke,width),shape(0xffffffff,r,0,0));}
     Typeface mono(int weight){return weights.computeIfAbsent(weight,w->Typeface.create(refs.mono,w,false));}
-    Typeface font(int weight){return uiMono?mono(weight):Typeface.create(Typeface.DEFAULT,weight,false);}
+    Typeface font(int weight){return uiFamily.equals("jetbrains")?mono(weight):Typeface.create(Typeface.create(uiFamily,Typeface.NORMAL),weight,false);}
     void style(TextView t,float s,int ink,int w){
         t.setTextSize(TypedValue.COMPLEX_UNIT_PX,f(s));t.setTextColor(ink);t.setTypeface(font(w));t.setIncludeFontPadding(false);
         t.setBreakStrategy(android.text.Layout.BREAK_STRATEGY_SIMPLE);t.setHyphenationFrequency(android.text.Layout.HYPHENATION_FREQUENCY_NONE);

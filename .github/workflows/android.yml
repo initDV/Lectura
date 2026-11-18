@@ -47,6 +47,18 @@ jobs:
           name: Lectura-Android-API31+
           path: ${{ runner.temp }}/Lectura.apk
           if-no-files-found: error
+      - name: Sources correspondantes et notices Android
+        run: |
+          mkdir -p "$RUNNER_TEMP/lectura-sources"
+          git archive --format=tar.gz --prefix=Lectura/ HEAD > "$RUNNER_TEMP/lectura-sources/lectura.tar.gz"
+          rev=582bbba6a12f981b984d8fb9e1874499fed85675
+          curl -fsSL --retry 2 "https://codeload.github.com/zhuker/lamejs/tar.gz/$rev" -o "$RUNNER_TEMP/lectura-sources/lamejs.tar.gz"
+          cp android/README.md android/licenses/*.md android/licenses/*.txt "$RUNNER_TEMP/lectura-sources/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lectura-Android-sources
+          path: ${{ runner.temp }}/lectura-sources
+          if-no-files-found: error
       - name: Accélération KVM pour Android 12
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

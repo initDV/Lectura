@@ -55,7 +55,7 @@ for ((i=0;i<150;i++)); do
         adb install -r "$2"
         adb shell pm clear io.github.initdv.lectura
         adb logcat -c
-        adb shell am instrument -w -r -e hd true io.github.initdv.lectura.tests/io.github.initdv.lectura.DeviceChecks | tee "$LECTURA_REPORT/android-checks.txt"
+        timeout 220 adb shell am instrument -w -r -e hd true io.github.initdv.lectura.tests/io.github.initdv.lectura.DeviceChecks | tee "$LECTURA_REPORT/android-checks.txt"
         adb logcat -d -s AndroidRuntime:E Lectura:E > "$LECTURA_REPORT/android-errors.txt"
         while IFS= read -r result; do
             result=${result%$'\r'};result=${result//%/%25}

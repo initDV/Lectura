@@ -198,9 +198,9 @@ final class Screens {
         colorField(c,t("reglages.fond"),p.background,s->p.background=s);movements(c);
         c=card(t("reglages.animations"),14);check(c,t("reglages.reduire"),settings.optBoolean("reduireAnimations"),b->a.db.set("reduireAnimations",b));
         check(c,t("reglages.presentation"),settings.optBoolean("modePresentation"),b->a.db.set("modePresentation",b));
-        c=card(t("reglages.decor"),14);JSONObject decor=object(settings,"decor");String[] k={"mur","sol","horizon","neon"},def={"#1a2340","#1c1429","#00d4ff","#ff3ea5"};
-        for(int i=0;i<k.length;i++){String key=k[i];colorField(c,t("reglages.decor."+key),decor.optString(key,def[i]),s->a.db.set("decor",put(decor,key,s)));}
-        small(c,t("reglages.decor.aide"),0);addButton(c,t("reglages.decor.reset"),null,false,()->{JSONObject colors=new JSONObject();for(int i=0;i<k.length;i++)put(colors,k[i],def[i]);a.db.set("decor",colors);refresh();},12);
+        c=card(t("reglages.decor"),14);JSONObject decor=object(settings,"decor"),defaults=object(a.refs.defaults,"decor");
+        for(String key:new String[]{"mur","sol","horizon","neon"})colorField(c,t("reglages.decor."+key),decor.optString(key,defaults.optString(key)),s->a.db.set("decor",put(decor,key,s)));
+        small(c,t("reglages.decor.aide"),0);addButton(c,t("reglages.decor.reset"),null,false,()->{a.db.set("decor",merge(new JSONObject(),defaults));refresh();},12);
         c=panel(body,t("reglages.mots"),true,14);custom(c);
         c=card(t("reglages.stockage"),14);storage(c);
         c=card(t("reglages.version"),14);para(c,"Lectura "+version()+" ("+build()+")",0);addButton(c,t("nav.apropos"),null,false,()->a.go("apropos"),12);
@@ -274,7 +274,12 @@ final class Screens {
         c=card(t("apropos.confidentialite"),14);para(c,t("apropos.confidentialite.texte"),0);
         c=card(t("apropos.raccourcis"),14);String[] names={t("touche.espace"),"← →","P","S","R","M","F","E"},keys={"scene.lecture","aide.pm5","scene.presentation","scene.capture","scene.enregistrer","scene.muet","scene.pleinEcran","aide.expression"};
         for(int i=0;i<names.length;i++){LinearLayout r=u.row();u.add(c,r,6);TextView k=u.text(names[i],13.6f,u.mutedText,400);k.setBackground(u.shape(u.surface2,6,0,0));u.pad(k,6,2);r.addView(k);u.gap(r,14);u.grow(r,u.p(t(keys[i])));}
-        c=card(t("apropos.licences"),14);para(c,t("apropos.licences.texte"),0);for(String k:List.of("code","polices","voix","ort"))para(c,"• "+t("apropos.lic."+k),4);
+        c=card(t("apropos.licences"),14);para(c,t("apropos.licences.texte"),0);for(String k:List.of("code","polices","voix"))para(c,"• "+t("apropos.lic."+k),4);
+        if(Hd.supported())para(c,"• ONNX Runtime Android (Microsoft) · MIT",4);
+        para(c,"• LAME / lamejs · LGPL",4);
+        addButton(c,a.db.locale().equals("en")?"Android component notices":"Licences des composants Android",null,false,()->{
+            LinearLayout sheet=a.sheet(t("apropos.licences"));small(sheet,a.refs.text("COMPOSANTS-ANDROID.md"),0);
+        },8);
         c=card(t("apropos.journal"),14);small(c,t("apropos.journal.aide"),0);
         TextView journal=u.text(journal(),12.8f,u.text,400);journal.setTextIsSelectable(true);u.pad(journal,10,10);journal.setBackground(u.shape(u.bg,10,u.border,1));
         ScrollView sc=u.scroll();sc.addView(journal);c.addView(sc,u.lp(Ui.MATCH,Math.min(260,34+Math.max(0,a.journal.size()-1)*24)));

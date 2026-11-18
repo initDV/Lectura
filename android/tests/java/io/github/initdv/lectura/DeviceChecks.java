@@ -176,9 +176,10 @@ public final class DeviceChecks extends Instrumentation {
         Future<File> done=worker.submit(()->r.run(ext,start::countDown));try{
             long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(20);
             while(!start.await(200,TimeUnit.MILLISECONDS)){if(done.isDone())return done.get();require(System.nanoTime()<deadline,"Démarrage de l'encodeur " +ext);}
+            deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(35);
             r.mark(new MediaExport.Mark(0,0,1,true));
             for(int i=0;i<48;i++){
-                while(!r.room()){if(done.isDone())return done.get();Thread.sleep(3);}
+                while(!r.room()){if(done.isDone())return done.get();require(System.nanoTime()<deadline,"Encodage bloqué : "+ext);Thread.sleep(3);}
                 final int frame=i;Bitmap bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
                 runOnMainSync(()->{a.stage.sprite.tick(1000+frame*1000./30);a.reading.terminal.shown=a.reading.text.length()*frame/47;
                     a.stage.exportDraw(new Canvas(bitmap),w,h,false,frame*1000./30);});r.offer(bitmap,i*1_000_000L/30);

@@ -63,14 +63,17 @@ public final class MainActivity extends Activity {
         super.onCreate(state);refs=new Refs(this);db=new Library(refs);hd=new Hd(refs);refreshLicense();project=db.draft();ui=new Ui(this,refs);exports=new ExportUi(this);
         getWindow().setDecorFitsSystemWindows(false);getWindow().setStatusBarColor(0);getWindow().setNavigationBarColor(0);
         getWindow().setNavigationBarContrastEnforced(false);getWindow().setStatusBarContrastEnforced(false);
-        getWindow().getInsetsController().setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
         root=new FrameLayout(this);root.setOnApplyWindowInsetsListener((v,i)->{
             Insets bars=i.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());Insets keyboard=i.getInsets(WindowInsets.Type.ime());
             root.setPadding(bars.left,bars.top,bars.right,Math.max(bars.bottom,keyboard.bottom));return WindowInsets.CONSUMED;
         });
         content=new FrameLayout(this);content.setFocusableInTouchMode(true);root.addView(content,new FrameLayout.LayoutParams(-1,-1));
         toasts=ui.col();FrameLayout.LayoutParams tp=ui.fp(Ui.MATCH,Ui.WRAP,Gravity.TOP|Gravity.CENTER_HORIZONTAL);tp.topMargin=ui.d(10);tp.leftMargin=tp.rightMargin=ui.d(12);root.addView(toasts,tp);
-        toasts.setElevation(ui.f(16));setContentView(root);talk=new Talk(this,()->{if(scene!=null)scene.voice();else if(screens!=null&&route.equals("reglages"))screens.refresh();});
+        toasts.setElevation(ui.f(16));setContentView(root);
+        // On API 31, the DecorView does not exist until the activity's content is installed.
+        WindowInsetsController bars=getWindow().getInsetsController();
+        if(bars!=null)bars.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        talk=new Talk(this,()->{if(scene!=null)scene.voice();else if(screens!=null&&route.equals("reglages"))screens.refresh();});
         render("scene");if(!db.settings.optBoolean("tutorielVu"))tutorial(1);handler.postDelayed(draftTimer,5000);
     }
     @Override protected void onResume(){super.onResume();isForeground=true;if(stage!=null)stage.refresh();exports.foreground();}
@@ -91,7 +94,8 @@ public final class MainActivity extends Activity {
         dismiss();hideKeyboard();if(fullscreen&&!name.equals("scene"))fullscreen();disposeScene();ui.theme(db.settings.optString("themeApp","actuel"));
         root.setBackgroundColor(ui.bg);content.removeAllViews();route=name;
         int light=android.graphics.Color.luminance(ui.bg)>.5?WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS:0;
-        getWindow().getInsetsController().setSystemBarsAppearance(light,WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+        WindowInsetsController bars=getWindow().getInsetsController();
+        if(bars!=null)bars.setSystemBarsAppearance(light,WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
         if(name.equals("scene")){
             JSONObject d=refs.character(project.character);
             if(d==null||!pro&&d.optBoolean("pro")){note(t(d==null?"scene.persoIntrouvable":"scene.persoPro","id",project.character,"nom",d==null?"":d.optString("nom")),"warn");d=refs.character("robot_lectura");}
@@ -113,7 +117,8 @@ public final class MainActivity extends Activity {
         }
     }
     void presentation(boolean yes){if(scene==null)return;hideKeyboard();scene.present(yes);if(yes)note(t("scene.presentationAide"),"info",3500);}
-    void fullscreen(){fullscreen=!fullscreen;WindowInsetsController i=getWindow().getInsetsController();if(fullscreen)i.hide(WindowInsets.Type.systemBars());else i.show(WindowInsets.Type.systemBars());}
+    void fullscreen(){WindowInsetsController i=getWindow().getInsetsController();if(i==null)return;fullscreen=!fullscreen;
+        if(fullscreen)i.hide(WindowInsets.Type.systemBars());else i.show(WindowInsets.Type.systemBars());}
     void open(Project p){project=p;render("scene");}
     void example(){Project p=new Project(db.settings);p.title=t("accueil.exempleTitre");p.text=refs.text("data/samples/exemple_"+db.locale()+".txt").trim();open(p);}
     void tutorial(int n){
@@ -223,6 +228,7 @@ public final class MainActivity extends Activity {
     void nextExpression(){List<String> ids=new ArrayList<>();ids.add("");refs.expressions.keys().forEachRemaining(id->{if(!id.equals("neutre")&&(pro||!object(refs.expressions,id).optBoolean("pro")))ids.add(id);});
         forced=ids.get((ids.indexOf(forced)+1)%ids.size());note(t("scene.expression")+" : "+t("expr."+(forced.isEmpty()?"auto":forced)),"info",1800);}
     @Override public boolean dispatchKeyEvent(KeyEvent e){
+        if(e.getAction()==KeyEvent.ACTION_DOWN&&e.getKeyCode()==KeyEvent.KEYCODE_ESCAPE&&modal!=null){onBackPressed();return true;}
         if(e.getAction()==KeyEvent.ACTION_DOWN&&e.getRepeatCount()==0&&!e.isCtrlPressed()&&!e.isMetaPressed()&&!e.isAltPressed()&&modal==null&&stage!=null&&!(getCurrentFocus() instanceof EditText)){
             switch(e.getKeyCode()){
                 case KeyEvent.KEYCODE_SPACE:if(getCurrentFocus()!=null&&getCurrentFocus().isClickable())break;launch(false);return true;
