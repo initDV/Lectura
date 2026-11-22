@@ -2,6 +2,31 @@
 
 ## Vue d'ensemble
 
+Lectura existe en deux incarnations :
+
+- **Web (PWA)** : application installable basée sur HTML/JS/CSS, service worker et IndexedDB.
+- **Android native** : application Java (`io.github.initdv.lectura`), minSdk 31, sans WebView.
+
+Les deux s’appuient sur un socle de ressources et de formats, tout en disposant de moteurs de lecture, de rendu et de stockage spécifiques.
+
+### Ressources et formats
+
+| Élément | Nature | Commentaire |
+|---------|--------|-----------|
+| Personnages (SVG + JSON) | Ressource partagée | Même source. `android/assets.mjs` l’adapte à la compilation Android. |
+| Poses, pivots, lexiques d’émotions | Ressource partagée (en partie) | Même origine. Une partie est transformée lors de la préparation Android. |
+| Traductions (FR/EN) | Ressource partagée (en partie) | Même source, adaptée pour Android via `android/assets.mjs`. |
+| Format de projet `.lectura` v1 | Contrat commun | Mis en œuvre séparément en JavaScript et en Java. Ne transporte pas le fichier audio. Ne garantit pas que la même voix soit disponible sur les deux plateformes. |
+
+**Clarification :**
+
+- **Partagé** : le Web et Android partent de la même source, même si Android l’adapte à la compilation.
+- **Contrat commun** : format ou règle défini une fois et implémenté de façon indépendante sur chaque plateforme (cas du `.lectura` v1).
+
+La vérification de licence Pro (ECDSA) est actuellement spécifique au Web. L’Android n’active plus ce mécanisme. Elle est distincte du certificat qui signe les APK.
+
+## Architecture Web
+
 ```
 index.html ── src/boot.js (garde de démarrage)
            └─ src/main.js → src/app.js (états, réglages, licence)
@@ -108,3 +133,58 @@ quelque chose manque.
 1. Copier `src/i18n/en.js` et `src/i18n/en-settings.js`, traduire les valeurs.
 2. Déclarer la langue dans `CHARGEURS` et `LANGUES` de `src/modules/i18n.js`.
 3. `npm test` vérifie que les clés et les variables correspondent au français.
+
+## Architecture Android
+
+Point d’entrée unique : `MainActivity`.
+
+### Carte des classes principales
+
+| Classe | Rôle | Relation avec MainActivity |
+|--------|------|---------------------------|
+| `Stage`, `ScenePage`, `Screens`, `ExportUi`, `Ui` | Interface / présentation | Référencent **directement** l’activité |
+| `Reading`, `Talk`, `Hd` | Moteurs (lecture, voix système, voix HD) | Pilotés par MainActivity, reçoivent aussi d’autres dépendances |
+| `Project`, `MediaExport`, `Refs`… | Données, export, utilitaires | Utilisés par l’activité et les moteurs |
+
+### Stockage Android
+
+- Réglages → `SharedPreferences`
+- Projets et audio importé → stockage privé de l’application
+- Voix HD → doivent être téléchargées avant leur première utilisation hors ligne
+
+`MainActivity` concentre actuellement la navigation, le cycle de vie de la lecture, la coordination des téléchargements HD et l’accès aux services système. Les rôles existent déjà dans des classes séparées, mais le couplage reste élevé sur certaines classes d’interface.
+
+## Intégration et branches
+
+Le code Android vit actuellement sur une branche de travail dédiée. La compilation Android y est configurée.
+
+Une future intégration dans `main` devra distinguer :
+
+### Compilation de contrôle
+
+- Vérifier que le projet Android compile (notamment lorsque les ressources communes changent).
+- Sans clé de signature.
+- Devra pouvoir s’exécuter aussi depuis `main`.
+
+### Production d’APK signé
+
+- Reste protégée (secrets + certificat permanent).
+
+### Contrôles de non-régression
+
+- Exécuter les tests et le build Web
+- Vérifier la compilation Android sans signature
+- Tester l’échange d’un projet `.lectura` dans les deux sens (Web → Android et Android → Web)
+- Vérifier une lecture hors ligne après mise à jour
+- Respecter les critères de mise à jour :
+  - Même `applicationId`
+  - Même certificat de signature
+  - `versionCode` supérieur
+  - Conservation des projets, réglages et médias locaux
+
+## Principes d’évolution
+
+1. Les ressources partagées restent la source de vérité quand c’est pertinent.
+2. Chaque plateforme garde la liberté de ses moteurs (voix, rendu, stockage).
+3. On documente d’abord les frontières (partagé / contrat commun / spécifique) avant de découpler davantage le code.
+4. Tout refactoring de packages Java est reporté après stabilisation de l’intégration.
