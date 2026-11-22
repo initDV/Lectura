@@ -1,0 +1,90 @@
+name: Lectura Android — compilation de contrôle
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-check.yml'
+      - 'characters/**'
+      - 'data/**'
+      - 'fonts/**'
+      - 'icons/**'
+      - 'src/**'
+      - 'tools/fetch_voice.mjs'
+      - 'package.json'
+      - 'LICENSE'
+      - 'THIRD_PARTY_LICENSES.md'
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-check.yml'
+      - 'characters/**'
+      - 'data/**'
+      - 'fonts/**'
+      - 'icons/**'
+      - 'src/**'
+      - 'tools/fetch_voice.mjs'
+      - 'package.json'
+      - 'LICENSE'
+      - 'THIRD_PARTY_LICENSES.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    name: Android — compilation sans signature
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Choisir le répertoire du SDK Android
+        run: |
+          sdk=${ANDROID_HOME:-}
+          if [[ ! -d "$sdk" || ! -w "$sdk" ]]; then sdk=${ANDROID_SDK_ROOT:-}; fi
+          if [[ ! -d "$sdk" || ! -w "$sdk" ]]; then
+            sdk="$RUNNER_TEMP/lectura-android-sdk"
+            mkdir -p "$sdk"
+          fi
+          printf 'ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n' "$sdk" "$sdk" >> "$GITHUB_ENV"
+      - name: Configurer les outils Android et accepter les licences du SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          accept-android-sdk-licenses: true
+          packages: ''
+      - name: Installer les composants SDK manquants
+        run: |
+          : "${ANDROID_HOME:?Le SDK Android n’a pas été configuré.}"
+          command -v sdkmanager
+          if [[ ! -f "$ANDROID_HOME/platforms/android-37.0/android.jar" && ! -f "$ANDROID_HOME/platforms/android-37/android.jar" ]]; then
+            sdkmanager 'platforms;android-37.0'
+          fi
+          tools="$ANDROID_HOME/build-tools/37.0.0"
+          if [[ ! -x "$tools/aapt2" || ! -x "$tools/d8" || ! -x "$tools/zipalign" ]]; then
+            sdkmanager 'build-tools;37.0.0'
+          fi
+      - name: Installer les outils de police
+        run: python3 -m pip install --disable-pip-version-check fonttools==4.61.1 brotli==1.1.0
+      - name: Compiler l’application et l’instrumentation
+        # Les runtimes vocaux optionnels et les tests sur émulateur restent dans le workflow signé.
+        run: bash android/build.sh --check

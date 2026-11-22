@@ -156,19 +156,19 @@ Point d’entrée unique : `MainActivity`.
 
 ## Intégration et branches
 
-Le code Android vit actuellement sur une branche de travail dédiée. La compilation Android y est configurée.
-
-Une future intégration dans `main` devra distinguer :
+Le code Android vit actuellement sur une branche de travail dédiée. Pour préparer son intégration dans `main`, la compilation de contrôle est séparée du workflow d’APK signé.
 
 ### Compilation de contrôle
 
-- Vérifier que le projet Android compile (notamment lorsque les ressources communes changent).
-- Sans clé de signature.
-- Devra pouvoir s’exécuter aussi depuis `main`.
+Le [workflow de contrôle](../.github/workflows/android-check.yml) est configuré pour les demandes de fusion vers `main` et les mises à jour de `main` qui touchent Android ou les entrées Web utilisées par le build Android (personnages, données, traductions, polices, icônes, catalogue de voix, etc.).
+
+Sur le runner, le contrôle réutilise un SDK Android accessible en écriture ou crée un répertoire temporaire. Il configure `sdkmanager`, accepte les licences du SDK et installe la plateforme 37 et les Build Tools 37.0.0 s’ils manquent.
+
+Il exécute `bash android/build.sh --check` : l’application et l’instrumentation sont compilées sans clé de signature ni APK conservé. Ce contrôle ne télécharge pas les runtimes vocaux optionnels et n’exécute pas les tests sur appareil.
 
 ### Production d’APK signé
 
-- Reste protégée (secrets + certificat permanent).
+Le [workflow d’APK signé](../.github/workflows/android.yml) reste sur son déclenchement et son environnement de signature actuels. Il vérifie les runtimes natifs, le certificat permanent et le fonctionnement sur émulateur. Le contrôle sans signature ne remplace pas ces vérifications.
 
 ### Contrôles de non-régression
 
