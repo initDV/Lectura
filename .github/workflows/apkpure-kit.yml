@@ -33,16 +33,19 @@ jobs:
             'https://github.com/initDV/Lectura/releases/download/v1.0.0/Lectura.apk'
       - name: Préparer l’émulateur Android 16 et ses outils
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
           : "${ANDROID_HOME:?}"
+          trap 'printf "::error title=Préparation Android::Commande échouée : %s\n" "$BASH_COMMAND"' ERR
+          sdk=$(command -v sdkmanager || find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -print -quit)
+          test -x "$sdk"
           test -c /dev/kvm
           sudo chgrp "$(id -gn)" /dev/kvm
           sudo chmod g+rw /dev/kvm
           set +o pipefail
-          yes | sdkmanager --licenses > "$RUNNER_TEMP/lectura-sdk-licenses.txt"
+          yes | "$sdk" --licenses > "$RUNNER_TEMP/lectura-sdk-licenses.txt"
           set -o pipefail
-          sdkmanager platform-tools emulator 'build-tools;37.0.0' "$AVD_IMAGE"
-          printf '%s\n' "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          "$sdk" platform-tools emulator 'build-tools;37.0.0' "$AVD_IMAGE"
+          printf '%s\n' "$(dirname "$sdk")" "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           packages=()
           for spec in espeak-ng:espeak-ng ffprobe:ffmpeg convert:imagemagick; do
             if ! command -v "${spec%:*}" >/dev/null; then packages+=("${spec#*:}"); fi

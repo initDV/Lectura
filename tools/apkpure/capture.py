@@ -243,4 +243,6 @@ if __name__ == '__main__':
                 (tmp / 'interface-echec.txt').write_text('\n'.join(labels(nodes())))
             except Exception:
                 pass
+            detail = str(exc).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')[:1500]
+            print(f'::error title=Capture {language.upper()}::{detail}', flush=True)
             raise RuntimeError(f'Capture {language}: {exc}') from exc
