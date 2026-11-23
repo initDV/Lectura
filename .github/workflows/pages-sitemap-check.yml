@@ -1,0 +1,105 @@
+name: Lectura — robots.txt, .nojekyll et test HTTP du sitemap
+
+on:
+  push:
+    branches: ['arena/d2229c4f-lectura']
+    paths: ['.github/workflows/pages-sitemap-check.yml']
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Ajouter robots.txt et .nojekyll puis tester le sitemap public'
+        required: true
+        type: choice
+        options: [publish-robots]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'workflow_dispatch' && 'pages' || 'lectura-robots-read-only' }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    if: github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Vérifier robots.txt, .nojekyll et le sitemap inchangé
+        run: |
+          set -euo pipefail
+          base=c12b908b3c3f8fe92e6734fc202ab518685efcc0
+          git merge-base --is-ancestor "$base" HEAD
+          git diff --exit-code "$base" HEAD -- . ':!robots.txt' ':!.nojekyll' \
+            ':!.github/workflows/pages-sitemap-check.yml' ':!tools/pages-sitemap-check.py'
+          python3 tools/pages-sitemap-check.py validate
+
+  snapshot:
+    needs: guard
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'publish-robots'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Copier le site public sans changer ses fichiers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/pages-sitemap-check.py snapshot \
+            "$RUNNER_TEMP/sitemap-check-site" "$RUNNER_TEMP/sitemap-check-sha256.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: preuve-sitemap-check-sha256
+          path: ${{ runner.temp }}/sitemap-check-sha256.json
+          if-no-files-found: error
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: ${{ runner.temp }}/sitemap-check-site
+      - name: Vérifier le marqueur vide dans le paquet Pages
+        run: |
+          set -euo pipefail
+          tar -xOf "$RUNNER_TEMP/artifact.tar" './.nojekyll' > "$RUNNER_TEMP/nojekyll-check"
+          test ! -s "$RUNNER_TEMP/nojekyll-check"
+
+  deploy:
+    needs: snapshot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: preuve-sitemap-check-sha256
+          path: ${{ runner.temp }}/verification-proof
+      - name: Vérifier que le site n’a pas changé avant publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/pages-sitemap-check.py guard
+      - id: pages
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+      - name: Vérifier robots.txt et la conservation des autres fichiers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/pages-sitemap-check.py verify "$RUNNER_TEMP/verification-proof/sitemap-check-sha256.json"
+      - name: Relever l’en-tête Content-Type (curl -I)
+        run: python3 tools/pages-sitemap-check.py probe
