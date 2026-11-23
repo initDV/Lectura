@@ -46,16 +46,12 @@ jobs:
           set -o pipefail
           "$sdk" platform-tools emulator 'build-tools;37.0.0' "$AVD_IMAGE"
           printf '%s\n' "$(dirname "$sdk")" "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          packages=()
-          for spec in espeak-ng:espeak-ng ffprobe:ffmpeg convert:imagemagick; do
-            if ! command -v "${spec%:*}" >/dev/null; then packages+=("${spec#*:}"); fi
-          done
-          if (( ${#packages[@]} )); then
-            if ! sudo apt-get install -y -q --no-install-recommends "${packages[@]}"; then
-              sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=15 update -q
-              sudo apt-get install -y -q --no-install-recommends "${packages[@]}"
-            fi
-          fi
+      - name: Préparer la voix de démonstration et les outils de validation d’images
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --no-input --only-binary=:all: \
+            --target "$RUNNER_TEMP/capture-python" espeakng-loader==0.2.4 av==15.1.0 Pillow==11.3.0
+          printf 'PYTHONPATH=%s/capture-python\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Vérifier la signature et capturer l’application Android en FR et EN
         run: bash tools/apkpure/emulator.sh "$RUNNER_TEMP/lectura-apkpure" "$RUNNER_TEMP/Lectura.apk"
       - name: Ajouter l’icône, les textes et les bannières au dossier
@@ -64,11 +60,15 @@ jobs:
           kit="$RUNNER_TEMP/lectura-apkpure"
           mkdir "$kit/bannieres"
           git show 3c5ca6d5a02c1475ca121958bde923f44004af97:icons/512.png > "$RUNNER_TEMP/lectura-logo.png"
-          convert "$RUNNER_TEMP/lectura-logo.png" -background '#101016' -alpha remove -alpha off -strip "PNG24:$kit/icone-512.png"
-          python3 - "$RUNNER_TEMP" <<'PY'
+          python3 - "$RUNNER_TEMP" "$kit" <<'PY'
           from base64 import b64encode
           from pathlib import Path
           import sys
+          from PIL import Image
+          source_icon = Image.open(Path(sys.argv[1], 'lectura-logo.png')).convert('RGBA')
+          icon = Image.new('RGB', source_icon.size, '#101016')
+          icon.paste(source_icon, (0, 0), source_icon.getchannel('A'))
+          icon.save(Path(sys.argv[2], 'icone-512.png'), optimize=True)
           source = Path('tools/apkpure/banner.html').read_text()
           font = b64encode(Path('app/assets/space-grotesk-latin-wght-normal.woff2').read_bytes()).decode()
           source = source.replace('<style>', '<style>@font-face{font-family:"Space Grotesk";font-weight:300 700;'

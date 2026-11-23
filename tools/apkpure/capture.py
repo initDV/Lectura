@@ -10,9 +10,12 @@ import subprocess
 import sys
 import time
 import uuid
-import wave
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
+
+import av
+
+from fixture_audio import narrate
 
 PKG = 'io.github.initdv.lectura'
 APP = f'/data/user/0/{PKG}'
@@ -155,9 +158,7 @@ def stage_fixture(lang, data, scratch):
     # The public build uses UUID.nameUUIDFromBytes(UTF-8 project id) for local audio.
     audio_name = f'{uuid.UUID(bytes=hashlib.md5(identity.encode()).digest(), version=3)}.audio'
     audio = scratch / audio_name
-    run('espeak-ng', '-v', data['voice'], '-s', '120', '-w', str(audio), data['text'])
-    with wave.open(str(audio)) as stream:
-        duration_ms = stream.getnframes() * 1000 // stream.getframerate()
+    duration_ms = narrate(data['text'], data['voice'], audio)
     assert duration_ms >= 22_000, f'The sample audio is too short: {duration_ms} ms.'
     project = {
         'version': 1, 'id': identity, 'titre': data['title'], 'texte': data['text'],
@@ -224,8 +225,11 @@ def capture(lang, out, scratch):
         raise RuntimeError('The test video was not saved to Movies/Lectura.')
     local_movie = scratch / movie
     adb('pull', movie_path, str(local_movie))
-    media = json.loads(run('ffprobe', '-v', 'error', '-show_entries', 'stream=codec_name,codec_type,width,height',
-                           '-of', 'json', str(local_movie)))
+    with av.open(str(local_movie)) as video:
+        streams = [{'codec_type': s.type, 'codec_name': s.codec_context.name} | (
+                   {'width': s.width, 'height': s.height} if s.type == 'video' else {})
+                   for s in video.streams if s.type in ('audio', 'video')]
+        media = {'streams': streams}
     tracks = {stream['codec_type']: stream for stream in media['streams']}
     assert tracks['audio']['codec_name'] == 'aac'
     assert (tracks['video']['width'], tracks['video']['height']) == (720, 1280)
