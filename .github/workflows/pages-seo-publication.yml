@@ -1,0 +1,98 @@
+name: Lectura — sitemap et aperçus de partage
+
+on:
+  push:
+    branches: ['arena/d2229c4f-lectura']
+    paths: ['.github/workflows/pages-seo-publication.yml']
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Publier uniquement sitemap.xml et les métadonnées sociales de /app/'
+        required: true
+        type: choice
+        options: [publish-seo]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'workflow_dispatch' && 'pages' || 'lectura-seo-read-only' }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    if: github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Vérifier le périmètre et les métadonnées
+        run: |
+          set -euo pipefail
+          base=1f0b78ee168b50da4d84c5c51cb1e22f807ee4ce
+          git merge-base --is-ancestor "$base" HEAD
+          git diff --exit-code "$base" HEAD -- . ':!sitemap.xml' ':!app/index.html' ':!app/assets/lectura-social.jpg' \
+            ':!.github/workflows/pages-seo-publication.yml' ':!tools/pages-seo-publication.py'
+          python3 tools/pages-seo-publication.py validate
+
+  snapshot:
+    needs: guard
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'publish-seo'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Copier exactement le site public puis ajouter le sitemap et les aperçus
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/pages-seo-publication.py snapshot \
+            "$RUNNER_TEMP/seo-site" "$RUNNER_TEMP/seo-sha256.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: preuve-seo-sha256
+          path: ${{ runner.temp }}/seo-sha256.json
+          if-no-files-found: error
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: ${{ runner.temp }}/seo-site
+
+  deploy:
+    needs: snapshot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}sitemap.xml
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: preuve-seo-sha256
+          path: ${{ runner.temp }}/seo-proof
+      - name: Vérifier que le site n’a pas changé avant publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/pages-seo-publication.py guard
+      - id: pages
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+      - name: Vérifier le sitemap, les aperçus et les fichiers publics inchangés
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/pages-seo-publication.py verify "$RUNNER_TEMP/seo-proof/seo-sha256.json"
