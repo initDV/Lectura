@@ -86,9 +86,21 @@ public final class DeviceChecks extends Instrumentation {
                 check("sous-titres-et-capture",()->subtitlesAndPng(ctx));
                 check("video-interface",()->recordFromScene(ctx));
                 for(String format:new String[]{"mp4","webm"})check(format,()->media(ctx,format));
+                check("bibliotheque-projets",()->new ProjectLibraryChecks().run(this,ctx));
+                // Extension réservée à chaque suite du lot 3 : un nouveau fichier de test, pas
+                // d'autre changement du runner ni de l'enregistrement de l'instrumentation.
+                feature("stockage-voix", "VoiceStorageChecks",ctx);
+                feature("mediatheque", "MediaLibraryChecks",ctx);
         }
         Bundle out=new Bundle();out.putString("stream","\nLECTURA_COMPLETE\n");
         finish(failed?Activity.RESULT_CANCELED:Activity.RESULT_OK,out);
+    }
+    interface FeatureCheck { String run(DeviceChecks device,Context ctx) throws Exception; }
+    private void feature(String name,String className,Context ctx){
+        Class<?> type;
+        try{type=Class.forName(DeviceChecks.class.getPackageName()+"."+className,false,DeviceChecks.class.getClassLoader());}
+        catch(ClassNotFoundException notInThisLot){return;}
+        check(name,()->type.asSubclass(FeatureCheck.class).getDeclaredConstructor().newInstance().run(this,ctx));
     }
     private interface Check { String run() throws Exception; }
     private void check(String name,Check c){
@@ -99,13 +111,13 @@ public final class DeviceChecks extends Instrumentation {
         }
         Bundle status=new Bundle();status.putString("stream","\n"+message+"\n");sendStatus(0,status);
     }
-    private interface MainAction { void run() throws Exception; }
-    private void main(MainAction fn)throws Exception{
+    interface MainAction { void run() throws Exception; }
+    void main(MainAction fn)throws Exception{
         AtomicReference<Throwable> error=new AtomicReference<>();
         runOnMainSync(()->{try{fn.run();}catch(Throwable e){error.set(e);}});
         Throwable e=error.get();if(e instanceof Exception)throw (Exception)e;if(e instanceof Error)throw (Error)e;
     }
-    private static View named(View view,String label){
+    static View named(View view,String label){
         if(view.getVisibility()!=View.VISIBLE)return null;
         if(label.contentEquals(view.getContentDescription()==null?"":view.getContentDescription())
             ||view instanceof TextView&&label.contentEquals(((TextView)view).getText()))return view;
@@ -125,7 +137,7 @@ public final class DeviceChecks extends Instrumentation {
             View match=action(group.getChildAt(i),label);if(match!=null)return match;
         }}return null;
     }
-    private void click(MainActivity a,String label)throws Exception{
+    void click(MainActivity a,String label)throws Exception{
         main(()->{View v=action(a.modal==null?a.content:a.modal,label);
             require(v!=null&&v.isEnabled()&&v.performClick(),"Contrôle absent ou inactif : "+label);
         });
@@ -195,12 +207,12 @@ public final class DeviceChecks extends Instrumentation {
             return "API 31, installation, tutoriel, scène, menu, aperçu, pause/reprise/arrêt, vitesse, œil, quatre destinations de base";
         }finally{main(a::finish);}
     }
-    private void waitFor(String message,java.util.function.BooleanSupplier condition,long millis)throws Exception {
+    void waitFor(String message,java.util.function.BooleanSupplier condition,long millis)throws Exception {
         long deadline=android.os.SystemClock.uptimeMillis()+millis;AtomicReference<Boolean> ready=new AtomicReference<>();
         while(android.os.SystemClock.uptimeMillis()<deadline){main(()->ready.set(condition.getAsBoolean()));if(ready.get())return;Thread.sleep(80);}
         throw new AssertionError(message);
     }
-    private static void require(boolean b,String msg) {if(!b)throw new AssertionError(msg);}
+    static void require(boolean b,String msg) {if(!b)throw new AssertionError(msg);}
     private String refsAndModels(Refs refs)throws Exception {
         require(refs.characters.size()==43,"Catalogue personnages");
         require(Sprite.fixed2(1.005)==1f&&Sprite.fixed2(1.125)==1.13f&&Sprite.fixed2(2.675)==2.67f
@@ -427,7 +439,7 @@ public final class DeviceChecks extends Instrumentation {
         }
         return speechFrames+" images TTS (callbacks rejoués, avec/sans limites de mots), "+audio.length()+" fenêtres du même WAV ("+spectral+" variations spectrales) et "+paths.length()+" formes Wend : positions/niveaux/tracés de référence à 1,25×";
     }
-    private static boolean noNetwork(Context ctx){
+    static boolean noNetwork(Context ctx){
         return Settings.Global.getInt(ctx.getContentResolver(),Settings.Global.AIRPLANE_MODE_ON,0)==1
             &&ctx.getSystemService(ConnectivityManager.class).getActiveNetwork()==null;
     }
@@ -586,7 +598,7 @@ public final class DeviceChecks extends Instrumentation {
             for(int i=0;i<frames;i++){short x=(short)(11000*Math.sin(2*Math.PI*440*i/rate));out.writeByte(x&255);out.writeByte(x>>8);}}
         return wav;
     }
-    private MainActivity open(Context ctx){return (MainActivity)startActivitySync(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
+    MainActivity open(Context ctx){return (MainActivity)startActivitySync(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
     // Observe the values from the actual drawn frame. t is a playback-clock sample, not an audio timestamp.
     private JSONArray sampleReading(MainActivity a,File dir,String name,long timeout)throws Exception {
         waitFor("Démarrage de la lecture : "+name,()->a.reading!=null&&a.reading.playing,10000);

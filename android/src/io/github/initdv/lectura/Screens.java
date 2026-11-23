@@ -16,6 +16,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.IOException;
 import java.io.InputStream;
+import java.text.Collator;
+import java.text.Normalizer;
 import java.text.NumberFormat;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -112,19 +114,71 @@ final class Screens {
             Project p=Project.fromJson(parse(a.fileText(uri,2_500_000)));a.open(p);if(p.fileAudio)a.note(t("accueil.audioARechoisir","nom",p.fileName.isEmpty()?"?":p.fileName),"warn",9000);
         }catch(Exception e){a.report("import",e);}})),10);
         u.add(body,u.button(t("accueil.exemple"),"play",a::example),10);
-        LinearLayout c=card(t("accueil.recents"),14);
-        try {List<Project> list=a.db.projects();if(list.isEmpty())small(c,t("accueil.aucunProjet"),0);
-            DateTimeFormatter date=DateTimeFormatter.ofPattern("dd MMM yyyy",Locale.forLanguageTag(a.db.locale())).withZone(ZoneId.systemDefault());
-            for(Project saved:list.subList(0,Math.min(list.size(),30))){
-                String title=saved.title.isEmpty()?t("editeur.sansTitre"):saved.title;
-                LinearLayout r=u.row();r.setBackground(u.shape(u.surface2,12,u.border,1));u.pad(r,12,6,6,6);u.add(c,r,8);
-                LinearLayout open=u.col();open.setMinimumHeight(u.d(44));open.setGravity(Gravity.CENTER_VERTICAL);u.grow(r,open);
-                TextView label=u.p(title);u.one(label);u.add(open,label,0);String stamp;try{stamp=date.format(Instant.parse(saved.modified));}catch(Exception ignored){stamp=saved.modified;}
-                small(open,stamp+" · "+saved.text.length()+" "+t("commun.caracteres"),0);u.click(open,()->a.open(saved));u.gap(r,10);
-                View del=u.iconButton("trash",t("accueil.supprimer","titre",title),u.text,20,()->a.confirm(t("accueil.confirmerSuppression","titre",title),()->{a.db.delete(saved);a.go("projets");}));
-                del.setBackground(u.touch(0,12,u.border,1));r.addView(del,u.lp(44,44));
-            }
-        }catch(Exception e){a.report("projets",e);}
+        new ProjectBrowser(card(t("accueil.bibliotheque"),14)).load();
+    }
+    private final class ProjectBrowser {
+        private static final int PAGE=30;
+        private final LinearLayout rows=u.col();
+        private final Locale locale=Locale.forLanguageTag(a.db.locale());
+        private final DateTimeFormatter date=DateTimeFormatter.ofPattern("dd MMM yyyy",locale).withZone(ZoneId.systemDefault());
+        private final Collator collator=Collator.getInstance(locale);
+        private List<Project> saved=List.of();
+        private String query="";
+        private int order,limit=PAGE;
+        private boolean copying;
+        ProjectBrowser(LinearLayout card){
+            collator.setStrength(Collator.PRIMARY);
+            String label=t("accueil.rechercher");
+            field(card,label,u.field("",label,false,200,s->{query=fold(s.trim());limit=PAGE;draw();}),null);
+            select(card,t("accueil.trier"),List.of(t("accueil.tri.recents"),t("accueil.tri.anciens"),t("accueil.tri.titre")),0,true,
+                i->{order=i;limit=PAGE;draw();});
+            u.add(card,rows,0);
+        }
+        private String fold(String s){return Normalizer.normalize(s,Normalizer.Form.NFD).replaceAll("\\p{M}","").toLowerCase(Locale.ROOT);}
+        private String title(Project p){return p.title.isEmpty()?t("editeur.sansTitre"):p.title;}
+        void load(){try{saved=a.db.projects();draw();}catch(Exception e){a.report("projets",e);}}
+        private void draw(){
+            List<Project> matches=new ArrayList<>();
+            for(Project p:saved)if(query.isEmpty()||fold(title(p)).contains(query))matches.add(p);
+            if(order==1)matches.sort((x,y)->x.modified.compareTo(y.modified));
+            if(order==2)matches.sort((x,y)->collator.compare(title(x),title(y)));
+            rows.removeAllViews();
+            if(matches.isEmpty())small(rows,t(saved.isEmpty()?"accueil.aucunProjet":"accueil.aucunResultat"),0);
+            for(Project p:matches.subList(0,Math.min(limit,matches.size())))row(p);
+            if(matches.size()>limit)addButton(rows,t("accueil.plusProjets"),null,false,()->{limit+=PAGE;draw();},8);
+        }
+        private void row(Project p){
+            String title=title(p);
+            LinearLayout r=u.row();r.setBackground(u.shape(u.surface2,12,u.border,1));u.pad(r,12,6,6,6);u.add(rows,r,8);
+            LinearLayout open=u.col();open.setMinimumHeight(u.d(44));open.setGravity(Gravity.CENTER_VERTICAL);u.grow(r,open);
+            TextView label=u.p(title);u.one(label);u.add(open,label,0);String stamp;
+            try{stamp=date.format(Instant.parse(p.modified));}catch(Exception ignored){stamp=p.modified;}
+            small(open,stamp+" · "+p.text.length()+" "+t("commun.caracteres"),0);open.setContentDescription(title);u.click(open,()->a.open(p));u.gap(r,6);
+            View copy=u.iconButton("copy",t("accueil.dupliquer","titre",title),u.text,20,()->duplicate(p,title));
+            View del=u.iconButton("trash",t("accueil.supprimer","titre",title),u.text,20,()->a.confirm(t("accueil.confirmerSuppression","titre",title),()->{a.db.delete(p);load();}));
+            for(View b:new View[]{copy,del}){b.setBackground(u.touch(0,12,u.border,1));u.enable(b,!copying,.5f);r.addView(b,u.lp(44,44));}
+        }
+        private void duplicate(Project p,String title){
+            if(copying)return;
+            String copyTitle=t("accueil.titreCopie","titre",title.substring(0,Math.min(180,title.length())));
+            copying=true;draw();
+            a.queue.submit(()->{
+                try{
+                    Project copy=a.db.duplicate(p,copyTitle);
+                    a.handler.post(()->{
+                        copying=false;if(a.isDestroyed())return;
+                        if(a.screens==Screens.this)load();
+                        else if(a.route.equals("projets")&&a.screens!=null&&a.modal==null)a.screens.refresh();
+                        a.note(t("accueil.projetDuplique","titre",copy.title),"ok");
+                    });
+                }catch(Exception e){a.handler.post(()->{
+                    copying=false;if(a.isDestroyed())return;
+                    if(a.screens==Screens.this)draw();
+                    if(e instanceof Library.ProjectAudioMissing)a.note(t("accueil.duplicationAudioManquant"),"warn");
+                    else a.report("duplication-projet",e);
+                });}
+            });
+        }
     }
     private void movements(LinearLayout c){List<String> ids=List.of("calme","normal","vif");select(c,t("reglages.mouvements"),List.of(t("reglages.mouvements.calme"),t("reglages.mouvements.normal"),t("reglages.mouvements.vif")),ids.indexOf(p.motion),true,i->p.motion=ids.get(i));}
     static List<String> expressions(Refs refs){List<String> out=new ArrayList<>();out.add("auto");

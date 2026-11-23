@@ -78,6 +78,53 @@ export async function deleteProject(id) {
   await dbDel('blobs', id);
 }
 
+export class ProjectAudioMissing extends Error {}
+
+function copieProjet(source, titre, audio) {
+  if (source.audio?.source === 'fichier' && !(audio instanceof Blob && audio.size > 0)) {
+    throw new ProjectAudioMissing();
+  }
+  const maintenant = new Date().toISOString();
+  return { ...structuredClone(source), id: uuid(), titre: titre.slice(0, 200), creeLe: maintenant, modifieLe: maintenant };
+}
+
+/** Duplique un projet enregistré et son audio privé sans toucher au brouillon ou à la source. */
+export async function duplicateProject(id, titre) {
+  const db = await ouvrir();
+  if (!db) {
+    const source = memoire.projects.get(id);
+    if (!source) throw new Error('Projet source introuvable.');
+    const audio = source.audio?.source === 'fichier' ? memoire.blobs.get(id) : null;
+    const copie = copieProjet(source, titre, audio);
+    memoire.projects.set(copie.id, copie);
+    if (audio) memoire.blobs.set(copie.id, audio); // Blob immuable, clé indépendante
+    return copie;
+  }
+  // Les deux écritures réussissent ensemble ou aucune n'est conservée (p. ex. quota dépassé).
+  return new Promise((res, rej) => {
+    const tx = db.transaction(['projects', 'blobs'], 'readwrite');
+    const projets = tx.objectStore('projects'), blobs = tx.objectStore('blobs');
+    let copie, erreur;
+    tx.oncomplete = () => res(copie);
+    tx.onabort = () => rej(erreur || tx.error);
+    const source = projets.get(id);
+    const annuler = (err) => { erreur = err; tx.abort(); };
+    function ecrire(p, audio) {
+      try {
+        copie = copieProjet(p, titre, audio);
+        projets.add(copie, copie.id);
+        if (audio) blobs.add(audio, copie.id);
+      } catch (err) { annuler(err); }
+    }
+    source.onsuccess = () => {
+      if (!source.result) return annuler(new Error('Projet source introuvable.'));
+      if (source.result.audio?.source !== 'fichier') return ecrire(source.result, null);
+      const audio = blobs.get(id);
+      audio.onsuccess = () => ecrire(source.result, audio.result);
+    };
+  });
+}
+
 /** Fichier audio importé d'un projet (Blob + nom). */
 export const saveAudio = (id, blob) => dbPut('blobs', id, blob);
 export const getAudio = (id) => dbGet('blobs', id);

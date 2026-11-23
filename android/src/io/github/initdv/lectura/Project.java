@@ -98,6 +98,24 @@ final class Library {
     void draft(Project p) throws IOException {File f=new File(files,"draft.json");if(p.text.trim().isEmpty())new AtomicFile(f).delete();else writeJson(f,p.json());}
     void save(Project p) throws IOException {p.modified=Instant.now().toString();writeJson(new File(projects,storageKey(p)+".json"),p.json());new AtomicFile(new File(files,"draft.json")).delete();}
     void delete(Project p){new AtomicFile(new File(projects,storageKey(p)+".json")).delete();audio(p).delete();}
+    static final class ProjectAudioMissing extends IOException {}
+    Project duplicate(Project source,String title) throws IOException {
+        Project copy=Project.fromJson(readJson(new File(projects,storageKey(source)+".json")));
+        File original=audio(copy);
+        if(copy.fileAudio&&(!original.isFile()||original.length()==0))throw new ProjectAudioMissing();
+        copy.id=UUID.randomUUID().toString();copy.title=title.length()>200?title.substring(0,200):title;
+        copy.created=Instant.now().toString();copy.modified=copy.created;
+        File target=audio(copy);
+        try{
+            if(copy.fileAudio)java.nio.file.Files.copy(original.toPath(),target.toPath());
+            // Publier le projet seulement après la copie audio. save() effacerait le brouillon courant.
+            writeJson(new File(projects,storageKey(copy)+".json"),copy.json());
+            return copy;
+        }catch(IOException|RuntimeException e){
+            try{java.nio.file.Files.deleteIfExists(target.toPath());}catch(IOException cleanup){e.addSuppressed(cleanup);}
+            throw e;
+        }
+    }
     List<Project> projects() throws IOException {
         List<Project> list=new ArrayList<>();File[] fs=projects.listFiles((f,n)->n.endsWith(".json"));
         if(fs!=null)for(File f:fs)list.add(Project.fromJson(readJson(f)));list.sort(Comparator.comparing((Project p)->p.modified).reversed());return list;
