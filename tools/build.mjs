@@ -53,10 +53,13 @@ function construire() {
     writeFileSync(join(dist, 'models', 'index.json'), `${JSON.stringify({ moteur: null, voix: [] })}\n`);
   }
 
+  // Page juridique autonome : publique, mais hors du précache et de la version de l’application.
+  cpSync(join(racine, 'privacy'), join(dist, 'privacy'), { recursive: true });
+
   // Fichiers gardés hors ligne dès la première visite : tout sauf models/ (à la demande) et les fichiers de service.
   const fichiers = lister(dist).map((p) => relative(dist, p).split(sep).join('/'))
     .filter((p) => (!p.startsWith('models/') || p === 'models/index.json') && !['sw.js', '.nojekyll', 'LICENSE', 'THIRD_PARTY_LICENSES.md'].includes(p))
-    .filter((p) => !p.startsWith('src/vendor/aac/')).sort();
+    .filter((p) => !p.startsWith('src/vendor/aac/') && !p.startsWith('privacy/')).sort();
   // models/index.json (catalogue des voix, quelques Ko) est gardé hors ligne ; les fichiers de voix restent à la demande.
   const empreinte = createHash('sha256');
   for (const f of fichiers) empreinte.update(f).update(readFileSync(join(dist, f)));
