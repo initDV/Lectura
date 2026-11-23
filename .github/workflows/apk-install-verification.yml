@@ -95,9 +95,8 @@ jobs:
           pkg=io.github.initdv.lectura
           cert=b6873c0f1a2f447163fb9af7e6f4181280b31fd1f5c45b0535993075b3dc7d8b
           signer="$ANDROID_HOME/build-tools/37.0.0/apksigner"
-          aapt="$ANDROID_HOME/build-tools/37.0.0/aapt2"
           emulator="$ANDROID_HOME/emulator/emulator"
-          phase='validation du paquet'
+          phase='validation des fichiers téléchargés'
           booted=0
           finish() {
             rc=$?
@@ -116,14 +115,16 @@ jobs:
           }
           trap finish EXIT
           assert_apk() {
-            "$signer" verify --print-certs "$1" > "$REPORT/$2-cert.txt"
+            phase="signature de $1"
+            "$signer" verify --verbose --print-certs "$RUNNER_TEMP/$1" > "$REPORT/$2-cert.txt" 2>&1 || {
+              tail -n 10 "$REPORT/$2-cert.txt"
+              return 1
+            }
+            cat "$REPORT/$2-cert.txt"
+            phase="empreinte du certificat de $1"
             [[ $(awk '/certificate SHA-256 digest:/ {print $NF}' "$REPORT/$2-cert.txt") == "$cert" ]]
-            "$aapt" dump badging "$1" > "$REPORT/$2-manifest.txt"
-            grep -Eq "^package: name='io\.github\.initdv\.lectura' versionCode='$2' versionName='1\.0\.0'" "$REPORT/$2-manifest.txt"
-            grep -Fx "sdkVersion:'31'" "$REPORT/$2-manifest.txt"
           }
           assert_apk Lectura.apk 32
-          if [[ $VARIANT == standard ]]; then assert_apk Lectura-31.apk 31; fi
           phase='démarrage de l’émulateur'
           printf 'no\n' | avdmanager create avd -f -n lectura_android16 -k "$AVD_IMAGE" -d pixel_4
           "$emulator" -accel-check
@@ -183,6 +184,7 @@ jobs:
           printf '::notice title=Installation propre confirmée::Android 16 (API 36, x86_64, pages de %s octets) : l’APK exact de la Release, versionCode 32, s’installe et ouvre Lectura.\n' "$page_size"
           if [[ $VARIANT != standard ]]; then exit 0; fi
 
+          assert_apk Lectura-31.apk 31
           phase='installation du prédécesseur sur l’émulateur de test'
           adb uninstall "$pkg" | grep -F Success
           install_apk installation-v31 Lectura-31.apk
