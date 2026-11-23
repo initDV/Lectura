@@ -101,9 +101,10 @@ def base_sources():
                 for f in src.rglob('*') if f.is_file() and f.relative_to(src).parts[0] != 'tools'}
 
 
-def assemble(site, manifest, android_page):
+def assemble(site, manifest, android_page, publishing=True):
     guard_base()
-    guard_release()
+    if publishing:
+        guard_release()
     try:
         fetch(PAGE)
     except HTTPError as exc:
@@ -194,12 +195,16 @@ def verify(manifest):
 
 if __name__ == '__main__':
     command = sys.argv[1]
-    if command == 'snapshot':
-        assemble(*map(Path, sys.argv[2:]))
-    elif command == 'guard':
-        guard_base()
-        guard_release()
-    elif command == 'verify':
-        verify(Path(sys.argv[2]))
-    else:
-        raise SystemExit(f'Opération Pages inconnue : {command}')
+    try:
+        if command in {'snapshot', 'audit'}:
+            assemble(*map(Path, sys.argv[2:]), publishing=command == 'snapshot')
+        elif command == 'guard':
+            guard_base()
+            guard_release()
+        elif command == 'verify':
+            verify(Path(sys.argv[2]))
+        else:
+            raise SystemExit(f'Opération Pages inconnue : {command}')
+    except (SystemExit, Exception) as exc:
+        print(f'::error title=Pages Android::{str(exc).splitlines()[0]}', file=sys.stderr)
+        raise

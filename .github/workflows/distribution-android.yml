@@ -75,8 +75,9 @@ jobs:
       - name: Recopier Pages octet pour octet et ajouter uniquement /app/
         env:
           GH_TOKEN: ${{ github.token }}
+          MODE: ${{ inputs.operation == 'deploy-page' && 'snapshot' || 'audit' }}
         run: |
-          python3 tools/distribution/pages-android.py snapshot \
+          python3 tools/distribution/pages-android.py "$MODE" \
             "$RUNNER_TEMP/pages-release" "$RUNNER_TEMP/pages-sha256.json" app/index.html
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
