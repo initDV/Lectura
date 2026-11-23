@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { signaturePreparation, varianteCommandes } from '../src/ui/scene-calculs.js';
+import { prochaineExpression, signaturePreparation, varianteCommandes } from '../src/ui/scene-calculs.js';
+import { NOMS_BASE, NOMS_PRO } from '../src/modules/expressions.js';
 import { nettoyer } from '../src/modules/text-clean.js';
 
 // Chaînes capturées avec signer() dans scene.js avant l'extraction (3adc98e).
@@ -54,5 +55,33 @@ describe('variante affichée des commandes', () => {
     expect(varianteCommandes(etat, true)).toBe(aLArret);
     expect(varianteCommandes(etat, false)).toBe(enCours);
     expect(varianteCommandes(etat, true)).toBe(aLArret);
+  });
+});
+
+describe('cycle des expressions de la scène', () => {
+  it.each([
+    ['gratuit', false, [...NOMS_BASE, '']],
+    ['Pro', true, [...NOMS_BASE, ...NOMS_PRO, '']],
+  ])('%s : trois tours dans l’ordre du catalogue, retour à Auto compris', (_mode, pro, attendu) => {
+    let expression = '';
+    for (let tour = 1; tour <= 3; tour++) {
+      const obtenu = Array.from(attendu, () => {
+        expression = prochaineExpression(expression, pro);
+        return expression;
+      });
+      expect(obtenu, `tour ${tour}`).toEqual(attendu);
+    }
+  });
+
+  it.each([
+    ['auto', false],
+    ['auto', true],
+    ['inconnue_qa', false],
+    ['inconnue_qa', true],
+    ['rire', false],
+  ])('%s (Pro : %s) : retourne à Auto avant de repartir à neutre', (expression, pro) => {
+    const auto = prochaineExpression(expression, pro);
+    expect(auto).toBe('');
+    expect(prochaineExpression(auto, pro)).toBe('neutre');
   });
 });

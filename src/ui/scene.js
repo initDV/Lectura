@@ -15,12 +15,11 @@ import { Terminal } from '../modules/terminal.js';
 import { typeLigne } from '../modules/timeline.js';
 import { mouthShape } from '../modules/lipsync.js';
 import { applyTheme } from '../modules/themes.js';
-import { EXPRESSIONS_BASE, EXPRESSIONS_PRO } from '../modules/project.js';
 import { wakeLock } from '../modules/pwa.js';
 import { getEngine } from '../modules/voice/engine.js';
 import { prechaufferTexte } from '../modules/voice/prechauffer-texte.js';
 import { logError, notify, report } from '../modules/errors.js';
-import { signaturePreparation, varianteCommandes } from './scene-calculs.js';
+import { prochaineExpression, signaturePreparation, varianteCommandes } from './scene-calculs.js';
 import { createControls } from './scene-controls.js';
 import { creerExport } from './scene-export.js';
 import { nettoyer } from '../modules/text-clean.js';
@@ -203,8 +202,7 @@ export async function render(root) {
   }
 
   function expressionSuivante() { // touche E : force une expression (puis revient à « auto »)
-    const liste = ['', ...EXPRESSIONS_BASE.slice(1), ...(store.pro ? EXPRESSIONS_PRO : [])];
-    exprManuelle = liste[(liste.indexOf(exprManuelle) + 1) % liste.length];
+    exprManuelle = prochaineExpression(exprManuelle, store.pro);
     notify(`${t('scene.expression')} : ${t(`expr.${exprManuelle || 'auto'}`)}`, 'info', 1800);
   }
 
