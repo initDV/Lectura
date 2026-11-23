@@ -15,7 +15,11 @@ tag=v1.0.0
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-api() { gh api "repos/$repo/$1"; }
+api() {
+  local path=$1
+  shift
+  gh api "repos/$repo/$path" "$@"
+}
 phase='provenance du run signé et de la recette'
 api "actions/runs/$run" | jq -e --arg sha "$sha" --arg branch "$branch" --argjson run "$run" '
   .id==$run and .workflow_id==422483874 and .head_sha==$sha and .head_branch==$branch
@@ -26,8 +30,9 @@ api "actions/runs/$run/jobs" | jq -e '
 ' >/dev/null
 phase='branche principale et absence de publication concurrente'
 api 'git/ref/heads/main' | jq -e '.object.sha=="39e429522cc715aeda6ce0db9d3eb5690ba1f2fd"' >/dev/null
-[[ -z $(gh release list --repo "$repo" --limit 100 | awk -F '\t' '$3 == "v1.0.0" {print}') ]]
-[[ -z $(git ls-remote --tags "https://github.com/$repo.git" "refs/tags/$tag") ]]
+api 'releases?per_page=100' --paginate | jq -es --arg tag "$tag" 'all(.[][]; .tag_name != $tag)' >/dev/null
+tag_ref=$(git ls-remote --tags "https://github.com/$repo.git" "refs/tags/$tag")
+[[ -z $tag_ref ]]
 
 fetch_artifact() {
   local id=$1 name=$2 hash=$3 dest=$4
@@ -57,8 +62,10 @@ verify_apk() {
   local path=$1
   phase="certificat de $(basename "$path")"
   "$buildtools/apksigner" verify --print-certs "$path" > "$work/cert.txt"
-  cat "$work/cert.txt"
-  [[ $(awk '/^Signer #[0-9]+ certificate SHA-256 digest:/ {print $NF}' "$work/cert.txt") == "$cert" ]]
+  # Même extraction que la recette signée : le libellé du signataire dépend d'apksigner.
+  local fingerprint
+  fingerprint=$(awk '/certificate SHA-256 digest:/ {print $NF}' "$work/cert.txt")
+  [[ $fingerprint == "$cert" ]]
   phase="nom de paquet et versions de $(basename "$path")"
   "$buildtools/aapt2" dump badging "$path" > "$work/badging.txt"
   grep -Eq "^package: name='io\.github\.initdv\.lectura' versionCode='32' versionName='1\.0\.0'" "$work/badging.txt"
@@ -99,7 +106,8 @@ cmp "$apk" "$work/roundtrip/Lectura.apk"
 cmp "$work/Lectura-Android-sources.zip" "$work/roundtrip/Lectura-Android-sources.zip"
 verify_apk "$work/roundtrip/Lectura.apk"
 gh release view "$tag" --repo "$repo" --json isDraft,targetCommitish | jq -e --arg sha "$sha" '.isDraft and .targetCommitish==$sha' >/dev/null
-[[ -z $(git ls-remote --tags "https://github.com/$repo.git" "refs/tags/$tag") ]]
+tag_ref=$(git ls-remote --tags "https://github.com/$repo.git" "refs/tags/$tag")
+[[ -z $tag_ref ]]
 
 phase='publication de la Release relue'
 gh release edit "$tag" --repo "$repo" --draft=false --latest
@@ -108,9 +116,14 @@ api "git/ref/tags/$tag" | jq -e --arg sha "$sha" '.object.type=="commit" and .ob
 published=$(api "releases/tags/$tag")
 jq -e --arg sha "$sha" --arg hash "sha256:$apk_hash" '
   .tag_name=="v1.0.0" and .target_commitish==$sha and .draft==false and .prerelease==false
-  and any(.assets[]; .name=="Lectura.apk" and .state=="uploaded" and .digest==$hash)
+  and any(.assets[]; .name=="Lectura.apk" and .state=="uploaded" and .digest==$hash
+          and .browser_download_url=="https://github.com/initDV/Lectura/releases/download/v1.0.0/Lectura.apk")
   and .html_url=="https://github.com/initDV/Lectura/releases/tag/v1.0.0"
 ' <<< "$published" >/dev/null
+phase='comparaison du téléchargement public sans authentification'
+curl --fail --silent --show-error --location --retry 4 --retry-all-errors --max-time 120 \
+  "https://github.com/$repo/releases/download/$tag/Lectura.apk" --output "$work/public.apk"
+cmp "$apk" "$work/public.apk"
 release_url=$(jq -er .html_url <<< "$published")
 printf '::notice title=APK de distribution::Run %s, commit %s, SHA-256 APK %s, certificat %s\n' "$run" "$sha" "$apk_hash" "$cert"
 printf '## Publication Android\n\n- [Release %s](%s)\n- SHA-256 de Lectura.apk : `%s`\n- Certificat : `%s`\n' "$tag" "$release_url" "$apk_hash" "$cert" >> "$GITHUB_STEP_SUMMARY"
