@@ -22,8 +22,9 @@ DOCS = {
         'title': 'Les couleurs du ciel',
         'text': ('Le ciel change de couleur au fil de la journée. Au matin, une lumière douce se lève à l’horizon. '
                  'Puis le bleu s’installe et les nuages glissent lentement. Le soir, regarde bien : '
-                 'le rose et l’orange se mêlent avant de laisser place aux premières étoiles.'),
-        'file': 'Les couleurs du ciel.wav', 'voice': 'fr', 'settings': 'Réglages', 'characters': 'Personnages',
+                 'le rose et l’orange se mêlent avant de laisser place aux premières étoiles. '
+                 'Demain, prends un instant pour observer à nouveau le ciel. Rien ne se répète tout à fait.'),
+        'file': 'Le ciel.wav', 'voice': 'fr', 'settings': 'Réglages', 'characters': 'Personnages',
         'record': 'Enregistrer la vidéo', 'export': 'Télécharger', 'share': 'Partager',
         'with_audio': 'Vidéo avec son, prête à partager',
     },
@@ -31,8 +32,9 @@ DOCS = {
         'title': 'Colours of the Sky',
         'text': ('The sky changes colour throughout the day. In the morning, a soft light rises on the horizon. '
                  'Then blue fills the sky and clouds drift past. Watch closely in the evening: '
-                 'pink and orange come together before the first stars appear.'),
-        'file': 'Colours of the Sky.wav', 'voice': 'en-us', 'settings': 'Settings', 'characters': 'Characters',
+                 'pink and orange come together before the first stars appear. '
+                 'Tomorrow, take a moment to look up again. The same colours never appear in quite the same way.'),
+        'file': 'The sky.wav', 'voice': 'en-us', 'settings': 'Settings', 'characters': 'Characters',
         'record': 'Record video', 'export': 'Download', 'share': 'Share',
         'with_audio': 'Video with sound, ready to share',
     },
@@ -122,8 +124,9 @@ def menu_action(label):
     raise RuntimeError(f'Menu option {label!r} not found. Visible: {details!r}')
 
 
-def save_screen(target, required):
-    items = nodes()
+def save_screen(target, required, items=None):
+    if items is None:
+        items = nodes()
     texts = labels(items)
     for label in required:
         if label not in texts:
@@ -152,10 +155,10 @@ def stage_fixture(lang, data, scratch):
     # The public build uses UUID.nameUUIDFromBytes(UTF-8 project id) for local audio.
     audio_name = f'{uuid.UUID(bytes=hashlib.md5(identity.encode()).digest(), version=3)}.audio'
     audio = scratch / audio_name
-    run('espeak-ng', '-v', data['voice'], '-s', '136', '-w', str(audio), data['text'])
+    run('espeak-ng', '-v', data['voice'], '-s', '120', '-w', str(audio), data['text'])
     with wave.open(str(audio)) as stream:
         duration_ms = stream.getnframes() * 1000 // stream.getframerate()
-    assert duration_ms >= 15_000, f'The sample audio is too short: {duration_ms} ms.'
+    assert duration_ms >= 22_000, f'The sample audio is too short: {duration_ms} ms.'
     project = {
         'version': 1, 'id': identity, 'titre': data['title'], 'texte': data['text'],
         'personnageId': 'robot_lectura', 'timing': 'auto',
@@ -184,16 +187,22 @@ def capture(lang, out, scratch):
     pics = out / 'captures' / lang.upper()
     pics.mkdir(parents=True)
     click('Lancer' if lang == 'fr' else 'Start')
-    wait_label('Pause')
-    time.sleep(7)
-    visible = save_screen(pics / '01-scene.png', ['Pause', data['text'], 'Menu'])
-    assert any(data['text'][:30] in line and line != data['text'] for line in visible), 'Terminal did not advance during playback.'
-    click('Pause')
+    # Use the same accessibility snapshot that identifies active playback and an advancing terminal.
+    # Never wait for a second dump or a fixed delay between that assertion and screencap.
+    deadline = time.monotonic() + 18
+    while time.monotonic() < deadline:
+        items = nodes()
+        shown = next((n.get('text', '') for n in items if n.get('content-desc') == 'terminal'), '')
+        if match(items, 'Pause') and data['text'].startswith(shown) and 62 <= len(shown) <= len(data['text']) - 75:
+            save_screen(pics / '01-scene.png', ['Pause', shown, data['text'], 'Menu'], items)
+            break
+        time.sleep(.35)
+    else:
+        raise RuntimeError('Could not capture live playback with the terminal partially rendered.')
     click('Menu')
-    save_screen(pics / '02-menu.png', ['Menu', 'Projet' if lang == 'fr' else 'Project', data['title']])
+    save_screen(pics / '02-menu.png', ['Menu', 'PROJET' if lang == 'fr' else 'PROJECT', data['title']])
     back()
     menu_action(data['record'])
-    wait_label('Pause', timeout=35)
     # Let the public app's recorder stop naturally at the end of this clip.
     wait_label(data['share'], timeout=80)
     time.sleep(1)
@@ -244,5 +253,6 @@ if __name__ == '__main__':
             except Exception:
                 pass
             detail = str(exc).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')[:1500]
-            print(f'::error title=Capture {language.upper()}::{detail}', flush=True)
+            done = ', '.join(p.name for p in sorted((output / 'captures' / language.upper()).glob('*.png'))) or 'none'
+            print(f'::error title=Capture {language.upper()}::{detail} | Captures: {done}', flush=True)
             raise RuntimeError(f'Capture {language}: {exc}') from exc
