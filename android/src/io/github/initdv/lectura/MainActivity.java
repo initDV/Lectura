@@ -372,13 +372,7 @@ public final class MainActivity extends Activity {
         note(t("reglages.stockage.libere"),"ok");if(screens!=null&&route.equals("reglages"))screens.refresh();});});}
     private List<Script.Segment> subtitleTimings(){
         if(project.fileAudio||reading==null||reading.silent||!reading.text.equals(project.text)||!sig.equals(signature(false)))return project.recalc();
-        List<Script.Segment> cues=new ArrayList<>();double speed=reading.rate;
-        for(Script.Segment p:reading.timeline.parts){
-            if(p.type!=Script.SPOKEN)continue;
-            Script.Segment q=new Script.Segment(p.text,p.start,p.end,p.type);q.expression=p.expression;
-            q.from=Math.round(p.from/speed);q.to=Math.max(q.from+1,Math.round((p.speechEnd>p.from?p.speechEnd:p.to)/speed));cues.add(q);
-        }
-        return cues;
+        return Script.spokenSubtitleTimings(reading.timeline.parts,reading.rate);
     }
     void menu(){
         LinearLayout r=sheet(t("scene.menu"));ui.menuGroup(r,t("menu.projet"),6);

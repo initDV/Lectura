@@ -131,6 +131,20 @@ final class Script {
         result.sort(Comparator.comparingLong(p->p.from));StringBuilder out=new StringBuilder();for(Segment p:result){if(out.length()>0)out.append('\n');out.append(p.text);}
         target.text=out.toString();target.segments=encode(result);target.subtitles=true;
     }
+    /** Convert prepared speech timings to playback time without changing the source timeline. */
+    static List<Segment> spokenSubtitleTimings(List<Segment> parts,double rate){
+        List<Segment> cues=new ArrayList<>();
+        for(Segment part:parts){
+            if(part.type!=SPOKEN)continue;
+            Segment cue=new Segment(part.text,part.start,part.end,part.type);
+            cue.expression=part.expression;
+            long end=part.speechEnd>part.from?part.speechEnd:part.to;
+            cue.from=Math.round(part.from/rate);
+            cue.to=Math.max(cue.from+1,Math.round(end/rate));
+            cues.add(cue);
+        }
+        return cues;
+    }
     static String subtitles(List<Segment> parts,boolean vtt){
         StringBuilder out=new StringBuilder(vtt?"WEBVTT\n\n":"");int i=1;
         for(Segment p:parts)if(p.type==SPOKEN){if(!vtt)out.append(i++).append('\n');out.append(stamp(p.from,vtt)).append(" --> ").append(stamp(p.to,vtt)).append('\n').append(p.text).append("\n\n");}

@@ -81,6 +81,7 @@ public final class DeviceChecks extends Instrumentation {
                 check("lips-reference",()->lipsReference(ctx,refs));
                 check("audio-importe",()->imported(ctx));
                 check("tts-local",()->tts(ctx));
+                check("minutage-sous-titres",DeviceChecks::preparedSubtitles);
                 check("sous-titres-et-capture",()->subtitlesAndPng(ctx));
                 check("video-interface",()->recordFromScene(ctx));
                 for(String format:new String[]{"mp4","webm"})check(format,()->media(ctx,format));
@@ -507,6 +508,46 @@ public final class DeviceChecks extends Instrumentation {
             click(a,a.t("scene.menu"));click(a,label);
             waitFor("Résultat du sélecteur : "+label,()->monitor.getHits()==1&&a.result==null,5000);
         }finally{removeMonitor(monitor);}
+    }
+    private static String preparedSubtitles(){
+        String[] text={"Ça va, Lectura 🙂","$ echo ok","# repère"," ","Deuxième ligne.","Fin."};
+        int[] types={Script.SPOKEN,Script.COMMAND,Script.COMMENT,Script.PAUSE,Script.SPOKEN,Script.SPOKEN};
+        long[][] times={{501,1501,1001},{1501,1510,-1},{1510,1520,-1},{1520,2101,-1},{2101,3301,2101},{4001,4002,-1}};
+        List<Script.Segment> parts=new ArrayList<>();int offset=0;
+        for(int i=0;i<text.length;i++){
+            Script.Segment p=new Script.Segment(text[i],offset,offset+text[i].length(),types[i]);
+            p.from=times[i][0];p.to=times[i][1];p.speechEnd=times[i][2];p.expression="joie";
+            parts.add(p);offset=p.end+1;
+        }
+        // Golden timestamps captured before the extraction (SRT uses commas, VTT uses dots).
+        double[] rates={.5,1,1.25,2};
+        String[][] stamps={
+            {"01,002","02,002","04,202","06,602","08,002","08,004"},
+            {"00,501","01,001","02,101","03,301","04,001","04,002"},
+            {"00,401","00,801","01,681","02,641","03,201","03,202"},
+            {"00,251","00,501","01,051","01,651","02,001","02,002"}
+        };
+        List<Script.Segment> spoken=List.of(parts.get(0),parts.get(4),parts.get(5));
+        for(int i=0;i<rates.length;i++){
+            List<Script.Segment> cues=Script.spokenSubtitleTimings(parts,rates[i]);
+            require(cues.size()==spoken.size(),"Seules les phrases prononcées doivent être exportées");
+            StringBuilder srt=new StringBuilder(),vtt=new StringBuilder("WEBVTT\n\n");
+            for(int j=0;j<cues.size();j++){
+                Script.Segment p=spoken.get(j),cue=cues.get(j);
+                require(cue!=p&&cue.start==p.start&&cue.end==p.end&&cue.expression.equals(p.expression),"Repère source modifié ou perdu");
+                String time="00:00:"+stamps[i][2*j]+" --> 00:00:"+stamps[i][2*j+1];
+                String body="\n"+p.text+(j+1==cues.size()?"\n":"\n\n");
+                srt.append(j+1).append('\n').append(time).append(body);
+                vtt.append(time.replace(',','.')).append(body);
+            }
+            require(Arrays.equals(Script.subtitles(cues,false).getBytes(StandardCharsets.UTF_8),srt.toString().getBytes(StandardCharsets.UTF_8)),"SRT à "+rates[i]+"×");
+            require(Arrays.equals(Script.subtitles(cues,true).getBytes(StandardCharsets.UTF_8),vtt.toString().getBytes(StandardCharsets.UTF_8)),"VTT à "+rates[i]+"×");
+        }
+        for(int i=0;i<parts.size();i++){
+            Script.Segment p=parts.get(i);
+            require(p.from==times[i][0]&&p.to==times[i][1]&&p.speechEnd==times[i][2],"Timeline de lecture modifiée");
+        }
+        return "SRT/VTT exacts à 0,5×, 1×, 1,25× et 2× ; timeline préservée";
     }
     private String subtitlesAndPng(Context ctx)throws Exception{
         MainActivity a=open(ctx);File dir=ctx.getExternalFilesDir("verification");File input=tone(ctx,6);
