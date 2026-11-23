@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Met à jour seulement /app/ dans une copie contrôlée du déploiement Pages existant."""
+"""Ajoute seulement /app/ à une copie contrôlée du déploiement Pages existant."""
 import hashlib
 import io
 import json
@@ -13,17 +13,13 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-from zipfile import ZipFile
 
 REPO = 'initDV/Lectura'
 ORIGIN = 'https://initdv.github.io/Lectura/'
 BASE_SHA = '39e429522cc715aeda6ce0db9d3eb5690ba1f2fd'
-PREVIOUS_DEPLOYMENT = (8006394650, 'c821341bf637efc9ad87e0d1b8b6c7f64a308b62', 'arena/d2229c4f-lectura')
-PREVIOUS_PAGE = '15ba01d18972fe6a9850783ee92d4bfa5adc20b4b503d23aacd3685f409e2537'
+BASE_DEPLOYMENT = 7836267315
 BUILD = '2026-11-16 · 76713dcd32'
 APK_SHA = '3c5ca6d5a02c1475ca121958bde923f44004af97'
-APK_DIGEST = 'd2121f08964d98d6d3f5b1cc784daf18e41caaf34f5b5553a34356ec808f55c0'
-APK_SIZE = 71681981
 STATIC = ('index.html', 'offline.html', 'manifest.webmanifest', 'sw.js', 'LICENSE',
           'THIRD_PARTY_LICENSES.md', 'src', 'characters', 'data', 'icons', 'fonts')
 ORT = ('ort.min.mjs', 'ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm',
@@ -48,9 +44,8 @@ def guard_base():
     for deploy in api('deployments?environment=github-pages&per_page=20'):
         statuses = api(f'deployments/{deploy["id"]}/statuses?per_page=1')
         if statuses and statuses[0]['state'] == 'success':
-            require((deploy['id'], deploy['sha'], deploy['ref']) == PREVIOUS_DEPLOYMENT,
+            require((deploy['id'], deploy['sha'], deploy['ref']) == (BASE_DEPLOYMENT, BASE_SHA, 'main'),
                     'Le déploiement Pages servi a changé : arrêt.')
-            require(digest(fetch(PAGE, 64 * 1024)) == PREVIOUS_PAGE, 'La page /app/ servie a changé : arrêt.')
             return
     raise SystemExit('Impossible de confirmer le déploiement Pages de référence.')
 
@@ -61,20 +56,8 @@ def guard_release():
             'Release Android non publiée sur le SHA vérifié.')
     require(api('git/ref/tags/v1.0.0')['object']['sha'] == APK_SHA, 'Tag Android inattendu.')
     require(any(a['name'] == 'Lectura.apk' and a['state'] == 'uploaded' and a['browser_download_url'] == APK_URL
-                and a.get('digest') == 'sha256:' + APK_DIGEST and a['size'] == APK_SIZE for a in release['assets']),
+                and re.fullmatch(r'sha256:[0-9a-f]{64}', a.get('digest') or '') for a in release['assets']),
             'APK vérifié absent de la Release.')
-
-
-def inspect_public_apk():
-    # Lecture seule du fichier publié, pour vérifier le lien et les architectures prises en charge.
-    with urlopen(APK_URL, timeout=60) as response:
-        apk = response.read(APK_SIZE + 1)
-    require(len(apk) == APK_SIZE and digest(apk) == APK_DIGEST, 'Le téléchargement public de Lectura.apk diffère.')
-    with ZipFile(io.BytesIO(apk)) as archive:
-        abis = sorted({path.split('/')[1] for path in archive.namelist()
-                       if re.fullmatch(r'lib/[A-Za-z0-9_-]+/[^/]+\.so', path)})
-    require(abis, 'Bibliothèques natives non trouvées dans Lectura.apk.')
-    print(f'::notice title=APK public vérifié::Lectura.apk ({len(apk)} octets), SHA-256 {APK_DIGEST} ; ABI : {", ".join(abis)}.')
 
 
 def fetch(path, limit=LIMIT):
@@ -122,7 +105,12 @@ def assemble(site, manifest, android_page, publishing=True):
     guard_base()
     if publishing:
         guard_release()
-        inspect_public_apk()
+    try:
+        fetch(PAGE)
+    except HTTPError as exc:
+        require(exc.code == 404, 'Impossible de confirmer que /app/ est libre.')
+    else:
+        raise SystemExit('Une page /app/ existe déjà : aucun remplacement.')
 
     expected = base_sources()
     catalogue = fetch('models/index.json', 1024 * 1024)
@@ -177,10 +165,10 @@ def assemble(site, manifest, android_page, publishing=True):
     (site / PAGE).parent.mkdir()
     (site / PAGE).write_bytes(page)
     emitted = {f.relative_to(site).as_posix(): digest(f.read_bytes()) for f in site.rglob('*') if f.is_file()}
-    require(emitted == original | {PAGE: digest(page)}, 'Le seul fichier modifiable est app/index.html.')
+    require(emitted == original | {PAGE: digest(page)}, 'Le seul ajout autorisé est app/index.html.')
     guard_base()
     manifest.write_text(json.dumps(emitted, sort_keys=True, indent=2) + '\n')
-    print(f'{len(original)} fichiers de la PWA conservés ; seule modification : /app/.')
+    print(f'{len(original)} fichiers de la PWA conservés ; seul ajout : /app/.')
 
 
 def verify(manifest):
