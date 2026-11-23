@@ -5,7 +5,7 @@ let timer = null, actif = null;
 
 export function prechaufferTexte(texte, voixId, { vitesse = 1, debounceMs = 2000 } = {}) {
   annulerPrechauffage();
-  if (!voixId || texte.length < 30 || texte.length > 12000) return;
+  if (!voixId || !texte.trim() || texte.length > 12000) return;
   const a = new AbortController(); actif = a;
   timer = setTimeout(async () => {
     timer = null;

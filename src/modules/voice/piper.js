@@ -104,7 +104,7 @@ export class PiperEngine {
 
   /** Prépare jusqu'à trois phrases entières, sans fabriquer ni conserver un WAV partiel. */
   async prewarm(texte, { voixId, vitesse = 1, signal }) {
-    if (!voixId || texte.length < 30 || texte.length > LIMITE_CARACTERES) return;
+    if (!voixId || !texte.trim() || texte.length > LIMITE_CARACTERES) return;
     const phrases = splitSentences(texte).filter((p) => p.type === 'parle').slice(0, MAX_WARM_PHRASES);
     return this.#programmer(async (verifier) => {
       let chars = 0;

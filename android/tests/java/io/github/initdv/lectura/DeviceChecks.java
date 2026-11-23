@@ -59,12 +59,12 @@ public final class DeviceChecks extends Instrumentation {
                     return "Mode avion désactivé, réseau Android de nouveau actif";
                 });
                 check("piper",()->hd(refs));
+                check("piper-mls",()->mls(refs));
+                check("packs-estelle-kokoro",()->newPacks(refs));
                 check("siwis-piper-installation",()->{
                     try(Hd h=new Hd(refs)){downloadWithRetry(h,"siwis",(n,total)->{});require(h.installed(h.voice("siwis")),"Siwis Piper absent");}
                     return "Modèle et configuration Siwis Piper installés, sans changer la voix par défaut";
                 });
-                check("piper-mls",()->mls(refs));
-                check("packs-estelle-kokoro",()->newPacks(refs));
                 break;
             case "offline-hd":
                 check("piper-en-avion",()->offlineHd(ctx));

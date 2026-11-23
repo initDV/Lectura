@@ -10,7 +10,6 @@ import java.util.regex.Pattern;
 /** Voiced-tail PSOLA. Keep in sync with question-pitch.js (shared contour tests). */
 final class QuestionPitch {
     private static final Pattern MARKS=Pattern.compile("\\p{M}+");
-    private static final Pattern QUOTES=Pattern.compile("^[\\s«“\"(]+|[\\s»”\"')\\]}]+$",Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern QUESTION=Pattern.compile("[^!?]\\?$");
     private static final Pattern EST_CE=Pattern.compile("^est-ce (?:que\\b|qu')");
     private static final Pattern OPEN=Pattern.compile("\\b(qui|que|quoi|quand|ou|pourquoi|comment|combien|quel(?:le)?s?)\\b|\\bou bien\\b");
@@ -19,12 +18,18 @@ final class QuestionPitch {
     private QuestionPitch(){}
 
     static boolean closed(String text){
-        String s=QUOTES.matcher(MARKS.matcher(Normalizer.normalize(text,Normalizer.Form.NFD)).replaceAll("")
-            .toLowerCase(Locale.ROOT).replace('’','\'')).replaceAll("");
+        String raw=MARKS.matcher(Normalizer.normalize(text,Normalizer.Form.NFD)).replaceAll("")
+            .toLowerCase(Locale.ROOT).replace('’','\'');
+        int from=0,to=raw.length();
+        while(from<to&&edge(raw.charAt(from),"«“\"("))from++;
+        while(to>from&&edge(raw.charAt(to-1),"»”\"')]}"))to--;
+        String s=raw.substring(from,to);
         if(!QUESTION.matcher(s).find())return false;
         String words=s.substring(0,s.length()-1).trim();
         return !OPEN.matcher(EST_CE.matcher(words).replaceFirst("")).find()&&CLOSED.matcher(words).find();
     }
+
+    private static boolean edge(char c,String quotes){return Character.isWhitespace(c)||Character.isSpaceChar(c)||quotes.indexOf(c)>=0;}
 
     private static final class Pulse {
         final int at,lag;

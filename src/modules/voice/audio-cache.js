@@ -1,6 +1,6 @@
 // @ts-check
 // audio-cache.js : cache IndexedDB des synthèses Piper, une entrée par phrase (révision + texte + voix + vitesse).
-// But : ne jamais synthétiser deux fois la même phrase. Éviction LRU au-delà du quota.
+// But : ne jamais synthétiser deux fois la même phrase. Éviction des anciens rendus au-delà du quota.
 // Deux étages (phrases + WAV) partagent cette révision. Ne jamais invalider lectura-models.
 export const PIPER_RENDER_VERSION = 'fr-voiced-2';
 const DB = 'lectura-audio-cache', VERSION = 2, STORE = 'phrases';
@@ -20,9 +20,15 @@ function ouvrir() {
         // Les clés de cet index permettent de comptabiliser/évincer sans matérialiser les PCM.
         s.createIndex('stock', ['date', 'taille']);
       };
-      req.onsuccess = () => res(req.result);
-      req.onerror = req.onblocked = () => res(null);
-      req.addEventListener('success', () => { req.result.onversionchange = () => { req.result.close(); ouverture = null; }; });
+      let bloque = false;
+      req.onblocked = () => { bloque = true; res(null); }; // Un ancien onglet ne doit pas bloquer la lecture.
+      req.onerror = () => res(null);
+      req.onsuccess = () => {
+        const db = req.result;
+        db.onversionchange = () => { db.close(); ouverture = null; };
+        if (bloque) ouverture = Promise.resolve(db); // Le cache redevient disponible quand l'ancien onglet se ferme.
+        else res(db);
+      };
     } catch { res(null); }
   });
   return ouverture;
@@ -64,7 +70,7 @@ export async function getPhrase(id) {
   } catch { return null; }
 }
 
-/** Stocke { samples, sampleRate, peak }, avec éviction LRU si nécessaire. */
+/** Stocke { samples, sampleRate, peak }, avec éviction par date si nécessaire. */
 export async function setPhrase(id, samples, sampleRate, peak) {
   retenir(id, { samples, sampleRate, peak });
   if (samples.byteLength > QUOTA) return;

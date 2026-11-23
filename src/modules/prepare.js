@@ -97,7 +97,10 @@ async function sourcePiper(projet, audio, onProgress, signal) {
   try { // synthèse déjà faite pour ce texte, cette voix et cette vitesse : on la reprend, sans rien recalculer
     cache = await caches.open(CACHE_SYNTHESE);
     const [a, j] = await Promise.all([cache.match(`${cle}.wav`), cache.match(`${cle}.json`)]);
-    if (a && j) { wav = await a.blob(); segs = await j.json(); onProgress?.(1, 1, t('scene.prep.audio')); }
+    if (a && j) {
+      const dates = await j.json();
+      if (segmentsValides(projet.texte, dates)) { wav = await a.blob(); segs = dates; onProgress?.(1, 1, t('scene.prep.audio')); }
+    }
   } catch { cache = null; wav = null; segs = null; }
   signal?.throwIfAborted();
   if (!wav) {
