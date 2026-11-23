@@ -20,6 +20,7 @@ import { wakeLock } from '../modules/pwa.js';
 import { getEngine } from '../modules/voice/engine.js';
 import { prechaufferTexte } from '../modules/voice/prechauffer-texte.js';
 import { logError, notify, report } from '../modules/errors.js';
+import { signaturePreparation } from './scene-calculs.js';
 import { createControls } from './scene-controls.js';
 import { creerExport } from './scene-export.js';
 import { nettoyer } from '../modules/text-clean.js';
@@ -79,8 +80,7 @@ export async function render(root) {
     if (_brut !== projet.texte) { _brut = projet.texte; _propre = nettoyer(projet.texte); }
     return _propre;
   };
-  const signer = (apercu) => JSON.stringify([textePropre(), apercu, projet.audio.source, projet.audio.nomFichier, projet.audio.voix.moteur, projet.audio.voix.id,
-    projet.audio.voix.moteur === 'piper' ? projet.audio.voix.vitesse : 0, projet.personnageId, projet.terminal.vitesseCps]);
+  const signer = (apercu) => signaturePreparation(textePropre(), apercu, projet);
 
   function carte(titre, ...contenu) { clear(overlay).append(h('div', { class: 'card', role: 'alert' }, h('h2', { text: titre }), ...contenu)); overlay.hidden = false; }
   function basculerTexte(force) {
