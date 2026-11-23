@@ -51,8 +51,10 @@ jobs:
             if ! command -v "${spec%:*}" >/dev/null; then packages+=("${spec#*:}"); fi
           done
           if (( ${#packages[@]} )); then
-            sudo apt-get update -q
-            sudo apt-get install -y -q --no-install-recommends "${packages[@]}"
+            if ! sudo apt-get install -y -q --no-install-recommends "${packages[@]}"; then
+              sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=15 update -q
+              sudo apt-get install -y -q --no-install-recommends "${packages[@]}"
+            fi
           fi
       - name: Vérifier la signature et capturer l’application Android en FR et EN
         run: bash tools/apkpure/emulator.sh "$RUNNER_TEMP/lectura-apkpure" "$RUNNER_TEMP/Lectura.apk"

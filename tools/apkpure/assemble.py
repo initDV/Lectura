@@ -80,7 +80,8 @@ def assemble(out):
         dimension(out / 'bannieres' / f'banniere-{lang}-1024x500.png', (1024, 500))
     for file in ('LIRE-MOI.txt', 'Fiche-FR.txt', 'Fiche-EN.txt'):
         shutil.copyfile(SHEETS / file, out / file)
-    shutil.copyfile(ROOT / 'privacy' / 'index.html', out / 'Confidentialite.html')
+    policy = (ROOT / 'privacy' / 'index.html').read_text()
+    (out / 'Confidentialite.html').write_text(policy.replace('href="../app/"', 'href="https://initdv.github.io/Lectura/app/"'))
     guide(out)
     if not (out / 'Verification-APK.txt').is_file():
         raise ValueError('Missing the SDK proof of official APK signature.')

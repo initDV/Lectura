@@ -40,15 +40,27 @@ expected_apk=d2121f08964d98d6d3f5b1cc784daf18e41caaf34f5b5553a34356ec808f55c0
   [[ $(awk '/certificate SHA-256 digest:/ {print $NF}' "$RUNNER_TEMP/lectura-capture-cert.txt") == "$expected_cert" ]]
   printf '\nAndroid SDK aapt2 dump badging :\n'
   "$build_tools/aapt2" dump badging "$apk" > "$RUNNER_TEMP/lectura-capture-badging.txt"
-  grep -E '^(package:|sdkVersion:|targetSdkVersion:|native-code:|uses-permission:)' "$RUNNER_TEMP/lectura-capture-badging.txt"
+  grep -E '^(package:|[[:alpha:]]*[sS]dkVersion:|native-code:|uses-permission:)' "$RUNNER_TEMP/lectura-capture-badging.txt"
   grep -q "^package: name='$pkg' versionCode='32' versionName='1.0.0'" "$RUNNER_TEMP/lectura-capture-badging.txt"
-  grep -Fxq "sdkVersion:'31'" "$RUNNER_TEMP/lectura-capture-badging.txt"
+  printf '\nAndroid SDK aapt2 dump xmltree — uses-sdk du manifeste compilé :\n'
+  "$build_tools/aapt2" dump xmltree --file AndroidManifest.xml "$apk" > "$RUNNER_TEMP/lectura-capture-manifest.txt"
+  grep -A3 'E: uses-sdk' "$RUNNER_TEMP/lectura-capture-manifest.txt"
+  grep -Eq 'minSdkVersion[^=]*= *(\(type 0x10\) *)?(31|0x0*1[fF])([[:space:]]|$)' "$RUNNER_TEMP/lectura-capture-manifest.txt"
   grep -Fxq "targetSdkVersion:'37'" "$RUNNER_TEMP/lectura-capture-badging.txt"
 } | tee "$out/Verification-APK.txt"
 printf '::notice title=APK public vérifié::Lectura.apk · %s · 1.0.0 · versionCode 32 · minSdk 31 · targetSdk 37 · APK SHA-256 %s · certificat permanent SHA-256 %s\n' "$pkg" "$expected_apk" "$expected_cert"
 
 phase='démarrage de l’émulateur'
 printf 'no\n' | avdmanager create avd -f -n captura_lectura -k "$AVD_IMAGE" -d pixel_4
+python3 - "$ANDROID_AVD_HOME/captura_lectura.avd/config.ini" <<'PYAVD'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+settings = {'hw.lcd.width': '1080', 'hw.lcd.height': '1920', 'hw.lcd.density': '420',
+            'skin.name': '1080x1920', 'skin.path': '_no_skin', 'showDeviceFrame': 'no'}
+lines = [line for line in p.read_text().splitlines() if line.split('=', 1)[0] not in settings]
+p.write_text('\n'.join(lines + [f'{k}={v}' for k, v in settings.items()]) + '\n')
+PYAVD
 "$emulator" -accel-check
 "$emulator" -avd captura_lectura -port 5554 -memory 4096 -no-window -gpu swiftshader_indirect \
   -no-snapshot -wipe-data -noaudio -no-boot-anim -camera-back none > "$RUNNER_TEMP/emulator-capture.txt" 2>&1 &
@@ -83,7 +95,8 @@ phase='installation et captures Android'
 adb install "$apk" | tee "$RUNNER_TEMP/capture-install.txt"
 grep -Fxq Success "$RUNNER_TEMP/capture-install.txt"
 adb shell dumpsys package "$pkg" > "$RUNNER_TEMP/capture-package.txt"
-grep -Eq '^[[:space:]]*versionCode=32([[:space:]]|$)' "$RUNNER_TEMP/capture-package.txt"
+grep -E '^[[:space:]]*versionCode=32([[:space:]]|$).*minSdk=31([[:space:]]|$).*targetSdk=37([[:space:]]|$)' \
+  "$RUNNER_TEMP/capture-package.txt" | tee -a "$out/Verification-APK.txt"
 if ! python3 tools/apkpure/capture.py "$out" "$RUNNER_TEMP/capture-fixtures"; then
   adb logcat -d -s AndroidRuntime:E Lectura:E > "$RUNNER_TEMP/capture-errors.txt" || true
   sed -n '1,100p' "$RUNNER_TEMP/capture-errors.txt" || true
