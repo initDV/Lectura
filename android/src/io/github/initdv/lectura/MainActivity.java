@@ -50,6 +50,7 @@ public final class MainActivity extends Activity {
     String route="scene",forced="",sig="",lastDraft="";
     boolean muted,preparing,stopped=true,isForeground,fullscreen;
     final Handler handler=new Handler(Looper.getMainLooper());
+    private final PcmDelivery pcmDelivery=new PcmDelivery(handler::post);
     final ExecutorService queue=Executors.newSingleThreadExecutor();
     final ArrayDeque<String> journal=new ArrayDeque<>();
     final Runnable draftTimer=new Runnable(){@Override public void run(){draft();handler.postDelayed(this,5000);}};
@@ -82,7 +83,8 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume(){super.onResume();isForeground=true;if(stage!=null)stage.refresh();exports.foreground();}
     @Override protected void onPause(){isForeground=false;exports.background();stopHdExample();if(reading!=null&&reading.playing){reading.pause();playState();}draft();super.onPause();}
-    @Override protected void onDestroy(){dismiss();disposeScene();exports.close();handler.removeCallbacksAndMessages(null);if(hdDownload!=null)hdDownload.cancel(true);queue.submit(hd::close);queue.shutdown();if(talk!=null)talk.close();super.onDestroy();}
+    @Override protected void onDestroy(){dismiss();disposeScene();exports.close();pcmDelivery.close();handler.removeCallbacksAndMessages(null);
+        if(hdDownload!=null)hdDownload.cancel(true);queue.submit(hd::close);queue.shutdown();if(talk!=null)talk.close();super.onDestroy();}
     @Override public void onBackPressed(){
         if(modal!=null){Runnable r=backModal;dismiss();if(r!=null)r.run();}
         else if(stage!=null&&stage.presenting)presentation(false);else if(fullscreen)fullscreen();else if(!route.equals("scene"))go("scene");else super.onBackPressed();
@@ -194,46 +196,22 @@ public final class MainActivity extends Activity {
         LinearLayout loading=sceneOverlay(t("scene.prep.titre"));TextView loadingText=ui.small(t("scene.prep.ressources"));ui.add(loading,loadingText,5);
         android.widget.ProgressBar bar=new android.widget.ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);bar.setMax(1000);ui.add(loading,bar,12);
         ui.add(loading,ui.button(t("commun.annuler"),null,this::stop),8);
-        preparation=queue.submit(()->{
-            Pcm decoded=null;boolean delivered=false;try{
-                int cps=cfg.cps;
-                Script.Keywords words=new Script.Keywords(refs,lang,personal);List<Script.Segment> segments;String spokenBy="";
-                if(silent)segments=Script.timing(text,text.length()*1000./cps,1);
-                else if(cfg.fileAudio){if(!audio.isFile())throw new IOException(t("scene.err.sansAudio"));
-                    decoded=Pcm.decode(audio,cache);segments=cfg.subtitles?Script.locate(text,cfg.segments,true):null;
-                    if(segments==null)segments=Script.timing(text,decoded.duration(),0);
-                }else {
-                    if(!automatic&&!choices.isEmpty()&&text.length()>SpeechPlan.MAX_TEXT)throw new IOException(t("voix.hd.err.tropLong","max",SpeechPlan.MAX_TEXT,"n",text.length()));
-                    Hd.Progress progress=(n,total)->handler.post(()->{
-                        if(ticket!=generation)return;
-                        loadingText.setText(t("voix.hd.synthesePhrase","i",Math.min(n+1,total),"n",total));bar.setProgress((int)(1000*n/Math.max(1,total)));
-                    });
-                    Hd.Synthesis syn=null;Exception hdError=null;
-                    for(String id:choices) {
-                        try {
-                            if(!hd.installed(hd.voice(id)))throw new IOException(t("voix.hd.err.manquant"));
-                            syn=hd.synth(text,id,cps,progress);spokenBy=id;break;
-                        }catch(Exception e){Pcm.interrupted();if(!automatic)throw e;hdError=e;hd.close();}
-                    }
-                    if(syn==null) {
-                        if(v==null){if(hdError!=null)throw hdError;throw new IOException(t(automatic?"android.voice.noAudio":localReady?"voix.err.aucune":"voix.err.absente"));}
-                        syn=talk.render(cache,text,lang,object(refs.json("prononciation.json"),lang),v,cps,cfg.pitch,progress);spokenBy=v.getName();
-                    }
-                    decoded=syn.pcm;segments=syn.segments;
-                }
-                Script.reportExpressions(text,segments,cfg.segments);if(segments.isEmpty())throw new IOException(t("scene.err.texteVide"));
-                Performance performance=new Performance(segments,new Mood(refs,lang,words,cfg.emotions),refs.rig);Pcm pcm=decoded;String voiceUsed=spokenBy;List<Script.Segment> parts=segments;
-                handler.post(()->{if(generation!=ticket||scene==null){if(pcm!=null)pcm.close();return;}try{
-                    reading=new Reading(text,parts,words,silent,pcm,talk,v,cfg,1,this::readingFinished,this::readingError);
-                    synthesisVoice=voiceUsed;
-                    if(!silent&&!cfg.fileAudio&&!choices.isEmpty()&&!choices.get(0).equals(voiceUsed)){
-                        JSONObject fallback=hd.voice(voiceUsed);note(t("android.voice.fallback","nom",fallback==null?voiceUsed:fallback.optString("nom")),"warn",5000);
-                    }
-                    reading.performance=performance;preparing=false;sig=signature;clearOverlay();reading.volume(volume(),muted);reading.speed(project.speed);
-                    if(silent)note(t("scene.apercuActif"),"info");if(isForeground)startPlaying();else playState();
-                }catch(Exception e){if(pcm!=null&&reading==null)pcm.close();sceneError(e);}});delivered=true;
-            }catch(Exception e){handler.post(()->{if(ticket==generation)sceneError(e);});}finally{if(!delivered&&decoded!=null)decoded.close();}
+        AudioPreparation.Request request=new AudioPreparation.Request(cfg,text,lang,silent,automatic,choices,personal,v,localReady,audio,cache);
+        Hd.Progress progress=(n,total)->handler.post(()->{
+            if(ticket!=generation)return;
+            loadingText.setText(t("voix.hd.synthesePhrase","i",Math.min(n+1,total),"n",total));bar.setProgress((int)(1000*n/Math.max(1,total)));
         });
+        preparation=queue.submit(()->new AudioPreparation(refs,hd,talk).run(request,this::t,progress,
+            prepared->pcmDelivery.post(()->{if(generation!=ticket||scene==null){prepared.close();return;}try{
+                reading=new Reading(text,prepared.segments,prepared.words,silent,prepared.pcm,talk,v,cfg,1,this::readingFinished,this::readingError);
+                String voiceUsed=prepared.voiceUsed;synthesisVoice=voiceUsed;
+                if(!silent&&!cfg.fileAudio&&!choices.isEmpty()&&!choices.get(0).equals(voiceUsed)){
+                    JSONObject fallback=hd.voice(voiceUsed);note(t("android.voice.fallback","nom",fallback==null?voiceUsed:fallback.optString("nom")),"warn",5000);
+                }
+                reading.performance=prepared.performance;preparing=false;sig=signature;clearOverlay();reading.volume(volume(),muted);reading.speed(project.speed);
+                if(silent)note(t("scene.apercuActif"),"info");if(isForeground)startPlaying();else playState();
+            }catch(Exception e){if(reading==null)prepared.close();sceneError(e);}},prepared::close),
+            e->handler.post(()->{if(ticket==generation)sceneError(e);})));
     }
     FrameLayout sceneOverlay;
     LinearLayout sceneOverlay(String title){
