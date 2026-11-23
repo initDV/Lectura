@@ -50,6 +50,8 @@ expected_apk=d2121f08964d98d6d3f5b1cc784daf18e41caaf34f5b5553a34356ec808f55c0
 } | tee "$out/Verification-APK.txt"
 printf '::notice title=APK public vérifié::Lectura.apk · %s · 1.0.0 · versionCode 32 · minSdk 31 · targetSdk 37 · APK SHA-256 %s · certificat permanent SHA-256 %s\n' "$pkg" "$expected_apk" "$expected_cert"
 
+phase='compilation de la sonde d’interface indépendante'
+bash tools/apkpure/build-probe.sh "$RUNNER_TEMP/UiSnapshot.apk"
 phase='démarrage de l’émulateur'
 printf 'no\n' | avdmanager create avd -f -n captura_lectura -k "$AVD_IMAGE" -d pixel_4
 python3 - "$ANDROID_AVD_HOME/captura_lectura.avd/config.ini" <<'PYAVD'
@@ -80,6 +82,7 @@ adb shell wm density 420
 adb shell svc power stayon true
 adb shell settings put global window_animation_scale 0
 adb shell settings put global transition_animation_scale 0
+adb shell settings put global animator_duration_scale 0
 adb shell settings put secure immersive_mode_confirmations confirmed
 adb shell settings put global sysui_demo_allowed 1
 adb shell am broadcast -a com.android.systemui.demo -e command enter
@@ -92,6 +95,8 @@ adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard
 
 phase='installation et captures Android'
+adb install "$RUNNER_TEMP/UiSnapshot.apk" | tee "$RUNNER_TEMP/probe-install.txt"
+grep -Fxq Success "$RUNNER_TEMP/probe-install.txt"
 adb install "$apk" | tee "$RUNNER_TEMP/capture-install.txt"
 grep -Fxq Success "$RUNNER_TEMP/capture-install.txt"
 adb shell dumpsys package "$pkg" > "$RUNNER_TEMP/capture-package.txt"

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Capture the exact release in a disposable Android emulator; do not rebuild the APK."""
+import base64
 import hashlib
 import json
 from pathlib import Path
@@ -19,7 +20,7 @@ from fixture_audio import narrate
 
 PKG = 'io.github.initdv.lectura'
 APP = f'/data/user/0/{PKG}'
-DUMP = '/data/local/tmp/lectura-apkpure-ui.xml'
+PROBE = 'io.github.initdv.lectura.capture/.UiSnapshot'
 DOCS = {
     'fr': {
         'title': 'Les couleurs du ciel',
@@ -57,8 +58,11 @@ def shell(*args):
 
 
 def nodes():
-    adb('shell', 'uiautomator', 'dump', DUMP, timeout=16)
-    tree = ET.fromstring(adb('exec-out', 'cat', DUMP))
+    output = adb('shell', 'am', 'instrument', '-w', PROBE, timeout=17).decode(errors='replace')
+    payload = re.search(r'^INSTRUMENTATION_RESULT: snapshot=([A-Za-z0-9+/=]+)$', output, flags=re.M)
+    if payload is None:
+        raise ET.ParseError(output[-1200:])
+    tree = ET.fromstring(base64.b64decode(payload[1], validate=True))
     return [n for n in tree.iter('node') if n.get('package') == PKG]
 
 
@@ -192,7 +196,11 @@ def capture(lang, out, scratch):
     # Never wait for a second dump or a fixed delay between that assertion and screencap.
     deadline = time.monotonic() + 18
     while time.monotonic() < deadline:
-        items = nodes()
+        try:
+            items = nodes()
+        except (ET.ParseError, subprocess.SubprocessError):
+            time.sleep(.2)
+            continue
         shown = next((n.get('text', '') for n in items if n.get('content-desc') == 'terminal'), '')
         if match(items, 'Pause') and data['text'].startswith(shown) and 62 <= len(shown) <= len(data['text']) - 75:
             save_screen(pics / '01-scene.png', ['Pause', shown, data['text'], 'Menu'], items)
@@ -224,6 +232,7 @@ def capture(lang, out, scratch):
     else:
         raise RuntimeError('The test video was not saved to Movies/Lectura.')
     local_movie = scratch / movie
+    time.sleep(1)  # allow the MediaStore copy to be committed before reading the container
     adb('pull', movie_path, str(local_movie))
     with av.open(str(local_movie)) as video:
         streams = [{'codec_type': s.type, 'codec_name': s.codec_context.name} | (
