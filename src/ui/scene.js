@@ -17,7 +17,7 @@ import { mouthShape } from '../modules/lipsync.js';
 import { applyTheme } from '../modules/themes.js';
 import { wakeLock } from '../modules/pwa.js';
 import { getEngine } from '../modules/voice/engine.js';
-import { prechaufferTexte } from '../modules/voice/prechauffer-texte.js';
+import { prechaufferTexte, annulerPrechauffage } from '../modules/voice/prechauffer-texte.js';
 import { logError, notify, report } from '../modules/errors.js';
 import { prochaineExpression, signaturePreparation, varianteCommandes } from './scene-calculs.js';
 import { createControls } from './scene-controls.js';
@@ -37,6 +37,7 @@ export async function render(root) {
   const projet = store.projet, audio = new AudioEngine();
   /** @type {any} */ let prep = null; /** @type {any} */ let perso = null; /** @type {any} */ let character = null; /** @type {any} */ let terminal = null;
   /** @type {any} */ let humeur = null;
+  let preparation = null, essaiLecture = 0;
   let raf = 0, vivant = true, exprManuelle = '', derniereExpr = '', dernierSeg = null, dernierRang = 0, muet = false, clic = 0, arrete = true, signature = '', masque = false;
 
   const charPane = h('div', { class: 'char-pane' });
@@ -56,11 +57,8 @@ export async function render(root) {
     onFichier: async () => { if (await choisirAudio(projet)) voixChangee(); },
     onTexte: (v) => {
       projet.texte = v; toucher();
-      // Pré-chauffage en arrière-plan : si la voix Piper est active, on synthétise les
-      // premières phrases dès la saisie. Lancer devient instantané si on clique dans les 30 s.
-      if (projet.audio?.voix?.moteur === 'piper' && projet.audio.voix.id) {
-        prechaufferTexte(v, projet.audio.voix.id, { vitesse: projet.audio.voix.vitesse || 1 });
-      }
+      annulerPreparation();
+      prechauffer();
     }, onLancer: lancer, onArreter: arreter, onMuet: basculerMuet,
     onVolume: (v) => { prep?.source.setVolume(v); majReglages({ volume: v }).catch((err) => report('reglages', err)); },
   });
@@ -80,6 +78,21 @@ export async function render(root) {
     return _propre;
   };
   const signer = (apercu) => signaturePreparation(textePropre(), apercu, projet);
+
+  function prechauffer() {
+    const v = projet.audio.voix;
+    if (!document.hidden && projet.audio.source === 'voix' && v.moteur === 'piper' && !preparation && store.etat !== 'LECTURE') {
+      prechaufferTexte(textePropre(), v.id, { vitesse: v.vitesse });
+    } else annulerPrechauffage();
+  }
+
+  function annulerPreparation() {
+    if (!preparation) return;
+    preparation.abort(); preparation = null;
+    audio.close();
+    signature = ''; overlay.hidden = true;
+    transition('IDLE');
+  }
 
   function carte(titre, ...contenu) { clear(overlay).append(h('div', { class: 'card', role: 'alert' }, h('h2', { text: titre }), ...contenu)); overlay.hidden = false; }
   function basculerTexte(force) {
@@ -125,15 +138,17 @@ export async function render(root) {
     const sig = signer(apercu);
     if (prep && sig === signature && pret()) return true;
     if (store.etat === 'LECTURE') { prep?.source.pause(); transition('PAUSE'); }
+    const a = new AbortController(); preparation = a;
     transition('PREPARATION'); majUi();
     const etape = h('p', { class: 'muted', text: t('scene.prep.ressources') }), barre = h('progress', { max: 1, value: 0 });
     carte(t('scene.prep.titre'), etape, barre);
     try {
       prep?.source.dispose(); prep = null;
       if (!perso) await chargerPerso();
-      const projetLecture = { ...projet, texte: textePropre() };
-      const nouveau = await prepare(projetLecture, { audio, apercu, perso, onProgress: (fait, total, texte) => { barre.value = total ? fait / total : 0; if (texte) etape.textContent = texte; } });
-      if (!vivant) { nouveau.source.dispose(); return false; }
+      a.signal.throwIfAborted();
+      const projetLecture = { ...projet, texte: textePropre(), audio: { ...projet.audio, voix: { ...projet.audio.voix } } };
+      const nouveau = await prepare(projetLecture, { audio, apercu, perso, signal: a.signal, onProgress: (fait, total, texte) => { barre.value = total ? fait / total : 0; if (texte) etape.textContent = texte; } });
+      if (!vivant || a.signal.aborted) { nouveau.source.dispose(); return false; }
       prep = nouveau; signature = sig; derniereExpr = ''; dernierSeg = null;
       humeur = creerHumeur({ lexique: prep.lexique, matcher: prep.matcher, pro: store.pro, actif: projet.reglages.emotions });
       terminal = new Terminal(termBody, prep.dict, prep.matcher);
@@ -148,26 +163,30 @@ export async function render(root) {
       if (apercu) notify(t('scene.apercuActif'), 'info');
       return true;
     } catch (err) {
-      if (vivant) erreur(err);
+      if (vivant && !a.signal.aborted) erreur(err);
       return false;
-    }
+    } finally { if (preparation === a) preparation = null; }
   }
 
   async function jouer() {
     if (!pret() || store.etat === 'LECTURE') return;
+    const id = ++essaiLecture, source = prep.source;
+    const courant = () => vivant && id === essaiLecture && prep?.source === source;
     try {
-      if (store.etat === 'FIN' || arrete) prep.source.seek(0);
+      if (store.etat === 'FIN' || arrete) source.seek(0);
       arrete = false;
-      await prep.source.play();
+      await source.play();
+      if (!courant()) return;
       transition('LECTURE');
       wakeLock(true);
-    } catch (err) { erreur(err); }
+    } catch (err) { if (courant()) erreur(err); }
     majUi();
   }
   function pause() { if (store.etat !== 'LECTURE') return; prep.source.pause(); transition('PAUSE'); wakeLock(false); majUi(); }
   /** Bouton « Lancer » : démarre, met en pause ou reprend. */
   async function lancer(apercu = false) {
     if (store.etat === 'PREPARATION') return;
+    annulerPrechauffage();
     if (store.etat === 'LECTURE' && apercu !== true) return pause();
     if (store.etat === 'PAUSE' && !arrete && apercu !== true && signer(false) === signature) return jouer();
     if (!textePropre().trim()) { notify(t('scene.err.texteVide'), 'warn'); controls.texte.focus(); return; }
@@ -176,8 +195,11 @@ export async function render(root) {
   }
   /** Bouton « Arrêter » : coupe la voix, remet le robot au repos, garde le texte affiché. */
   function arreter() {
+    essaiLecture++;
+    annulerPrechauffage(); annulerPreparation();
     exportScene.arreter();
-    if (store.etat === 'LECTURE') { prep.source.pause(); transition('PAUSE'); }
+    prep?.source.pause();
+    if (store.etat === 'LECTURE') transition('PAUSE');
     arrete = true; wakeLock(false);
     character?.setExpression('neutre'); derniereExpr = 'neutre';
     majUi();
@@ -191,12 +213,17 @@ export async function render(root) {
   }
   function basculerMuet() { muet = !muet; prep?.source.setMuted(muet); majUi(); }
   function changerVitesse(v) {
+    annulerPreparation(); annulerPrechauffage();
     projet.audio.voix.vitesse = v; toucher();
+    prechauffer();
     if (prep) prep.source.setRate(prep.source.kind === 'apercu' || projet.audio.source === 'fichier' ? v : v / prep.vitesseBase);
     majReglages({ vitesseVoix: v }).catch((err) => report('reglages', err));
   }
   async function voixChangee() {
-    toucher();
+    arreter();
+    prep?.source.dispose(); prep = null; signature = '';
+    transition('IDLE');
+    toucher(); prechauffer();
     controls.setVoix(await nomVoix(projet));
     if (projet.audio.source === 'voix') majReglages({ moteurVoix: projet.audio.voix.moteur, voixId: projet.audio.voix.id }).catch((err) => report('reglages', err));
   }
@@ -273,8 +300,8 @@ export async function render(root) {
       onFormat: (f) => majReglages({ formatVideo: f }).catch((err) => report('reglages', err)),
       actions: {
         enregistrer: () => actionsProjet.enregistrer(projet), exporter: () => actionsProjet.exporterLectura(projet),
-        importerTexte: async () => { if (await actionsProjet.importerTexte(projet)) { controls.setTexte(projet.texte); toucher(); } },
-        importerSrt: async () => { if (await actionsProjet.importerSousTitres(projet)) { controls.setTexte(projet.texte); toucher(); } },
+        importerTexte: async () => { if (await actionsProjet.importerTexte(projet)) { controls.setTexte(projet.texte); toucher(); annulerPreparation(); prechauffer(); } },
+        importerSrt: async () => { if (await actionsProjet.importerSousTitres(projet)) { controls.setTexte(projet.texte); toucher(); annulerPreparation(); prechauffer(); } },
         exporterSrt: () => actionsProjet.exporterSousTitres(projet, 'srt'), exporterVtt: () => actionsProjet.exporterSousTitres(projet, 'vtt'),
         apercu: () => lancer(true), capture: () => exportScene.capture(), video: () => exportScene.basculer(), pleinEcran, mesVideos: () => ouvrirMesVideos(),
       } });
@@ -295,6 +322,8 @@ export async function render(root) {
     if (clic) { clearTimeout(clic); clic = 0; presentation(false); return; }
     clic = window.setTimeout(() => { clic = 0; lancer(); }, 280);
   };
+  const visibilite = () => { if (document.hidden) annulerPrechauffage(); };
+  document.addEventListener('visibilitychange', visibilite);
   window.addEventListener('keydown', clavier);
   stage.addEventListener('click', toucherScene);
   const off = bus.on('app:state', majUi);
@@ -305,9 +334,12 @@ export async function render(root) {
   nomVoix(projet).then((nom) => controls.setVoix(nom)).catch((err) => report('voix', err));
   if (store.settings.modePresentation) presentation(true);
   if (store.apercu) { store.apercu = false; lancer(true); }
+  else prechauffer();
 
   return () => {
-    vivant = false;
+    vivant = false; essaiLecture++;
+    annulerPrechauffage(); preparation?.abort(); preparation = null;
+    document.removeEventListener('visibilitychange', visibilite);
     cancelAnimationFrame(raf); clearTimeout(clic); off();
     window.removeEventListener('keydown', clavier);
     exportScene.abandonner();

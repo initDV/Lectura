@@ -74,9 +74,11 @@ public final class EstelleCheck {
             try{mimi.decode(z);throw new AssertionError("Annulation Mimi ignorée");}
             catch(CancellationException expected){/* Next phrase must still start with empty decoder state. */}
             finally{Thread.interrupted();}
-            float[] question=mimi.decode(read(dir.resolve("question.f32"))),shifted=question.clone();
+            float[] question=mimi.decode(read(dir.resolve("question.f32")));
             int end=question.length;while(end>1&&Math.abs(question[end-1])<.001)end--;
-            boolean lift=QuestionPitch.lift(shifted,0,end,RATE);
+            float[] shifted=QuestionPitch.adjust(question,0,end,RATE,0);
+            boolean lift=shifted!=question;
+            require(shifted.length==question.length,"Le phrasé Estelle ne doit pas allonger le PCM.");
             int changed=0;
             for(int i=0;i<question.length;i++)if(question[i]!=shifted[i]){
                 require(i>=end-12480&&i<end,"Montée hors de la finale");changed++;

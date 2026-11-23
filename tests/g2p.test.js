@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { phonemiser, motEnPhonemes, phonemesEnIds } from '../src/modules/voice/g2p_fr.js';
+import { words, groups } from './fixtures/voice-fr.mjs';
 import { entierEnMots, nombresEnMots } from '../src/modules/voice/nombres.js';
 
 const nu = (s) => s.replace(/[ˈ-]/g, '');
@@ -43,6 +44,13 @@ describe('phonétisation française', () => {
   });
   it('ne produit jamais de chaîne vide pour un texte prononçable', () => {
     for (const s of ['sudo nmap -sV 192.168.1.10', 'HTTPS', '100 %', 'a@b.com']) expect(phonemiser(s).length).toBeGreaterThan(2);
+  });
+  it.each(words)('conserve les phonèmes de %s', (texte, attendu) => expect(nu(phonemiser(texte))).toBe(attendu));
+  it.each(groups)('désambiguïse le groupe %s', (texte, attendu) => expect(nu(phonemiser(texte))).toContain(attendu));
+  it('utilise le son /ɥ/ du modèle et se replie sur /y/ si absent', () => {
+    const carte = { '^': [1], $: [2], _: [0], y: [37] };
+    expect(phonemesEnIds('ɥ', { ...carte, 'ɥ': [69] })).toEqual([1, 0, 69, 0, 2]);
+    expect(phonemesEnIds('ɥ', carte)).toEqual([1, 0, 37, 0, 2]);
   });
   it('encode en identifiants Piper avec début, fin et séparateurs', () => {
     const carte = { '^': [1], $: [2], _: [0], a: [14], b: [15] };

@@ -6,6 +6,7 @@ import { parseSubtitles, cuesToProject, toSrt, toVtt } from '../../src/modules/s
 import { phonemiser } from '../../src/modules/voice/g2p_fr.js';
 import { autoTiming, estimateDurationMs, Timeline } from '../../src/modules/timeline.js';
 import { nettoyer } from '../../src/modules/text-clean.js';
+import { words, groups, questions } from '../../tests/fixtures/voice-fr.mjs';
 const texts = [
   'Bonjour, je suis Lectura !',
   'Les enfants aiment les histoires.',
@@ -27,5 +28,6 @@ fixtures.characters = JSON.parse(await readFile(new URL('../../characters/index.
 fixtures.expressions = NOMS;
 const { data, wav } = lipsFixture();
 fixtures.lips = data;
+fixtures.voice = { words, groups, questions };
 await writeFile(process.argv[2], JSON.stringify(fixtures));
 await writeFile(join(dirname(process.argv[2]), 'lips-reference.wav'), wav);

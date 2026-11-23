@@ -23,10 +23,10 @@ final class SpeechPlan {
     static final class Fragment {
         final Script.Segment original;
         final String spoken;
-        final boolean question;
+        final boolean question,closedQuestion;
         int pauseMs;
-        Fragment(Script.Segment source,String text,int[] map,int silence,boolean question) {
-            original=source;spoken=text;pauseMs=silence;this.question=question;
+        Fragment(Script.Segment source,String text,int[] map,int silence,boolean question,boolean closedQuestion) {
+            original=source;spoken=text;pauseMs=silence;this.question=question;this.closedQuestion=closedQuestion;
             original.cursor=map;
         }
         long pauseFrames(int rate) {return Math.round(pauseMs*rate/1000.);}
@@ -42,18 +42,18 @@ final class SpeechPlan {
             String line=source.substring(start,end);int before=result.size();
             int type=Script.type(line);
             if(type!=Script.SPOKEN) {
-                result.add(new Fragment(new Script.Segment(line,start,end,type),"",null,0,false));
+                result.add(new Fragment(new Script.Segment(line,start,end,type),"",null,0,false,false));
             } else if(!line.isEmpty()) {
                 boolean[] ignore=new boolean[line.length()], literal=new boolean[line.length()];
                 mark(line,ignore,literal);
-                int from=0,lastWord=0;
+                int from=0,lastWord=0,sentenceStart=0;
                 for(int i=0;i<line.length();) {
                     char c=line.charAt(i);
                     if(Script.space(c)&&!ignore[i]&&!literal[i])lastWord=i+1;
                     if(i-from>=CHUNK&&!ignore[i]&&!literal[i]) {
                         int mid=lastWord>from+CHUNK/2?lastWord:i;
                         if(mid>from&&mid<line.length()&&Character.isLowSurrogate(line.charAt(mid)))mid--;
-                        if(mid>from){emit(result,line,start,from,mid,ignore,literal,lang,lexicon,0,false);from=mid;}
+                        if(mid>from){emit(result,line,start,from,mid,ignore,literal,lang,lexicon,0,false,false);from=mid;}
                     }
                     int gap=boundary(line,i,ignore,literal);
                     if(gap==0){i++;continue;}
@@ -64,15 +64,17 @@ final class SpeechPlan {
                         else if(Script.space(tail)||"\"'’”»)]}*_`".indexOf(tail)>=0)last++;
                         else break;
                     }
-                    emit(result,line,start,from,last,ignore,literal,lang,lexicon,gap,question);
+                    boolean closed=question&&!lang.equals("en")&&QuestionPitch.closed(line.substring(sentenceStart,last));
+                    emit(result,line,start,from,last,ignore,literal,lang,lexicon,gap,question,closed);
+                    if(gap>=320)sentenceStart=last;
                     from=i=last;
                 }
-                emit(result,line,start,from,line.length(),ignore,literal,lang,lexicon,0,false);
+                emit(result,line,start,from,line.length(),ignore,literal,lang,lexicon,0,false,false);
             }
             if(next>end) {
                 if(result.size()>before||!result.isEmpty()) {
                     Fragment f=result.get(result.size()-1);f.pauseMs=Math.max(f.pauseMs,560);
-                } else result.add(new Fragment(new Script.Segment(source.substring(start,next),start,next,Script.PAUSE),"",null,560,false));
+                } else result.add(new Fragment(new Script.Segment(source.substring(start,next),start,next,Script.PAUSE),"",null,560,false,false));
             }
             start=next;
         }
@@ -113,7 +115,7 @@ final class SpeechPlan {
         }
     }
     private static void emit(List<Fragment> out,String line,int start,int from,int to,boolean[] ignore,boolean[] literal,
-                             String lang,JSONObject lex,int gap,boolean question) {
+                             String lang,JSONObject lex,int gap,boolean question,boolean closed) {
         while(from<to&&Script.space(line.charAt(from)))from++;
         while(to>from&&Script.space(line.charAt(to-1)))to--;
         if(from==to)return;
@@ -157,7 +159,7 @@ final class SpeechPlan {
         if(spoken.isEmpty()&&gap==0)return;
         int kind=spoken.isEmpty()?Script.PAUSE:Script.SPOKEN;
         out.add(new Fragment(new Script.Segment(raw,start+from,start+to,kind),spoken,
-            spoken.isEmpty()?null:Arrays.copyOf(b.map,spoken.length()),gap,question));
+            spoken.isEmpty()?null:Arrays.copyOf(b.map,spoken.length()),gap,question,closed));
     }
     private static String number(String raw) {
         String s=raw.replaceAll("[ \\t]","");boolean minus=s.startsWith("-")||s.startsWith("−");

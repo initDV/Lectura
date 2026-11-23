@@ -18,7 +18,10 @@ const instances = {};
 /** @returns {Promise<VoiceEngine & Record<string, any>>} */
 export async function getEngine(id) {
   if (id === 'piper') {
-    if (!instances.piper) instances.piper = new (await import('./piper.js')).PiperEngine(); // chargement paresseux
+    if (!instances.piper) instances.piper = import('./piper.js').then(({ PiperEngine }) => new PiperEngine()).catch((err) => {
+      delete instances.piper;
+      throw err;
+    });
     return instances.piper;
   }
   if (!instances.webspeech) instances.webspeech = new WebSpeechEngine();

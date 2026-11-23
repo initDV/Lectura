@@ -59,11 +59,16 @@ public final class DeviceChecks extends Instrumentation {
                     return "Mode avion désactivé, réseau Android de nouveau actif";
                 });
                 check("piper",()->hd(refs));
+                check("siwis-piper-installation",()->{
+                    try(Hd h=new Hd(refs)){downloadWithRetry(h,"siwis",(n,total)->{});require(h.installed(h.voice("siwis")),"Siwis Piper absent");}
+                    return "Modèle et configuration Siwis Piper installés, sans changer la voix par défaut";
+                });
                 check("piper-mls",()->mls(refs));
                 check("packs-estelle-kokoro",()->newPacks(refs));
                 break;
             case "offline-hd":
                 check("piper-en-avion",()->offlineHd(ctx));
+                check("siwis-piper-en-avion",()->offlineSiwis(ctx));
                 break;
             case "offline-estelle":
                 check("estelle-auto-en-avion",()->offlineNewVoice(ctx,"estelle"));
@@ -225,6 +230,15 @@ public final class DeviceChecks extends Instrumentation {
         frame.recycle();JSONObject fixture=fixtures();
         G2p g=new G2p(refs.json("g2p.json"));JSONArray tests=fixture.getJSONArray("phrases");
         for(int i=0;i<tests.length();i++){JSONArray row=tests.getJSONArray(i);String actual=g.phrase(row.getString(0));require(actual.equals(row.getString(1)),"G2P : "+row.getString(0)+" | "+actual+" != "+row.getString(1));}
+        JSONObject voice=fixture.getJSONObject("voice");
+        for(String key:List.of("words","groups")){
+            JSONArray cases=voice.getJSONArray(key);
+            for(int i=0;i<cases.length();i++){
+                JSONArray row=cases.getJSONArray(i);String text=row.getString(0),ipa=g.phrase(text).replaceAll("[ˈ-]","");
+                require(key.equals("words")?ipa.equals(row.getString(1)):ipa.contains(row.getString(1)),text+" : "+ipa+" != "+row.getString(1));
+            }
+        }
+        require(Arrays.equals(G2p.ids("ɥ",new JSONObject("{\"^\":[1],\"$\":[2],\"_\":[0],\"y\":[37]}")),new long[]{1,0,37,0,2}),"Repli /ɥ/ Piper");
         tests=fixture.getJSONArray("timeline");for(int i=0;i<tests.length();i++){
             JSONObject t=tests.getJSONObject(i);String clean=Script.clean(t.getString("t"));require(clean.equals(t.getString("text")),"Nettoyage Markdown");
             long ms=Script.estimate(clean,1.25,28);require(ms==t.getLong("duration"),"Durée estimée");
@@ -249,7 +263,7 @@ public final class DeviceChecks extends Instrumentation {
         }
         Script.Segment mixed=Script.timing("Bravo, je suis triste.",2000,0).get(0);
         require(!mood.summary(mixed).second.isEmpty()&&!mood.pose(mixed,mixed.text.length()).mix.isEmpty(),"Mélange d’émotions indisponible");
-        return "43 rigs, 38 poses, mélange d’émotions, mots étendus/personnalisés, 8 cas G2P, 8 chronologies, SRT/VTT et projet v1";
+        return "43 rigs, 38 poses, mélange d’émotions, mots étendus/personnalisés, G2P partagé + cas vérifiés, 8 chronologies, SRT/VTT et projet v1";
     }
     private String prosody(Refs refs)throws Exception {
         JSONObject lex=Refs.object(refs.json("prononciation.json"),"fr");
@@ -279,18 +293,34 @@ public final class DeviceChecks extends Instrumentation {
             }
             require((plan.get(3).original.to-plan.get(3).original.speechEnd)/1.25==256,"Pause à 1,25×");
         }
-        int first=onset+50,last=end-1;float[] raised=audio.clone();
-        require(QuestionPitch.lift(raised,first,last,rate),"Montée non détectée sur voyelle de test");
+        JSONArray questions=fixtures().getJSONObject("voice").getJSONArray("questions");
+        for(int i=0;i<questions.length();i++){
+            JSONArray row=questions.getJSONArray(i);String text=row.getString(0);boolean closed=row.getBoolean(1);
+            require(QuestionPitch.closed(text)==closed,"Type de question : "+text);
+            require(SpeechPlan.plan(text,"fr",lex).stream().anyMatch(p->p.closedQuestion)==closed,"Contexte perdu au découpage : "+text);
+        }
+        int first=onset+50,last=end-1,extra=rate*70/1000;
+        float[] raised=QuestionPitch.adjust(audio,first,last,rate,70);
         int a=end-rate*13/100,b=end-rate*4/100;
-        require(crossings(raised,a,b)>crossings(audio,a,b)&&raised.length==audio.length&&raised[onset+100]==audio[onset+100],
-            "Montée locale seulement, sans raccourcir ni toucher l’attaque");
+        require(raised.length==audio.length+extra&&crossings(raised,a+extra,b+extra)>crossings(audio,a,b)
+            &&Arrays.equals(raised,0,rate/2,audio,0,rate/2)&&Arrays.equals(raised,end+extra,raised.length,audio,end,audio.length),
+            "+70 ms de voyelle et montée locale, attaque et silence inchangés");
+        float[] rising=audio.clone();double phase=0;
+        for(int i=onset;i<end;i++){phase+=2*Math.PI*(106+110.*(i-onset)/(end-onset))/rate;rising[i]=(float)(.3*Math.sin(phase));}
+        require(QuestionPitch.adjust(rising,first,last,rate,70)==rising,"Ne pas doubler une montée naturelle");
+        var qPlan=SpeechPlan.plan("Tu viens ce soir ?", "fr",lex);
+        try(Pcm wave=VoiceRender.render(refs.context.getCacheDir(),null,null,qPlan,rate,28,VoiceRender.Profile.SIWIS,ignored->audio,(n,total)->{}).pcm){
+            var q=qPlan.get(0).original;
+            require(q.to-q.speechEnd==360&&Pcm.mono16Frames(wave.file,rate)==wave.frames&&pcmPeak(wave,q.speechEnd+1,q.to-1)==0,
+                "Pause Siwis et en-tête WAV après allongement");
+        }
         float[] hot=audio.clone();for(int i=0;i<hot.length;i++)hot[i]*=4; // A signal that would otherwise hit the PCM16 rails.
-        try(Pcm wave=VoiceRender.render(refs.context.getCacheDir(),null,null,SpeechPlan.plan("Tu viens ?","fr",lex),rate,28,true,
+        try(Pcm wave=VoiceRender.render(refs.context.getCacheDir(),null,null,SpeechPlan.plan("Tu viens ?","fr",lex),rate,28,VoiceRender.Profile.ESTELLE,
                 ignored->hot,(n,total)->{}).pcm){
             require(wave.frames>=end-onset,"L’atténuation ne doit pas enlever d’échantillons");
             int peak=estelleWave(wave);require(peak>21500,"Atténuation excessive : "+peak);
         }
-        return "8 durées exactes, 320 → 256 ms à 1,25×, question à durée constante et source intacte ; WAV Estelle mono 24 kHz reconnu par Android, signal de test > 0 dBFS écrit avec 3 dB de marge";
+        return "8 durées exactes, 320 → 256 ms à 1,25×, montée faible corrigée et +70 ms sans silence en plus ; montée naturelle et source intactes ; WAV Estelle mono 24 kHz reconnu par Android, signal de test > 0 dBFS écrit avec 3 dB de marge";
     }
     private static int crossings(float[] w,int a,int b){int n=0;for(int i=a+1;i<b;i++)if(w[i-1]<0&&w[i]>=0)n++;return n;}
     private String performance(Refs refs)throws Exception {
@@ -1078,6 +1108,35 @@ public final class DeviceChecks extends Instrumentation {
             Arrays.sort(before);Arrays.sort(after);require(Arrays.equals(before,after),"Phrases recalculées malgré le cache");
             return "cache WAV "+full+" ms, édition avec cache de phrases "+(end-full)+" ms";
         }
+    }
+    private String offlineSiwis(Context ctx)throws Exception {
+        require(noNetwork(ctx),"Siwis testé avec réseau actif");
+        MainActivity a=open(ctx);
+        String text="Tu viens ce soir ?\nVraiment ?\n$ echo silence\nLes yeux de monsieur.";
+        try{
+            waitFor("Fenêtre Siwis au premier plan",()->a.isForeground&&a.hasWindowFocus(),15000);
+            long start=android.os.SystemClock.elapsedRealtime();
+            main(()->{
+                Project p=new Project(a.db.settings);p.text=text;p.engine="piper";p.voice="siwis";p.cps=28;p.speed=1;
+                a.open(p);a.launch(false);
+            });
+            waitFor("Lecture Siwis Piper à froid",()->a.reading!=null&&a.reading.playing,40000);
+            long cold=android.os.SystemClock.elapsedRealtime()-start;
+            waitFor("Premier son Siwis Piper",()->a.reading.time()>100,8000);
+            main(()->{
+                Reading r=a.reading;r.pause();
+                require(a.synthesisVoice.equals("siwis")&&r.pcm.rate==22050&&r.text.equals(text)&&r.timeline.parts.size()==4,"Voix, format ou chronologie Siwis Piper");
+                var spans=r.timeline.parts;
+                for(int i=0;i<spans.size();i++){
+                    var p=spans.get(i);int peak=pcmPeak(r.pcm,p.from+1,p.to-1);
+                    require(i==2?peak==0:peak>900,"Signal inattendu dans le segment Siwis : "+p.text);
+                }
+                r.seek(spans.get(3).from);require(!r.playing&&r.chars(r.time())==spans.get(3).start,"Saut/curseur Siwis Piper");
+                a.startPlaying();
+            });
+            waitFor("Fin sans coupure de Siwis Piper",()->a.reading.ended,13000);
+            return "Piper Siwis réel en avion ; démarrage à froid "+cold+" ms ; WAV 22 050 Hz, pause, saut, curseur et silence vérifiés";
+        }finally{main(a::finish);}
     }
     private String hd(Refs refs)throws Exception {
         try(Hd h=new Hd(refs)){

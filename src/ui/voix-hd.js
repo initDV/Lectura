@@ -27,7 +27,7 @@ export function voixHdPanel({ onChange } = {}) {
     notify(t('voix.hd.ecoute.chargement'), 'info', 20000);
     try {
       const nom = v.nom.split(' ·')[0];
-      const r = await moteur.synthesize(`Bonjour, je suis ${nom}.`, { voixId: v.id, vitesse: 1 });
+      const r = await moteur.synthesize(`Bonjour, je suis ${nom}.`, { voixId: v.id, vitesse: 1, signal: abort.signal });
       if (abort.signal.aborted) return;
       urlLecteur = URL.createObjectURL(encodeWav(r.samples, r.sampleRate));
       lecteur = new Audio(urlLecteur);
@@ -35,8 +35,8 @@ export function voixHdPanel({ onChange } = {}) {
       await lecteur.play();
     } catch (err) {
       if (!abort.signal.aborted) report('voix-hd', err);
-      arreterEcoute();
-    } finally { ecouteAbort = null; }
+      if (ecouteAbort === abort) arreterEcoute();
+    } finally { if (ecouteAbort === abort) ecouteAbort = null; }
   }
 
   async function dessiner() {

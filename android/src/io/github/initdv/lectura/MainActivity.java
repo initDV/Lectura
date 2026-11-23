@@ -82,7 +82,7 @@ public final class MainActivity extends Activity {
         render("scene");if(!db.settings.optBoolean("tutorielVu"))tutorial(1);handler.postDelayed(draftTimer,5000);
     }
     @Override protected void onResume(){super.onResume();isForeground=true;if(stage!=null)stage.refresh();exports.foreground();}
-    @Override protected void onPause(){isForeground=false;exports.background();stopHdExample();if(reading!=null&&reading.playing){reading.pause();playState();}draft();super.onPause();}
+    @Override protected void onPause(){isForeground=false;exports.background();cancelPrewarm();stopHdExample();if(reading!=null&&reading.playing){reading.pause();playState();}draft();super.onPause();}
     @Override protected void onDestroy(){dismiss();disposeScene();exports.close();pcmDelivery.close();handler.removeCallbacksAndMessages(null);
         if(hdDownload!=null)hdDownload.cancel(true);queue.submit(hd::close);queue.shutdown();if(talk!=null)talk.close();super.onDestroy();}
     @Override public void onBackPressed(){
@@ -118,20 +118,24 @@ public final class MainActivity extends Activity {
         downloadProgress=null;if(talk!=null)talk.cancel();getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}
     void draft(){if(project==null)return;String key=project.json().toString();if(key.equals(lastDraft))return;
         try{db.draft(project);lastDraft=key;}catch(IOException ex){log("brouillon",ex);}}
-    private void cancelPrewarm(){if(prewarmTimer!=null)handler.removeCallbacks(prewarmTimer);if(prewarm!=null)prewarm.cancel(true);}
-    void changedText(){
-        cancelPrewarm();String text=project.text,id=hdId();
-        if(!project.fileAudio&&text.length()>=30&&text.length()<=SpeechPlan.MAX_TEXT&&hd.installed(hd.voice(id))){
-            prewarmTimer=()->prewarm=queue.submit(()->{try{hd.prewarm(text,id);}catch(Exception ignored){}});handler.postDelayed(prewarmTimer,2000);
-        }
+    private void cancelPrewarm(){
+        if(prewarmTimer!=null){handler.removeCallbacks(prewarmTimer);prewarmTimer=null;}
+        if(prewarm!=null){prewarm.cancel(true);prewarm=null;}
     }
-    private void preloadVoice(){
-        cancelPrewarm();String id=hdId();
-        if(!project.fileAudio&&hd.installed(hd.voice(id))) {
-            prewarmTimer=()->prewarm=queue.submit(()->{try{hd.preload(id);}catch(Exception ignored){}});
-            handler.postDelayed(prewarmTimer,650);
-        }
+    private void scheduleWarm(boolean editing){
+        cancelPrewarm();String text=project.text,id=hdId();JSONObject voice=hd.voice(id);
+        if(project.fileAudio||!hd.installed(voice)||!editing&&text.length()>SpeechPlan.MAX_TEXT)return;
+        boolean prefix=text.length()>=30&&text.length()<=SpeechPlan.MAX_TEXT;
+        if(editing&&!prefix)return;
+        boolean preparePrefix=prefix&&(editing||Hd.engine(voice).equals("piper"));
+        prewarmTimer=()->{
+            prewarmTimer=null;if(!isForeground||preparing||reading!=null&&reading.playing)return;
+            prewarm=queue.submit(()->{try{if(preparePrefix)hd.prewarm(text,id);else hd.preload(id);}catch(Exception ignored){}});
+        };
+        handler.postDelayed(prewarmTimer,preparePrefix?2000:650);
     }
+    void changedText(){if(preparing)stop();scheduleWarm(true);}
+    private void preloadVoice(){scheduleWarm(false);}
     void presentation(boolean yes){if(scene==null)return;hideKeyboard();scene.present(yes);if(yes)note(t("scene.presentationAide"),"info",3500);}
     void fullscreen(){WindowInsetsController i=getWindow().getInsetsController();if(i==null)return;fullscreen=!fullscreen;
         if(fullscreen)i.hide(WindowInsets.Type.systemBars());else i.show(WindowInsets.Type.systemBars());}
@@ -231,7 +235,7 @@ public final class MainActivity extends Activity {
     void startPlaying(){try{stopped=false;reading.play();playState();}catch(Exception e){sceneError(e);}}
     void adjustRate(){try{if(reading!=null){reading.speed(project.speed);exports.mark(true);}}catch(RuntimeException e){sceneError(e);}}
     void adjustVolume(){if(reading!=null)reading.volume(volume(),muted);if(scene!=null)scene.update();}
-    void stop(){exports.stop();if(preparing){if(preparation!=null)preparation.cancel(true);generation++;clearOverlay();preparing=false;}
+    void stop(){cancelPrewarm();exports.stop();if(preparing){if(preparation!=null)preparation.cancel(true);generation++;clearOverlay();preparing=false;}
         if(reading!=null)reading.pause();stopped=true;playState();}
     void readingFinished(){stopped=true;playState();exports.naturalEnd();}
     void playState(){exports.mark(false);if(scene!=null)scene.update();if(reading!=null&&reading.playing)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}

@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
 import java.text.Normalizer;
 
 /** Kokoro v1.0 INT8, voice 30 (ff_siwis), via the official Sherpa-ONNX Kotlin/JNI API. */
@@ -13,11 +14,13 @@ final class Kokoro implements AutoCloseable {
     private final Object tts,config;
     private final Method generate,samples,phonemes,free;
     private final G2p g2p;
+    private final boolean glide;
     final int rate;
     static boolean supported(){try{Class.forName(BASE+"OfflineTts",false,Kokoro.class.getClassLoader());return true;}
         catch(ClassNotFoundException|LinkageError e){return false;}}
     Kokoro(File dir,G2p g2p)throws Exception {
         this.g2p=g2p;
+        glide=Files.readAllLines(new File(dir,"tokens.txt").toPath()).stream().anyMatch(line->line.startsWith("ɥ ")||line.startsWith("ɥ\t"));
         try {
             Class<?> type=Class.forName(BASE+"OfflineTts"),generation=Class.forName(BASE+"GenerationConfig");
             config=generation.getConstructor().newInstance();generation.getMethod("setSid",int.class).invoke(config,30);
@@ -38,7 +41,8 @@ final class Kokoro implements AutoCloseable {
         }catch(InvocationTargetException|LinkageError e){throw new IOException("Initialisation Kokoro/Sherpa-ONNX : "+cause(e),cause(e));}
     }
     float[] generate(String text)throws Exception {
-        Pcm.interrupted();int[] ipa=Normalizer.normalize(g2p.phrase(text),Normalizer.Form.NFD).codePoints().toArray();
+        Pcm.interrupted();String phrase=g2p.phrase(text);
+        int[] ipa=Normalizer.normalize(glide?phrase:phrase.replace('ɥ','y'),Normalizer.Form.NFD).codePoints().toArray();
         if(ipa.length==0||ipa.length>500)throw new IOException("Phrase Kokoro non prononçable ou trop longue.");
         try {
             // Sherpa 2.x no longer includes eSpeak. Supply Lectura's local French IPA (no service or lexicon download).

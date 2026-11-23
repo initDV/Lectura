@@ -2,7 +2,7 @@
 // g2p_lexique.js : exceptions de prononciation (mot=API), mots outils, lettres, symboles. Données maison (MIT).
 // Chargé uniquement avec la voix Lectura HD (jamais au démarrage de l'application).
 
-const brut = (s) => Object.fromEntries(s.trim().split(/\s+/).map((p) => { const i = p.indexOf('='); return [p.slice(0, i), p.slice(i + 1)]; }));
+const brut = (s) => Object.assign(Object.create(null), Object.fromEntries(s.trim().split(/\s+/).map((p) => { const i = p.indexOf('='); return [p.slice(0, i), p.slice(i + 1)]; })));
 
 /** Mots outils non accentués. Ceux de TIRET reçoivent « - » comme dans la phonétisation d'origine des voix Piper. */
 export const TIRET = new Set(['le', 'la', 'les', 'de', 'du', 'des']);
@@ -32,12 +32,19 @@ blanc=blɑ̃ franc=fʁɑ̃ banc=bɑ̃ tabac=taba estomac=ɛstoma porc=pɔʁ tron
 respect=ʁɛspɛ aspect=aspɛ suspect=syspɛ instinct=ɛ̃stɛ̃ distinct=distɛ̃ exact=ɛɡzakt
 vient=vjɛ̃ tient=tjɛ̃ viens=vjɛ̃ tiens=tjɛ̃ revient=ʁəvjɛ̃ devient=dəvjɛ̃ contient=kɔ̃tjɛ̃ obtient=ɔptjɛ̃ maintient=mɛ̃tjɛ̃ appartient=apaʁtjɛ̃
 soutient=sutjɛ̃ retient=ʁətjɛ̃ convient=kɔ̃vjɛ̃ parvient=paʁvjɛ̃ intervient=ɛ̃tɛʁvjɛ̃ provient=pʁovjɛ̃ bientôt=bjɛ̃to
-aujourdhui=oʒuʁdyi vers=vɛʁ univers=ynivɛʁ divers=divɛʁ travers=tʁavɛʁ envers=ɑ̃vɛʁ parfum=paʁfœ̃ automne=otɔn condamner=kɔ̃dane solennel=solanɛl ennemi=ɛnmi évidemment=evidamɑ̃
+aujourdhui=oʒuʁdɥi vers=vɛʁ univers=ynivɛʁ divers=divɛʁ travers=tʁavɛʁ envers=ɑ̃vɛʁ parfum=paʁfœ̃ automne=otɔn condamner=kɔ̃dane solennel=solanɛl ennemi=ɛnmi évidemment=evidamɑ̃
 net=nɛt internet=ɛ̃tɛʁnɛt ethernet=etɛʁnɛt intranet=ɛ̃tʁanɛt but=byt brut=bʁyt sud=syd est-ouest=ɛstwɛst ouest=wɛst
 diagnostic=djaɡnostik stagnation=staɡnasjɔ̃ technique=tɛknik techniques=tɛknik technologie=tɛknoloʒi orchestre=ɔʁkɛstʁ écho=eko chaos=kao psychologie=psikoloʒi
 archive=aʁʃiv architecture=aʁʃitɛktyʁ chiffrement=ʃifʁəmɑ̃ œil=œj yeux=jø œuvre=œvʁ sœur=sœʁ cœur=kœʁ
 aiment=ɛm ferment=fɛʁm dorment=dɔʁm forment=fɔʁm nomment=nɔm estiment=ɛstim expriment=ɛkspʁim confirment=kɔ̃fiʁm affirment=afiʁm
 consomment=kɔ̃sɔm transforment=tʁɑ̃sfɔʁm informent=ɛ̃fɔʁm
+vraiment=vʁɛmɑ̃ absolument=apsɔlymɑ̃ poliment=polimɑ̃ suffisamment=syfizamɑ̃ constamment=kɔ̃stamɑ̃ élégamment=eleɡamɑ̃ apparemment=apaʁamɑ̃
+poêle=pwal poêles=pwal orgueil=ɔʁɡœj orgueilleux=ɔʁɡœjø orgueilleuse=ɔʁɡœjøz aïeul=ajœl aïeux=ajø aïe=aj maïs=mais yaourt=jauʁt yaourts=jauʁt
+chœur=kœʁ œuf=œf œufs=ø bœuf=bœf bœufs=bø paysage=peizaʒ abbaye=abei gageure=ɡaʒyʁ gnome=ɡnom agnostique=aɡnostik
+poing=pwɛ̃ poings=pwɛ̃ longtemps=lɔ̃tɑ̃ compte=kɔ̃t comptes=kɔ̃t comptent=kɔ̃t taon=tɑ̃ paon=pɑ̃ faon=fɑ̃ saoul=su soûl=su
+dès=dɛ ans=ɑ̃ village=vilaʒ villages=vilaʒ million=miljɔ̃ millions=miljɔ̃ millier=milje milliers=milje couvents=kuvɑ̃
+lui=lɥi nuit=nɥi nuits=nɥi pluie=plɥi huile=ɥil tuile=tɥil luire=lɥiʁ puis=pɥi depuis=dəpɥi celui=səlɥi ensuite=ɑ̃sɥit puisque=pɥiskə
+huître=ɥitʁ bruit=bʁɥi fruit=fʁɥi juin=ʒɥɛ̃ juillet=ʒɥijɛ cuisine=kɥizin cuivre=kɥivʁ aiguille=eɡɥij cuillère=kɥijɛʁ linguiste=lɛ̃ɡɥist linguistique=lɛ̃ɡɥistik
 python=pitɔ̃ bash=baʃ linux=linyks unix=ynyks docker=dɔkɛʁ git=ɡit github=ɡitœb gitlab=ɡitlab kali=kali wireshark=wajʁʃaʁk
 metasploit=metasplɔjt burp=bœʁp suite=sɥit phishing=fiʃiŋ malware=malwɛʁ ransomware=ʁɑ̃sɔmwɛʁ spyware=spajwɛʁ software=sɔftwɛʁ hardware=aʁdwɛʁ
 firmware=fœʁmwɛʁ hacker=akœʁ hackers=akœʁ hacking=akiŋ hack=ak firewall=fajœʁwol web=wɛb wifi=wifi bluetooth=blutus cloud=klawd

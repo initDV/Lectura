@@ -15,6 +15,7 @@ import java.util.List;
 /** Assemble every native engine's fragment PCM on the same presentation clock, at 1×. */
 final class VoiceRender {
     static final float ESTELLE_PEAK=.70794576f; // -3 dBFS of headroom for output resampling; never amplify.
+    enum Profile { STANDARD, SIWIS, ESTELLE }
     private VoiceRender(){}
     @FunctionalInterface interface Renderer {float[] generate(String text)throws Exception;}
 
@@ -40,10 +41,10 @@ final class VoiceRender {
 
     static Hd.Synthesis render(File dir,File wav,File timings,List<SpeechPlan.Fragment> plan,int rate,int cps,
                                Renderer renderer,Hd.Progress progress)throws Exception {
-        return render(dir,wav,timings,plan,rate,cps,false,renderer,progress);
+        return render(dir,wav,timings,plan,rate,cps,Profile.STANDARD,renderer,progress);
     }
     static Hd.Synthesis render(File dir,File wav,File timings,List<SpeechPlan.Fragment> plan,int rate,int cps,
-                               boolean estelle,Renderer renderer,Hd.Progress progress)throws Exception {
+                               Profile profile,Renderer renderer,Hd.Progress progress)throws Exception {
         if(plan.isEmpty())throw new IOException("Aucun texte à lire.");
         if(rate<8000||rate>48000)throw new IOException("Fréquence de synthèse invalide.");
         List<Script.Segment> parts=new ArrayList<>();JSONArray times=new JSONArray();
@@ -57,18 +58,22 @@ final class VoiceRender {
                     if(!fragment.spoken.isEmpty()) {
                         float[] samples=renderer.generate(fragment.spoken);
                         int[] span=audible(samples,rate);
-                        if(fragment.question){samples=samples.clone();QuestionPitch.lift(samples,span[0],span[1],rate);}
-                        float gain=estelle?headroom(samples,span[0],span[1]):1;
-                        if((frames+span[1]-span[0])*2>Pcm.MAX_BYTES)throw new IOException("Synthèse trop volumineuse.");
+                        int begin=span[0],end=span[1];
+                        if(fragment.closedQuestion){
+                            float[] prosody=QuestionPitch.adjust(samples,begin,end,rate,profile==Profile.SIWIS?70:0);
+                            end+=prosody.length-samples.length;samples=prosody;
+                        }
+                        float gain=profile==Profile.ESTELLE?headroom(samples,begin,end):1;
+                        if((frames+end-begin)*2>Pcm.MAX_BYTES)throw new IOException("Synthèse trop volumineuse.");
                         int fade=Math.max(1,rate/400); // 2.5 ms de raccord sans clic, sans allonger les silences.
                         pcm.clear();
-                        for(int j=span[0];j<span[1];j++) {
-                            float edge=Math.min(1,Math.min(j-span[0]+1,span[1]-j)/(float)fade);
+                        for(int j=begin;j<end;j++) {
+                            float edge=Math.min(1,Math.min(j-begin+1,end-j)/(float)fade);
                             pcm.putShort(Pcm.sample(samples[j]*gain*edge));
                             if(!pcm.hasRemaining()){out.write(pcm.array());pcm.clear();}
                         }
                         if(pcm.position()>0)out.write(pcm.array(),0,pcm.position());
-                        frames+=span[1]-span[0];
+                        frames+=end-begin;
                     } else if(p.type==Script.COMMAND||p.type==Script.COMMENT) {
                         long count=Math.round(rate*(double)p.text.length()/Math.max(1,cps));
                         zeros(out,silence,count);frames+=count;

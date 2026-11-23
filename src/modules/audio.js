@@ -15,7 +15,7 @@ export class AudioEngine {
     /** @type {AudioContext|null} */ this.ctx = null;
     /** @type {HTMLAudioElement|null} */ this.el = null;
     /** @type {LipSync|null} */ this.lip = null;
-    this.url = ''; this.dureeMs = 0; this.volume = 1; this.muet = false;
+    this.url = ''; this.lecture = 0; this.dureeMs = 0; this.volume = 1; this.muet = false;
     /** @type {any} */ this.dest = null;
   }
 
@@ -40,21 +40,29 @@ export class AudioEngine {
   }
 
   /** Charge un fichier audio (Blob). Rejette avec un message clair si le format n'est pas lisible. */
-  async load(blob) {
+  async load(blob, signal) {
+    signal?.throwIfAborted();
     this.init();
     const el = /** @type {HTMLAudioElement} */ (this.el);
     this.pret = false;
     if (this.url) URL.revokeObjectURL(this.url);
     this.url = URL.createObjectURL(blob);
     await new Promise((res, rej) => {
-      const fin = (fn, v) => { clearTimeout(delai); el.onloadedmetadata = null; el.onerror = null; fn(v); };
+      const fin = (fn, v) => {
+        clearTimeout(delai); el.onloadedmetadata = null; el.onerror = null;
+        signal?.removeEventListener('abort', annuler); fn(v);
+      };
+      const annuler = () => fin(rej, signal.reason);
+      signal?.addEventListener('abort', annuler, { once: true });
       const delai = setTimeout(() => fin(rej, new Error(MSG_FORMAT)), 20000);
       el.onloadedmetadata = () => fin(res);
       el.onerror = () => fin(rej, new Error(MSG_FORMAT));
       el.src = this.url;
       el.load();
     });
+    signal?.throwIfAborted();
     if (!Number.isFinite(el.duration)) await this.fixDuration(el); // WebM/Ogg enregistrés sans durée
+    signal?.throwIfAborted();
     if (!Number.isFinite(el.duration) || el.duration <= 0) throw new Error(MSG_FORMAT);
     this.dureeMs = el.duration * 1000;
     this.pret = true;
@@ -73,17 +81,19 @@ export class AudioEngine {
   }
 
   async play() {
-    if (!this.ctx || !this.el) return;
-    if (this.ctx.state !== 'running') await this.ctx.resume();
+    const { ctx, el } = this, lecteur = ++this.lecture;
+    if (!ctx || !el) return;
+    if (ctx.state !== 'running') await ctx.resume();
+    if (lecteur !== this.lecture) return;
     try {
-      await this.el.play();
+      await el.play();
     } catch (err) {
       if (err?.name === 'AbortError') return; // pause demandée pendant le démarrage
       if (err?.name === 'NotAllowedError') throw new Error('Le navigateur exige un geste pour démarrer le son : appuie sur Lecture.');
       throw new Error(MSG_FORMAT);
     }
   }
-  pause() { this.el?.pause(); }
+  pause() { this.lecture++; this.el?.pause(); }
   seek(ms) { if (this.el) this.el.currentTime = Math.max(0, Math.min(this.dureeMs, ms)) / 1000; }
   get timeMs() { return this.el ? this.el.currentTime * 1000 : 0; }
   get playing() { return !!this.el && !this.el.paused && !this.el.ended; }
@@ -96,6 +106,7 @@ export class AudioEngine {
 
   /** Fermeture propre (quand on quitte la scène). */
   async close() {
+    this.lecture++;
     const { ctx, el } = this;
     this.ctx = null; this.el = null; this.lip = null; this.pret = false;
     if (el) { el.pause(); el.removeAttribute('src'); el.load(); }

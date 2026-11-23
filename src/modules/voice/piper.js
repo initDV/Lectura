@@ -1,20 +1,20 @@
 // @ts-check
-// piper.js : moteur « Lectura HD hors ligne » (Piper + onnxruntime-web WASM), chargé à la demande uniquement.
-// Contrairement à la voix du système, il produit des échantillons audio : lip-sync réel et export vidéo possibles.
+// Piper hors ligne, chargé à la demande. Une seule inférence, y compris pendant le préchauffage.
 import { splitSentences, CPS_FRAPPE } from '../timeline.js';
 import { t } from '../i18n.js';
 import { getCatalogue, etatVoix, etatStockage, lire, urlFichier, telecharger, supprimer, supprimerPartiel, toutSupprimer } from './piper-store.js';
 import { hashPhrase, getPhrase, setPhrase } from './audio-cache.js';
 
-export const LIMITE_CARACTERES = 12000; // ≈ 14 min d'audio : au-delà, la mémoire d'un téléphone d'entrée de gamme sature
-const PAUSE_PHRASE = 0.22, PAUSE_PARAGRAPHE = 0.45; // secondes de silence ajoutées
+export const LIMITE_CARACTERES = 12000;
+const PAUSE_PHRASE = 0.22, PAUSE_PARAGRAPHE = 0.45;
+const MAX_WARM_CHARS = 320, MAX_WARM_PHRASES = 3;
 
 export class PiperEngine {
   id = 'piper';
   capabilities = { audioBuffer: true, boundary: false };
   #worker = null; #voixChargee = null; #cfg = null; #seq = 0; #attente = new Map();
+  #queue = Promise.resolve(); #generation = 0;
 
-  /** Voix installées seulement. */
   async listVoices() {
     try { return (await etatVoix()).filter((v) => v.installe).map((v) => ({ id: v.id, nom: v.nom })); } catch { return []; }
   }
@@ -22,30 +22,49 @@ export class PiperEngine {
   stockage = etatStockage;
   download = telecharger;
   removePartial = supprimerPartiel;
-  async remove(id) {
-    await supprimer(id);
-    // La voix en mémoire peut être un autre locuteur du même modèle.
-    if (this.#voixChargee && !(await etatVoix()).some((v) => v.id === this.#voixChargee && v.installe)) this.stop();
+  async remove(id) { this.stop(); await this.#programmer(() => supprimer(id)); }
+  async removeAll() { this.stop(); await this.#programmer(toutSupprimer); }
+
+  #programmer(action, signal, interrompre = false) {
+    const generation = this.#generation;
+    const verifier = () => {
+      signal?.throwIfAborted();
+      if (generation !== this.#generation) throw new Error(t('voix.hd.annule'));
+    };
+    const travail = this.#queue.then(async () => {
+      verifier();
+      // Un préchauffage finit au plus sa phrase en cours, pour la mettre en cache et garder le modèle.
+      // Une lecture explicitement annulée (Arrêter, changement de texte, scène fermée) libère le worker.
+      const annuler = () => this.#liberer();
+      if (interrompre) signal?.addEventListener('abort', annuler);
+      try { return await action(verifier); }
+      finally { if (interrompre) signal?.removeEventListener('abort', annuler); }
+    });
+    this.#queue = travail.then(() => {}, () => {});
+    return travail;
   }
-  async removeAll() { this.stop(); await toutSupprimer(); }
 
   #appel(msg, transfert = []) {
     return new Promise((resolve, reject) => {
       const id = ++this.#seq;
       this.#attente.set(id, { resolve, reject });
-      this.#worker.postMessage({ id, ...msg }, transfert);
+      try { this.#worker.postMessage({ id, ...msg }, transfert); }
+      catch (err) { this.#attente.delete(id); reject(err); }
     });
   }
 
-  async #charger(voixId) {
-    if (this.#worker && this.#voixChargee === voixId) return;
-    this.stop();
+  async #charger(voixId, verifier) {
+    if (this.#worker && this.#voixChargee?.id === voixId) return;
+    this.#liberer();
     const cat = await getCatalogue(), voix = cat.voix.find((v) => v.id === voixId);
+    verifier();
     if (!voix || !(await etatVoix()).find((v) => v.id === voixId)?.installe) throw new Error(t('voix.hd.err.manquant'));
+    verifier();
     const cfg = JSON.parse(new TextDecoder().decode(await lire(voix.config)));
+    verifier();
     const total = voix.parts.reduce((a, p) => a + p.taille, 0), modele = new Uint8Array(total);
     let pos = 0;
-    for (const p of voix.parts) { const b = new Uint8Array(await lire(p.fichier)); modele.set(b, pos); pos += b.length; }
+    for (const p of voix.parts) { const b = new Uint8Array(await lire(p.fichier)); verifier(); modele.set(b, pos); pos += b.length; }
     if (pos !== total) throw new Error(t('voix.hd.err.corrompu', { fichier: voix.id }));
     let w;
     try { w = new Worker(new URL('./piper-worker.js', import.meta.url), { type: 'module' }); } catch { throw new Error(t('voix.hd.err.worker')); }
@@ -56,90 +75,94 @@ export class PiperEngine {
       if (e.data.ok) a.resolve(e.data); else a.reject(new Error(t('voix.hd.err.moteur', { detail: e.data.erreur })));
     };
     w.onerror = (e) => {
-      for (const a of this.#attente.values()) a.reject(new Error(t('voix.hd.err.moteur', { detail: e.message || 'worker' })));
-      this.#attente.clear();
+      if (w === this.#worker) this.#liberer(new Error(t('voix.hd.err.moteur', { detail: e.message || 'worker' })));
     };
     this.#worker = w;
     try {
       await this.#appel({ type: 'init', ortUrl: urlFichier(cat.moteur.entree), wasmBase: urlFichier(cat.moteur.dossier), modele: modele.buffer, cfg }, [modele.buffer]);
-    } catch (err) { this.stop(); throw err; }
-    this.#voixChargee = voixId; this.#cfg = cfg;
+    } catch (err) { this.#liberer(); throw err; }
+    // On conserve le modèle si seul le préchauffage a été interrompu après l'initialisation.
+    this.#voixChargee = voix; this.#cfg = cfg;
+    verifier();
   }
 
-  /**
-   * Synthétise tout le texte, phrase par phrase : les dates de chaque phrase sont donc exactes.
-   * @param {string} texte
-   * @param {{voixId:string, vitesse?:number, cpsFrappe?:number, onProgress?:(fait:number,total:number,etape:string)=>void}} o
-   * @returns {Promise<{samples:Float32Array, sampleRate:number, segments:{texte:string,debutMs:number,finMs:number}[]}>}
-   */
-  async synthesize(texte, { voixId, vitesse = 1, cpsFrappe = CPS_FRAPPE, onProgress } = /** @type {any} */ ({})) {
+  async #phrase(texte, voixId, vitesse, verifier) {
+    const id = await hashPhrase(texte, voixId, vitesse);
+    verifier();
+    const cache = await getPhrase(id);
+    verifier();
+    if (cache) return cache;
+    await this.#charger(voixId, verifier);
+    verifier();
+    const sampleRate = this.#cfg.audio?.sample_rate || 22050;
+    const { samples, peak } = await this.#appel({ type: 'synth', texte, vitesse, speakerId: this.#voixChargee.speakerId, prosodie: voixId === 'siwis' });
+    const son = samples.length ? samples : new Float32Array(Math.round(sampleRate * 0.3));
+    await setPhrase(id, son, sampleRate, peak);
+    verifier();
+    return { samples: son, sampleRate, peak };
+  }
+
+  /** Prépare jusqu'à trois phrases entières, sans fabriquer ni conserver un WAV partiel. */
+  async prewarm(texte, { voixId, vitesse = 1, signal }) {
+    if (!voixId || texte.length < 30 || texte.length > LIMITE_CARACTERES) return;
+    const phrases = splitSentences(texte).filter((p) => p.type === 'parle').slice(0, MAX_WARM_PHRASES);
+    return this.#programmer(async (verifier) => {
+      let chars = 0;
+      for (const p of phrases) {
+        if ((chars += p.texte.length) > MAX_WARM_CHARS) break;
+        verifier();
+        await this.#phrase(p.texte, voixId, vitesse, verifier);
+      }
+    }, signal);
+  }
+
+  /** Un seul WAV normalisé et une seule horloge : lecture, lèvres, sauts et export. */
+  async synthesize(texte, { voixId, vitesse = 1, cpsFrappe = CPS_FRAPPE, onProgress = null, signal = null }) {
     if (texte.length > LIMITE_CARACTERES) throw new Error(t('voix.hd.err.tropLong', { max: LIMITE_CARACTERES, n: texte.length }));
     const phrases = splitSentences(texte);
     if (!phrases.length) throw new Error(t('scene.err.vide'));
-    onProgress?.(0, 1, t('voix.hd.chargement'));
-
-    // 1. Phase cache : hash + lookup pour chaque phrase « parle » (sans charger le worker).
-    const enCache = await Promise.all(phrases.map(async (p) => {
-      if (p.type !== 'parle') return null;
-      const id = await hashPhrase(p.texte, voixId, vitesse);
-      return { id, entree: await getPhrase(id) };
-    }));
-    const toutEnCache = phrases.every((p, i) => p.type !== 'parle' || enCache[i]?.entree);
-
-    // 2. Chargement du worker seulement si nécessaire ; sr vient du cache si tout y est, sinon de la config.
-    let sr;
-    if (toutEnCache) {
-      sr = enCache.find((c) => c?.entree)?.entree.sampleRate || 22050;
-    } else {
-      await this.#charger(voixId);
-      sr = this.#cfg.audio?.sample_rate || 22050;
-    }
-
-    // 3. Assemblage / synthèse phrase par phrase (synthèse uniquement pour les non-cachées).
-    const cat = await getCatalogue();
-    const voixCat = cat.voix.find((v) => v.id === voixId);
-    const blocs = [], segments = [];
-    let n = 0;
-    for (let i = 0; i < phrases.length; i++) {
-      const p = phrases[i];
-      onProgress?.(i, phrases.length, toutEnCache
-        ? t('voix.hd.cache', { i: i + 1, n: phrases.length })
-        : t('voix.hd.synthesePhrase', { i: i + 1, n: phrases.length }));
-      let son;
-      if (p.type !== 'parle') {
-        son = new Float32Array(Math.round((sr * p.texte.length) / (cpsFrappe * vitesse)));
-      } else if (enCache[i].entree) {
-        son = enCache[i].entree.samples;
-      } else {
-        const r = await this.#appel({ type: 'synth', texte: p.texte, vitesse, speakerId: voixCat?.speakerId });
-        son = r.samples.length ? r.samples : new Float32Array(Math.round(sr * 0.3));
-        setPhrase(enCache[i].id, son, sr).catch(() => {});
+    return this.#programmer(async (verifier) => {
+      onProgress?.(0, 1, t('voix.hd.chargement'));
+      // Connaître la fréquence de la première phrase pour dater aussi les commandes qui la précèdent.
+      const premiere = phrases.find((p) => p.type === 'parle');
+      const premier = premiere ? await this.#phrase(premiere.texte, voixId, vitesse, verifier) : null;
+      const sr = premier?.sampleRate || 22050;
+      let n = 0, crete = 0;
+      const blocs = [], segments = [];
+      for (let i = 0; i < phrases.length; i++) {
+        verifier();
+        const p = phrases[i];
+        onProgress?.(i, phrases.length, t('voix.hd.synthesePhrase', { i: i + 1, n: phrases.length }));
+        const debut = n;
+        if (p.type === 'parle') {
+          const entree = p === premiere ? premier : await this.#phrase(p.texte, voixId, vitesse, verifier);
+          if (entree.sampleRate !== sr) throw new Error(t('voix.hd.err.corrompu', { fichier: voixId }));
+          blocs.push([n, entree.samples]); n += entree.samples.length;
+          crete = Math.max(crete, entree.peak); // Même gain global avant/après le traitement local.
+        } else n += Math.round((sr * p.texte.length) / (cpsFrappe * vitesse));
+        const speechEndMs = Math.round(n * 1000 / sr);
+        const suite = phrases[i + 1], paragraphe = suite && /\n/.test(texte.slice(p.end, suite.start));
+        n += Math.round(sr * (suite ? (paragraphe ? PAUSE_PARAGRAPHE : PAUSE_PHRASE) : 0.15) / Math.max(0.5, vitesse));
+        segments.push({ texte: p.texte, type: p.type, debutMs: Math.round(debut * 1000 / sr), speechEndMs, finMs: Math.round(n * 1000 / sr) });
       }
-      const suite = phrases[i + 1], paragraphe = suite && /\n/.test(texte.slice(p.end, suite.start));
-      const silence = new Float32Array(Math.round(sr * (suite ? (paragraphe ? PAUSE_PARAGRAPHE : PAUSE_PHRASE) : 0.15) / Math.max(0.5, vitesse)));
-      const debut = n;
-      blocs.push(son, silence); n += son.length + silence.length;
-      segments.push({ texte: p.texte, type: p.type, debutMs: Math.round((debut / sr) * 1000), finMs: Math.round((n / sr) * 1000) });
-    }
-
-    // 4. Normalisation douce.
-    const samples = new Float32Array(n);
-    let pos = 0, crete = 0;
-    for (const b of blocs) { samples.set(b, pos); pos += b.length; }
-    for (let i = 0; i < n; i++) { const a = Math.abs(samples[i]); if (a > crete) crete = a; }
-    if (crete > 0.001) { const g = Math.min(4, 0.9 / crete); for (let i = 0; i < n; i++) samples[i] *= g; }
-    onProgress?.(phrases.length, phrases.length, t('voix.hd.pret'));
-    return { samples, sampleRate: sr, segments };
+      const samples = new Float32Array(n), gain = crete > 0.001 ? Math.min(4, 0.9 / crete) : 1;
+      for (const [debut, son] of blocs) {
+        if (gain === 1) samples.set(son, debut);
+        else for (let i = 0; i < son.length; i++) samples[debut + i] = son[i] * gain;
+      }
+      onProgress?.(phrases.length, phrases.length, t('voix.hd.pret'));
+      return { samples, sampleRate: sr, segments };
+    }, signal, true);
   }
 
   speak() { throw new Error('La voix Lectura HD passe par synthesize().'); }
   pause() {}
   resume() {}
-  /** Libère le modèle (≈ 150 Mo de mémoire). */
-  stop() {
+  #liberer(err = new Error(t('voix.hd.annule'))) {
     this.#worker?.terminate();
     this.#worker = null; this.#voixChargee = null; this.#cfg = null;
-    for (const a of this.#attente.values()) a.reject(new Error(t('voix.hd.annule')));
+    for (const a of this.#attente.values()) a.reject(err);
     this.#attente.clear();
   }
+  stop() { this.#generation++; this.#liberer(); }
 }

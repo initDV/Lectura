@@ -2,6 +2,7 @@
 // piper-worker.js : synthèse Piper (VITS) hors du fil principal. onnxruntime-web (MIT) est chargé depuis
 // notre propre origine (models/ort/), jamais depuis un CDN. La phonétisation est faite par g2p_fr.js (maison).
 import { phonemiser, phonemesEnIds } from './g2p_fr.js';
+import { phrasePiper } from './question-pitch.js';
 
 let ort = null, session = null, config = null;
 
@@ -14,9 +15,9 @@ async function init({ ortUrl, wasmBase, modele, cfg }) {
   session = await ort.InferenceSession.create(new Uint8Array(modele), { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
 }
 
-async function synth({ texte, vitesse, speakerId }) {
+async function synth({ texte, vitesse, speakerId, prosodie }) {
   const phonemes = phonemiser(texte);
-  if (!phonemes) return { samples: new Float32Array(0), phonemes };
+  if (!phonemes) return { samples: new Float32Array(0), phonemes, peak: 0 };
   const ids = phonemesEnIds(phonemes, config.phoneme_id_map);
   const inf = config.inference || {};
   const entrees = {
@@ -30,7 +31,11 @@ async function synth({ texte, vitesse, speakerId }) {
   }
   const sortie = await session.run(entrees);
   const t = sortie.output || Object.values(sortie)[0];
-  return { samples: new Float32Array(t.data), phonemes };
+  const samples = new Float32Array(t.data);
+  let peak = 0;
+  for (const x of samples) peak = Math.max(peak, Math.abs(x));
+  if (!Number.isFinite(peak)) throw new Error('Signal vocal non fini.');
+  return { samples: prosodie ? phrasePiper(samples, texte, config.audio?.sample_rate || 22050, vitesse, peak) : samples, phonemes, peak };
 }
 
 self.onmessage = async (e) => {

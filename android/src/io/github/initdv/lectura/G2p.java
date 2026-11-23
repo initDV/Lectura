@@ -25,7 +25,7 @@ final class G2p {
         "gouvernement environnement abonnement équipement logement jugement engagement changement chargement développement fonctionnement " +
         "comportement département appartement règlement sentiment testament monument tourment ciment aliment").split(" ")));
     private static final Set<String> SIGLE_NON=Set.of("non","oui","eau","ami","bon","mal","cas","vie","fin","nom","mot","peu","pas","sur","par","air","feu","mur","fil","clé","vol","jeu","loi","roi");
-    private static final Map<String,String> ELIDE=Map.ofEntries(Map.entry("l","l"),Map.entry("d","d"),Map.entry("j","ʒ"),Map.entry("n","n"),Map.entry("s","s"),Map.entry("m","m"),Map.entry("t","t"),Map.entry("c","s"),Map.entry("qu","k"),Map.entry("jusqu","ʒysk"),Map.entry("lorsqu","lɔʁsk"),Map.entry("puisqu","pyisk"),Map.entry("quelqu","kɛlk"));
+    private static final Map<String,String> ELIDE=Map.ofEntries(Map.entry("l","l"),Map.entry("d","d"),Map.entry("j","ʒ"),Map.entry("n","n"),Map.entry("s","s"),Map.entry("m","m"),Map.entry("t","t"),Map.entry("c","s"),Map.entry("qu","k"),Map.entry("jusqu","ʒysk"),Map.entry("lorsqu","lɔʁsk"),Map.entry("puisqu","pɥisk"),Map.entry("quelqu","kɛlk"));
     private static final Map<String,Pattern> PATTERNS=new ConcurrentHashMap<>();
     private static final String[] UNIT={"zéro","un","deux","trois","quatre","cinq","six","sept","huit","neuf","dix","onze","douze","treize","quatorze","quinze","seize"};
     private static final String[] TENS={"","dix","vingt","trente","quarante","cinquante","soixante","soixante","quatre-vingt","quatre-vingt"};
@@ -130,13 +130,27 @@ final class G2p {
     private static String accent(String p){int k=-1;for(int i=p.length()-1;i>=0;i--)if(has(PHON_VOY,p.charAt(i))&&(p.charAt(i)!='ə'||k<0)){k=i;if(p.charAt(i)!='ə')break;}
         return k<0?p:p.substring(0,k)+"ˈ"+p.substring(k);}
     String word(String raw){String m=raw.toLowerCase(Locale.ROOT);boolean clitic=clitics.contains(m);
-        if(lex.has(m))return clitic?lex.optString(m):accent(lex.optString(m));
+        String known=lex.optString(m,lex.optString(m.replace("oe","œ")));
+        if(!known.isEmpty())return clitic?known:accent(known);
         boolean acronym=raw.length()>1&&raw.equals(raw.toUpperCase(Locale.ROOT))&&re("[A-Z]",raw)&&(!re("[aeiouy]",m)?raw.length()<=6:raw.length()<=3&&!SIGLE_NON.contains(m)&&!clitic);
         if(acronym||m.length()==1&&!"aày".contains(m)||m.length()>1&&!re("[aeiouyàâäéèêëîïôöùûüœ]",m)){
             List<String> s=new ArrayList<>();for(int i=0;i<m.length();i++){String l=letters.optString(m.substring(i,i+1));if(!l.isEmpty())s.add(accent(l));}return String.join(" ",s);
         }
         String p=caduc(rules(m));return clitic?p:accent(p);
     }
+    // Mêmes cas sûrs que le G2P Piper Web ; laisser le cas ambigu au lexique courant.
+    private static String context(String word,String earlier,String before,String after,String next){
+        if(word.equals("fils")&&(re("^(électriques?|métalliques?)$",after)||
+            after.equals("de")&&re("^(cuivre|coton|soie|laine|fer|nylon)$",next)||after.equals("du")&&re("^c[âa]ble$",next)))return "fil";
+        if(word.equals("couvent")&&!re("^(ils|elles)$",earlier)&&re("^(le|un|du|au|ce|son|mon|ton|notre|votre|leur)$",before))return "kuvɑ̃";
+        if(word.equals("président")&&re("^(ils|elles)$",before))return "pʁezid";
+        return null;
+    }
+    private static boolean liaison(String next){
+        return next.equals("yeux")||re("^hommes?$",next)||
+            re("^[aeiouyhàâéèêîôûœ]",next)&&!re("^(h[aiou]|onze|oui|y[aeo]|héros$)",next);
+    }
+    private static String token(List<String> sequence,int i){return i<0||i>=sequence.size()?"":sequence.get(i).toLowerCase(Locale.ROOT);}
     String phrase(String source){
         String s=Normalizer.normalize(source,Normalizer.Form.NFC).replace('’','\'').replace('`','\'')
             .replaceAll("[«»“”\"()\\[\\]{}]"," ").replaceAll("\\.{3}|…",".").replaceAll("(?i)aujourd'hui","aujourdhui");
@@ -148,17 +162,16 @@ final class G2p {
             String word=tokens.get(i),lower=word.toLowerCase(Locale.ROOT),bare=word.replaceFirst("'$","");
             if(word.length()==1&&has(".,;:!?",word.charAt(0))){if(!out.isEmpty()){int k=out.size()-1;out.set(k,out.get(k).replaceFirst(" $","")+word+" ");}continue;}
             if(lower.endsWith("'")&&ELIDE.containsKey(cut(lower,1))){out.add(ELIDE.get(cut(lower,1)));continue;}
-            String ph=word(bare);if(tiret.contains(lower))ph+="-";
-            if(liaisons.has(lower)&&i+1<tokens.size()){
-                String next=tokens.get(i+1).toLowerCase(Locale.ROOT);
-                if(re("^[aeiouyhàâéèêîôûœ]",next)&&!re("^(h[aiou]|onze|oui|y[aeo])",next))ph+=liaisons.optString(lower);
-            }out.add(ph+" ");
+            String variant=context(lower,token(tokens,i-2),token(tokens,i-1),token(tokens,i+1),token(tokens,i+2));
+            String ph=variant==null?word(bare):accent(variant);if(tiret.contains(lower))ph+="-";
+            if(liaisons.has(lower)&&liaison(token(tokens,i+1)))ph+=liaisons.optString(lower);
+            out.add(ph+" ");
         }
-        return String.join("",out).trim().replaceAll("\\s+"," ").replace('g','ɡ').replace('ɥ','y').replace("ɲ","nj");
+        return String.join("",out).trim().replaceAll("\\s+"," ").replace('g','ɡ').replace("ɲ","nj");
     }
     static long[] ids(String p,JSONObject table){
         List<Long> out=new ArrayList<>();JSONArray pad=array(table,"_");append(out,array(table,"^"));append(out,pad);
-        Normalizer.normalize(p,Normalizer.Form.NFD).codePoints().forEach(c->{JSONArray a=table.optJSONArray(new String(Character.toChars(c)));if(a!=null){append(out,a);append(out,pad);}});
+        Normalizer.normalize(p,Normalizer.Form.NFD).codePoints().forEach(c->{JSONArray a=table.optJSONArray(new String(Character.toChars(c)));if(a==null&&c=='ɥ')a=table.optJSONArray("y");if(a!=null){append(out,a);append(out,pad);}});
         append(out,array(table,"$"));long[] result=new long[out.size()];for(int i=0;i<result.length;i++)result[i]=out.get(i);return result;
     }
     private static void append(List<Long> a,JSONArray v){for(int i=0;i<v.length();i++)a.add(v.optLong(i));}

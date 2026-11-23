@@ -35,6 +35,7 @@ import static io.github.initdv.lectura.Refs.*;
 final class Hd implements AutoCloseable {
     private static final String BASE="https://initdv.github.io/Lectura/models/";
     private static final long LIMIT=150L*1024*1024,PHRASE_LIMIT=80L*1024*1024;
+    private static final int WARM_CHARS=320, PIPER_WARM_PHRASES=3;
     final List<JSONObject> voices=new ArrayList<>();
     private final File models,phrases,whole;
     private final G2p g2p;
@@ -186,7 +187,7 @@ final class Hd implements AutoCloseable {
         float[] prev=l1.put(key,pcm);l1Bytes+=4L*(pcm.length-(prev==null?0:prev.length));while(l1Bytes>8*1024*1024&&l1.size()>1){String first=l1.keySet().iterator().next();l1Bytes-=4L*l1.remove(first).length;}}
     private float[] phrase(JSONObject v,String text,JSONObject config)throws Exception {
         boolean estelle=pack(v)==VoicePacks.ESTELLE;
-        String id=key("SHA-1",(estelle?"phrase-mimi-4|":"phrase-3|")+v.optString("id")+"|"+text);float[] out=l1.get(id);if(out!=null)return out;
+        String id=key("SHA-1",(estelle?"phrase-mimi-4|":"phrase-4|")+v.optString("id")+"|"+text);float[] out=l1.get(id);if(out!=null)return out;
         File f=new File(phrases,id+".f32");long bytes=f.length();
         int stride=estelle?Mimi.SAMPLES_PER_LATENT*4:4,limit=estelle?Mimi.MAX_FRAMES*stride:64*1024*1024;
         if(bytes>0&&bytes%stride==0&&bytes<=limit){try(InputStream in=new FileInputStream(f)){
@@ -204,6 +205,7 @@ final class Hd implements AutoCloseable {
         for(float sample:out)if(!Float.isFinite(sample))throw new IOException("La voix a produit un signal non fini.");
         if(out.length*4L>64*1024*1024)throw new IOException("Phrase trop longue pour la synthèse Lectura HD.");
         remember(id,out);
+        Pcm.interrupted(); // A finished fragment can be reused; no I/O or further inference after cancellation.
         File part=new File(phrases,f.getName()+".part");
         try {
             try(FileOutputStream data=new FileOutputStream(part)){ByteBuffer b=ByteBuffer.allocate(16384).order(ByteOrder.LITTLE_ENDIAN);for(float x:out){b.putFloat(x);if(!b.hasRemaining()){data.write(b.array());b.clear();}}
@@ -231,22 +233,29 @@ final class Hd implements AutoCloseable {
     void preload(String id)throws Exception {JSONObject v=voice(id);if(installed(v))ensureLoaded(v);}
     void prewarm(String text,String id)throws Exception {
         JSONObject v=voice(id);if(!installed(v))return;
-        JSONObject config=pack(v)==null?Library.readJson(cfg(v)):null;int n=0;
+        boolean piper=pack(v)==null;
+        JSONObject config=piper?Library.readJson(cfg(v)):null;int n=0,chars=0;
         for(SpeechPlan.Fragment p:SpeechPlan.plan(text,"fr",object(pronunciation,"fr"))){
-            Pcm.interrupted();if(!p.spoken.isEmpty()){phrase(v,p.spoken,config);if(++n>=1)break;}
+            Pcm.interrupted();
+            if(p.spoken.isEmpty())continue;
+            if((chars+=p.spoken.length())>WARM_CHARS)break;
+            phrase(v,p.spoken,config);
+            if(++n>=(piper?PIPER_WARM_PHRASES:1))break;
         }
     }
     Synthesis synth(String text,String id,int cps,Progress progress)throws Exception {
         if(text.length()>SpeechPlan.MAX_TEXT)throw new IOException("Texte trop long pour la synthèse.");
         JSONObject v=voice(id);if(!installed(v))throw new IOException("Voix HD non installée.");
         VoicePacks.Spec spec=pack(v);boolean estelle=spec==VoicePacks.ESTELLE;
-        String key=key("SHA-256",(estelle?"rendu-mimi-4|":"rendu-3|")+id+"|"+cps+"|"+text);
+        String key=key("SHA-256",(estelle?"rendu-mimi-5|":"rendu-4|")+id+"|"+cps+"|"+text);
         File wav=new File(whole,key+".wav"),json=new File(whole,key+".json");
         JSONObject config=spec==null?Library.readJson(cfg(v)):null;
         int rate=estelle?Pocket.RATE:config==null?24000:object(config,"audio").optInt("sample_rate",22050);
         List<SpeechPlan.Fragment> plan=SpeechPlan.plan(text,"fr",object(pronunciation,"fr"));
         Synthesis saved=VoiceRender.cached(wav,json,plan,rate,progress);if(saved!=null)return saved;
-        Synthesis result=VoiceRender.render(whole,wav,json,plan,rate,cps,estelle,w->phrase(v,w,config),progress);
+        Synthesis result=VoiceRender.render(whole,wav,json,plan,rate,cps,
+            estelle?VoiceRender.Profile.ESTELLE:id.equals("siwis")?VoiceRender.Profile.SIWIS:VoiceRender.Profile.STANDARD,
+            w->phrase(v,w,config),progress);
         prune(whole,".wav",6,Pcm.MAX_BYTES);return result;
     }
     @Override public void close(){

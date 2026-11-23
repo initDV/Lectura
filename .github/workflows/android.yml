@@ -124,8 +124,8 @@ jobs:
         with:
           name: Lectura-Android-API31+
           github-token: ${{ github.token }}
-          # Default to the last delivered v28, signed with the permanent certificate.
-          run-id: ${{ inputs.predecessor_run || '44352577013' }}
+          # v1.0.0 (code 32), signed with the permanent certificate.
+          run-id: ${{ inputs.predecessor_run || '45220486453' }}
           path: ${{ runner.temp }}/lectura-predecessor
       - name: Comparer les certificats de signature
         id: certificates
