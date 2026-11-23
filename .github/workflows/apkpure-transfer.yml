@@ -1,0 +1,57 @@
+name: Lectura — remettre le dossier vérifié à l’espace de travail
+
+on:
+  push:
+    branches: ['arena/d2229c4f-lectura']
+    paths: ['.github/workflows/apkpure-transfer.yml']
+  workflow_dispatch:
+    inputs:
+      artifact:
+        description: 'ID de l’archive CI de Lectura'
+        required: true
+        type: string
+      endpoint:
+        description: 'Destination éphémère de l’espace de travail, avec l’empreinte attendue'
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  check:
+    if: github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'Le transfert ne s’exécute que sur demande explicite, sans modifier le dépôt.'
+  transfer:
+    if: github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Récupérer l’archive en lecture seule et vérifier son empreinte
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT: ${{ inputs.artifact }}
+          ENDPOINT: ${{ inputs.endpoint }}
+        run: |
+          set -euo pipefail
+          [[ $ARTIFACT =~ ^[0-9]+$ ]]
+          [[ $ENDPOINT =~ ^https://4295-[A-Za-z0-9-]+\.e2b\.app/lectura-import/([0-9a-f]{64})$ ]]
+          sha=${BASH_REMATCH[1]}
+          api="repos/initDV/Lectura/actions/artifacts/$ARTIFACT"
+          size=$(gh api "$api" | jq -er --arg digest "sha256:$sha" '
+            select((.name == "Lectura-APKPure-v1.0.0" or .name == "privacy-inventaire" or .name == "Diagnostic-APKPure")
+              and .digest == $digest and .expired == false and .size_in_bytes > 0 and .size_in_bytes <= 15728640
+              and .workflow_run.head_branch == "arena/d2229c4f-lectura") | .size_in_bytes')
+          archive="$RUNNER_TEMP/lectura-ci-artifact.zip"
+          gh api "$api/zip" > "$archive"
+          [[ $(wc -c < "$archive") == "$size" ]]
+          printf '%s  %s\n' "$sha" "$archive" | sha256sum -c -
+          if ! curl --proto '=https' --fail --silent --show-error --max-time 40 --retry 2 \
+              --upload-file "$archive" -H 'Content-Type: application/zip' -H 'Expect:' "$ENDPOINT"; then
+            echo '::error title=Transfert vers l’espace de travail::Le service éphémère n’a pas accepté l’archive.'
+            exit 1
+          fi
+          echo '::notice title=Archive transmise::Le ZIP a été intégralement vérifié et remis à l’espace de travail.'
