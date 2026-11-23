@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.net.Uri;
 import android.view.View;
 import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.MediaController;
 import android.widget.TextView;
@@ -141,28 +142,78 @@ final class ExportUi implements AutoCloseable {
         });
     }
     private void share(Uri uri,String name){if(closed||!a.isForeground)return;try{SharedMedia.share(a,uri,name);}catch(Exception e){a.report("partage",e);}}
-    void library(){
-        LinearLayout r=a.sheet(t("mv.titre"));try{
-            var files=movies.list();if(files.isEmpty()){u.add(r,u.small(t("mv.vide")),0);return;}
+    void library(){library("tous");}
+    private void library(String filter){
+        LinearLayout r=a.sheet(t("mv.titre"));
+        u.add(r,u.small(t("mv.filtre")),0);
+        LinearLayout filters=u.row();u.add(r,filters,4);
+        for(String f:new String[]{"tous","audio","video"}){
+            if(filters.getChildCount()!=0)u.gap(filters,6);
+            u.grow(filters,u.button(t("mv."+f),null,filter.equals(f),false,()->library(f)));
+        }
+        try{
+            var files=movies.list();if(files.isEmpty()){u.add(r,u.small(t("mv.vide")),8);return;}
             DateTimeFormatter time=DateTimeFormatter.ofPattern(a.db.locale().equals("en")?"MM/dd/yyyy, HH:mm:ss":"dd/MM/yyyy HH:mm:ss").withZone(ZoneId.systemDefault());
+            int visible=0;
             for(Movies.Entry e:files){
+                if(!filter.equals("tous")&&e.audio()!=filter.equals("audio"))continue;
+                visible++;
                 LinearLayout panel=u.col();panel.setBackground(u.shape(0,6,0xff333333,1));u.pad(panel,9,9);u.add(r,panel,6);
                 u.add(panel,u.text(e.title,15,u.text,700),0);u.add(panel,u.small(time.format(Instant.parse(e.date))+" · "+e.format.toUpperCase(Locale.ROOT)+" · "+Refs.size(e.file.length())),3);
                 LinearLayout row=u.row();u.add(panel,row,6);
-                addAction(row,t("mv.lire"),()->view(e));u.gap(row,6);
-                addAction(row,t("mv.partager"),()->executor.submit(()->{try{Uri uri=SharedMedia.reserveShare(a,e.file,e.name());a.handler.post(()->share(uri,e.name()));}catch(Exception x){a.handler.post(()->a.report("partage",x));}}));u.gap(row,6);
-                addAction(row,t("mv.supprimer"),()->{movies.delete(e);a.note(t("mv.supprimee"),"ok");library();});
+                addAction(row,t("mv.lire"),()->view(e,filter));u.gap(row,6);
+                addAction(row,t("mv.partager"),()->copy(e,true));u.gap(row,6);
+                addAction(row,t("mv.enregistrer"),()->copy(e,false));
+                LinearLayout edit=u.row();u.add(panel,edit,6);
+                addAction(edit,t("mv.renommer"),()->rename(e,filter));u.gap(edit,6);
+                addAction(edit,t("mv.supprimer"),()->confirmDelete(e,filter));
             }
-        }catch(Exception e){a.report("mes-videos",e);}
+            if(visible==0)u.add(r,u.small(t("mv.filtreVide")),8);
+        }catch(Exception e){a.report("mediatheque",e);}
     }
-    private void view(Movies.Entry entry){
+    private void copy(Movies.Entry entry,boolean sharing){
+        executor.submit(()->{
+            try{
+                String name=entry.name();
+                if(sharing){Uri uri=SharedMedia.reserveShare(a,entry.file,name);a.handler.post(()->share(uri,name));}
+                else{SharedMedia.publish(a,entry.file,name);a.handler.post(()->a.note(t("mv.enregistre"),"ok"));}
+            }catch(Exception e){a.handler.post(()->a.report("mediatheque",e));}
+        });
+    }
+    private void confirmDelete(Movies.Entry entry,String filter){
+        LinearLayout r=a.sheet(t("mv.supprimer"));u.add(r,u.p(t("mv.confirmer","titre",entry.title)),8);
+        LinearLayout actions=u.row();u.add(r,actions,8);
+        addAction(actions,t("commun.annuler"),()->library(filter));u.gap(actions,6);
+        addAction(actions,t("commun.oui"),()->{
+            try{movies.delete(entry);a.note(t("mv.supprimee"),"ok");}
+            catch(IOException e){a.report("mediatheque",e);}
+            library(filter);
+        });
+        a.backModal=()->library(filter);
+    }
+    private void rename(Movies.Entry entry,String filter){
+        LinearLayout r=a.sheet(t("mv.renommer"));
+        EditText name=u.field(entry.title,t("mv.nom"),false,120,s->{});name.setContentDescription(t("mv.nom"));u.add(r,name,8);
+        LinearLayout actions=u.row();u.add(r,actions,8);
+        addAction(actions,t("commun.annuler"),()->library(filter));u.gap(actions,6);
+        addAction(actions,t("editeur.enregistrer"),()->{
+            String value=name.getText().toString().trim();
+            if(value.isEmpty()){name.setError(t("mv.nomVide"));return;}
+            try{movies.rename(entry,value);library(filter);}
+            catch(IOException e){a.report("mediatheque",e);}
+        });
+        a.backModal=()->library(filter);
+    }
+    private void view(Movies.Entry entry,String filter){
         if(!entry.file.isFile()){a.note(t("mv.introuvable"),"warn");return;}
         LinearLayout r=a.sheet(t("mv.lecteur"));VideoView video=new VideoView(a);showing=video;video.setBackgroundColor(0xff000000);
-        r.addView(video,u.lp(Ui.MATCH,entry.format.equals("mp3")?100:Math.min(a.viewportHeight()*.7f,450)));
+        u.add(r,u.p(entry.title),4);video.setContentDescription(entry.title);
+        r.addView(video,u.lp(Ui.MATCH,entry.audio()?100:Math.min(a.viewportHeight()*.7f,450)));
         MediaController controller=new MediaController(a);controller.setAnchorView(video);video.setMediaController(controller);
         video.setOnErrorListener((player,error,extra)->{a.report("lecture-video",new IOException(error+" / "+extra));return true;});
         video.setOnPreparedListener(player->{video.setBackgroundColor(0);video.start();});video.setVideoPath(entry.file.getPath());
-        u.add(r,u.button(t("commun.fermer"),null,a::dismiss),8);a.modalCleanup=()->{controller.hide();video.stopPlayback();if(showing==video)showing=null;};
+        u.add(r,u.button(t("mv.retour"),null,()->library(filter)),8);
+        a.backModal=()->library(filter);a.modalCleanup=()->{controller.hide();video.stopPlayback();if(showing==video)showing=null;};
     }
     void background(){if(active())stop();if(showing!=null&&showing.isPlaying())showing.pause();}
     @Override public void close(){closed=true;abandon();executor.shutdown();if(mediaToOffer!=null){mediaToOffer.delete();mediaToOffer=null;}}

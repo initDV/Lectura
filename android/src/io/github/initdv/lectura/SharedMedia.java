@@ -89,7 +89,14 @@ final class Movies {
     static final class Entry {
         final File file,json;final String title,date,format;
         Entry(File f,File document,JSONObject meta){file=f;json=document;title=meta.optString("titre");date=meta.optString("date");format=SharedMedia.extension(file.getName());}
-        String name(){return title+"."+format;}
+        boolean audio(){return format.equals("mp3");}
+        String name(){String base=Project.ascii(title);return (base.isEmpty()?"projet":base)+"."+format;}
+    }
+    synchronized void rename(Entry e,String title)throws IOException{
+        title=title.replaceAll("\\p{Cc}","").trim();
+        if(title.isEmpty()||title.length()>120)throw new IOException("Nom d’export invalide.");
+        if(!e.file.isFile()||!e.json.isFile())throw new FileNotFoundException("Export introuvable.");
+        JSONObject meta=Library.readJson(e.json);put(meta,"titre",title);Library.writeJson(e.json,meta);
     }
     synchronized List<Entry> list()throws IOException{
         List<Entry> out=new ArrayList<>();File[] fs=dir.listFiles((d,n)->n.endsWith(".json"));if(fs==null)return out;
@@ -98,12 +105,15 @@ final class Movies {
         out.sort(Comparator.comparing((Entry e)->e.date).reversed());return out;
     }
     synchronized void save(File video,String name)throws IOException {
-        if(video.length()>MAX)throw new IOException("Média trop volumineux pour Mes vidéos.");
+        if(video.length()>MAX)throw new IOException("Média trop volumineux pour la médiathèque.");
         String id=UUID.randomUUID().toString(),ext=SharedMedia.extension(name);if(!ext.matches("mp4|webm|mp3"))throw new IOException("Format impossible à conserver.");
         File blob=new File(dir,id+"."+ext),json=new File(dir,id+".json");JSONObject meta=new JSONObject();
         put(meta,"titre",Project.ascii(name.substring(0,name.length()-ext.length()-1)));put(meta,"date",Instant.now().toString());put(meta,"format",ext);
         try{Files.copy(video.toPath(),blob.toPath(),StandardCopyOption.REPLACE_EXISTING);Library.writeJson(json,meta);}catch(IOException e){blob.delete();throw e;}
         long total=0;int n=0;for(Entry e:list()){if((total+=e.file.length())>MAX||n++>=20)delete(e);}
     }
-    synchronized void delete(Entry e){e.json.delete();e.file.delete();}
+    // Les copies MediaStore et les URI déjà partagées n’appartiennent pas à cette bibliothèque.
+    synchronized void delete(Entry e)throws IOException{
+        Files.deleteIfExists(e.file.toPath());new android.util.AtomicFile(e.json).delete();
+    }
 }

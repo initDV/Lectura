@@ -51,6 +51,31 @@ export const dbPut = (m, cle, v) => tx(m, 'readwrite', (s, mem) => (s ? promesse
 export const dbDel = (m, cle) => tx(m, 'readwrite', (s, mem) => (s ? promesse(s.delete(cle)) : void mem.delete(cle)));
 export const dbAll = (m) => tx(m, 'readonly', (s, mem) => (s ? promesse(s.getAll()) : [...mem.values()]));
 
+/** Relit puis modifie une entrée atomiquement. undefined : aucun changement ; null : supprimer. */
+export async function dbUpdate(m, cle, modifier) {
+  const db = await ouvrir();
+  if (!db) {
+    const mem = memoire[m], valeur = modifier(mem.get(cle));
+    if (valeur === null) mem.delete(cle);
+    else if (valeur !== undefined) mem.set(cle, valeur);
+    return valeur;
+  }
+  return new Promise((res, rej) => {
+    const transaction = db.transaction(m, 'readwrite'), magasin = transaction.objectStore(m);
+    let valeur, erreur;
+    transaction.oncomplete = () => res(valeur);
+    transaction.onabort = () => rej(erreur || transaction.error);
+    const lecture = magasin.get(cle);
+    lecture.onsuccess = () => {
+      try {
+        valeur = modifier(lecture.result);
+        if (valeur === null) magasin.delete(cle);
+        else if (valeur !== undefined) magasin.put(valeur, cle);
+      } catch (e) { erreur = e; transaction.abort(); }
+    };
+  });
+}
+
 /** Réglages complets ; crée l'identifiant d'installation à la première visite. */
 export async function loadSettings() {
   const s = { ...DEFAUTS, ...((await dbGet('settings', 'main')) || {}) };

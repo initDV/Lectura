@@ -5,7 +5,7 @@ import { t, taille } from '../modules/i18n.js';
 import { downloadBlob } from '../modules/capture.js';
 import { videoVersMp3 } from '../modules/audio-export.js';
 import { remuxerMp4 } from '../modules/mp4-remux.js';
-import { sauverVideo } from '../modules/video-store.js';
+import { sauverMedia } from '../modules/video-store.js';
 import { notify, report } from '../modules/errors.js';
 
 const peutPartager = () => typeof navigator !== 'undefined' && typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
@@ -34,8 +34,8 @@ export function ouvrirMenuTelechargement({ videoBlob, mime, fileBase }) {
 
   const sauverSiDemande = async (blob, format) => {
     if (!garder.checked) return;
-    try { await sauverVideo({ blob, titre: fileBase, format }); }
-    catch (err) { report('sauver-video', err); }
+    try { await sauverMedia({ blob, titre: fileBase, format }); }
+    catch (err) { report('mediatheque', err); }
   };
 
   const preparerMp4 = async () => {
@@ -79,6 +79,10 @@ export function ouvrirMenuTelechargement({ videoBlob, mime, fileBase }) {
   };
 
   const telechargerWebm = async (fermer) => { await sauverSiDemande(videoBlob, 'webm'); downloadBlob(videoBlob, `${fileBase}.webm`); fermer(); };
+  const partagerWebm = async (fermer) => {
+    await sauverSiDemande(videoBlob, 'webm');
+    await partager(videoBlob, `${fileBase}.webm`, 'video/webm', fermer);
+  };
 
   const genererMp3 = async (fermer, pourPartage) => {
     notify(t('dl.mp3.encours'), 'info', 3000);
@@ -114,7 +118,7 @@ export function ouvrirMenuTelechargement({ videoBlob, mime, fileBase }) {
       ? ligne({ nom: 'MP4', sous: t('dl.formatVideo'), tailleTxt: tailleVideo, actif: true, onTelecharger: () => telechargerMp4(fermer), onPartager: () => partagerMp4(fermer) })
       : ligne({ nom: 'MP4', sous: t('dl.mp4.indispo'), actif: false }),
     !estMp4
-      ? ligne({ nom: 'WebM', sous: t('dl.formatVideo'), tailleTxt: tailleVideo, actif: true, onTelecharger: () => telechargerWebm(fermer), onPartager: () => partager(videoBlob, `${fileBase}.webm`, 'video/webm', fermer) })
+      ? ligne({ nom: 'WebM', sous: t('dl.formatVideo'), tailleTxt: tailleVideo, actif: true, onTelecharger: () => telechargerWebm(fermer), onPartager: () => partagerWebm(fermer) })
       : ligne({ nom: 'WebM', sous: t('dl.webm.indispo'), actif: false }),
     ligne({ nom: 'MP3', sous: t('dl.mp3.genere'), actif: true, onTelecharger: () => genererMp3(fermer, false), onPartager: () => genererMp3(fermer, true) }),
   ]);

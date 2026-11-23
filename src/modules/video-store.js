@@ -1,53 +1,60 @@
 // @ts-check
-// video-store.js : stockage local (IndexedDB) des vidéos exportées, accessible hors ligne.
-// Réutilise le magasin « blobs » existant avec un préfixe de clé « video- » (pas de migration).
-import { uuid } from './project.js';
-import { dbAll, dbDel, dbGet, dbPut } from './storage.js';
+// Médiathèque privée : conserve les anciens enregistrements et clés « video- » d'IndexedDB.
+import { fileBase, uuid } from './project.js';
+import { dbAll, dbGet, dbPut, dbUpdate } from './storage.js';
+import { t } from './i18n.js';
 
 const PREFIX = 'video-';
-const MAX_VIDEOS = 20;
-const MAX_BYTES = 150 * 1024 * 1024; // 150 Mo
+const MAX_ENTREES = 20, MAX_BYTES = 150 * 1024 * 1024;
+const MIMES = { mp3: 'audio/mpeg', mp4: 'video/mp4', webm: 'video/webm' };
 
-/** @returns {Promise<any[]>} */
-export async function listerVideos() {
-  const toutes = (await dbAll('blobs')) || [];
-  return toutes
-    .filter((x) => x && typeof x === 'object' && x.id && String(x.id).startsWith(PREFIX))
+const idMedia = (id) => typeof id === 'string' && id.startsWith(PREFIX);
+const estMedia = (x) => !!x && idMedia(x.id) && Object.hasOwn(MIMES, x.format) && x.blob instanceof Blob;
+const estEntree = (x, id) => estMedia(x) && x.id === id;
+const typeDe = (format) => format === 'mp3' ? 'audio' : 'video';
+const infos = ({ id, titre, format, blob, date }) => ({ id, titre, format, mime: MIMES[format], taille: blob.size, date, type: typeDe(format) });
+const titreNettoye = (titre) => String(titre ?? '').replace(/\p{Cc}/gu, '').trim().slice(0, 120).trimEnd();
+
+export async function listerMedias(filtre = 'tous') {
+  return (await dbAll('blobs')).filter(estMedia).map(infos)
+    .filter((m) => filtre === 'tous' || m.type === filtre)
     .sort((a, b) => b.date - a.date);
 }
 
-/**
- * Sauvegarde une vidéo.
- * @param {{ blob: Blob, titre: string, format: string }} o
- * @returns {Promise<string>} identifiant de la vidéo sauvegardée
- */
-export async function sauverVideo({ blob, titre, format }) {
+/** Garde le fichier d'export tel quel, sans encodage ni modification de son Blob. */
+export async function sauverMedia({ blob, titre, format }) {
+  if (!Object.hasOwn(MIMES, format) || !(blob instanceof Blob) || blob.size === 0) throw new Error(t('mv.introuvable'));
+  if (blob.size > MAX_BYTES) throw new Error(t('mv.tropGros'));
   const id = PREFIX + uuid();
-  const entree = { id, blob, titre: titre || 'Sans titre', format, mime: blob.type, taille: blob.size, date: Date.now() };
-  await dbPut('blobs', id, entree);
-  await purger();
+  await dbPut('blobs', id, { id, blob, titre: titreNettoye(titre) || t('editeur.sansTitre'), format, mime: MIMES[format], taille: blob.size, date: Date.now() });
+  const liste = await listerMedias();
+  let total = liste.reduce((n, m) => n + m.taille, 0);
+  while (liste.length > MAX_ENTREES || total > MAX_BYTES) {
+    const ancien = liste.pop();
+    total -= ancien.taille;
+    await supprimerMedia(ancien.id);
+  }
   return id;
 }
 
-/** @param {string} id @returns {Promise<Blob|null>} */
-export async function lireVideo(id) {
+export async function lireMedia(id) {
+  if (!idMedia(id)) return null;
   const e = await dbGet('blobs', id);
-  return e && e.blob ? e.blob : null;
+  return estEntree(e, id) ? { ...infos(e), blob: e.blob } : null;
 }
 
-/** @param {string} id */
-export async function supprimerVideo(id) {
-  await dbDel('blobs', id);
+export async function renommerMedia(id, titre) {
+  if (!idMedia(id)) return false;
+  titre = titreNettoye(titre);
+  if (!titre) throw new Error(t('mv.nomVide'));
+  return !!(await dbUpdate('blobs', id, (e) => estEntree(e, id) ? { ...e, titre } : undefined));
 }
 
-async function purger() {
-  const liste = await listerVideos();
-  let total = 0;
-  for (const v of liste) total += v.taille || 0;
-  while (liste.length > MAX_VIDEOS || total > MAX_BYTES) {
-    const vieille = liste.pop();
-    if (!vieille) break;
-    total -= vieille.taille || 0;
-    await dbDel('blobs', vieille.id);
-  }
+export async function supprimerMedia(id) {
+  return idMedia(id) && (await dbUpdate('blobs', id, (e) => estEntree(e, id) ? null : undefined)) === null;
+}
+
+export function fichierMedia(media) {
+  const nom = `${fileBase(media)}.${media.format}`;
+  return new File([media.blob], nom, { type: media.mime });
 }
