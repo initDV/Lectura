@@ -74,11 +74,46 @@ final class Hd implements AutoCloseable {
     private File part(String name){return new File(models,name);}
     private File onnx(JSONObject v){return part(model(v)+".onnx");}
     private File cfg(JSONObject v){return part(model(v)+".onnx.json");}
-    boolean installed(JSONObject v){
-        if(v==null||!available(v))return false;
-        VoicePacks.Spec spec=pack(v);return spec==null?onnx(v).length()>1024*1024&&cfg(v).isFile():packs.installed(spec);
-    }
+    boolean installed(JSONObject v){return v!=null&&available(v)&&modelOnDisk(v);}
     List<JSONObject> installed(){List<JSONObject> out=new ArrayList<>();if(supported())for(JSONObject v:voices)if(installed(v))out.add(v);return out;}
+    /** Fichiers locaux seulement : ni initialisation de moteur, ni accès réseau. */
+    static final class VoiceStorage {
+        final List<String> ids,names;
+        final long installedBytes,partialBytes;
+        VoiceStorage(List<JSONObject> voices,long installedBytes,long partialBytes){
+            List<String> ids=new ArrayList<>(),names=new ArrayList<>();
+            for(JSONObject v:voices){ids.add(v.optString("id"));names.add(v.optString("nom"));}
+            this.ids=List.copyOf(ids);this.names=List.copyOf(names);this.installedBytes=installedBytes;this.partialBytes=partialBytes;
+        }
+    }
+    private boolean modelOnDisk(JSONObject v){
+        VoicePacks.Spec spec=pack(v);
+        return spec==null?onnx(v).length()>1024*1024&&cfg(v).isFile():packs.installed(spec);
+    }
+    private File archiveInProgress(JSONObject v){
+        VoicePacks.Spec spec=pack(v);
+        return spec==null?part(onnx(v).getName()+".part"):packs.partial(spec);
+    }
+    List<VoiceStorage> voiceStorage(){
+        Map<String,List<JSONObject>> groups=new LinkedHashMap<>();
+        for(JSONObject v:voices)groups.computeIfAbsent(engine(v)+":"+model(v),k->new ArrayList<>()).add(v);
+        List<VoiceStorage> out=new ArrayList<>();
+        for(List<JSONObject> group:groups.values()){
+            JSONObject v=group.get(0);VoicePacks.Spec spec=pack(v);
+            boolean installed=modelOnDisk(v);
+            long complete=installed?(spec!=null?spec.installedBytes:onnx(v).length()+cfg(v).length()):0;
+            long partial=archiveInProgress(v).length()+(!installed&&spec==null?cfg(v).length():0);
+            if(complete==0&&partial==0)continue;
+            out.add(new VoiceStorage(group,complete,partial));
+        }
+        return out;
+    }
+    /** À appeler dans la file des opérations vocales, après confirmation. Garde tout modèle installé. */
+    void discardPartial(String id)throws IOException {
+        JSONObject v=voice(id);if(v==null)return;
+        Files.deleteIfExists(archiveInProgress(v).toPath());
+        if(pack(v)==null&&!modelOnDisk(v))Files.deleteIfExists(cfg(v).toPath());
+    }
     private JSONObject deployed(JSONObject v){JSONArray a=catalogue==null?new JSONArray():array(catalogue,"voix");for(int i=0;i<a.length();i++){
         JSONObject entry=a.optJSONObject(i);if(entry!=null&&entry.optString("id").equals(v.optString("id")))return entry;}return new JSONObject();}
     long size(JSONObject v){
@@ -128,7 +163,8 @@ final class Hd implements AutoCloseable {
             HttpURLConnection c=connect(target.getName(),from);try{
                 int status=c.getResponseCode();if(status!=200&&status!=206)throw new IOException("Téléchargement HD : HTTP "+status);
                 if(status==200)from=0;else if(!String.valueOf(c.getHeaderField("Content-Range")).startsWith("bytes "+from+"-"))throw new IOException("Reprise de téléchargement invalide.");
-                byte[] b=new byte[64*1024];long position=from,last=0;
+                if(from>0)progress.update(from,n);
+                byte[] b=new byte[64*1024];long position=from,last=from;
                 try(InputStream in=c.getInputStream();FileOutputStream out=new FileOutputStream(temp,from>0)){
                     for(int k;(k=in.read(b))!=-1;){Pcm.interrupted();if((position+=k)>n){temp.delete();throw new IOException("Modèle HD incomplet ou taille modifiée.");}out.write(b,0,k);
                         if(position-last>=256*1024||position==n){progress.update(position,n);last=position;}}

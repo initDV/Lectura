@@ -3,7 +3,7 @@
 // Contrairement à la voix du système, il produit des échantillons audio : lip-sync réel et export vidéo possibles.
 import { splitSentences, CPS_FRAPPE } from '../timeline.js';
 import { t } from '../i18n.js';
-import { getCatalogue, etatVoix, lire, urlFichier, telecharger, supprimer, toutSupprimer } from './piper-store.js';
+import { getCatalogue, etatVoix, etatStockage, lire, urlFichier, telecharger, supprimer, supprimerPartiel, toutSupprimer } from './piper-store.js';
 import { hashPhrase, getPhrase, setPhrase } from './audio-cache.js';
 
 export const LIMITE_CARACTERES = 12000; // ≈ 14 min d'audio : au-delà, la mémoire d'un téléphone d'entrée de gamme sature
@@ -19,8 +19,14 @@ export class PiperEngine {
     try { return (await etatVoix()).filter((v) => v.installe).map((v) => ({ id: v.id, nom: v.nom })); } catch { return []; }
   }
   etat = etatVoix;
+  stockage = etatStockage;
   download = telecharger;
-  async remove(id) { if (this.#voixChargee === id) this.stop(); await supprimer(id); }
+  removePartial = supprimerPartiel;
+  async remove(id) {
+    await supprimer(id);
+    // La voix en mémoire peut être un autre locuteur du même modèle.
+    if (this.#voixChargee && !(await etatVoix()).some((v) => v.id === this.#voixChargee && v.installe)) this.stop();
+  }
   async removeAll() { this.stop(); await toutSupprimer(); }
 
   #appel(msg, transfert = []) {

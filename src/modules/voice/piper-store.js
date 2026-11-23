@@ -18,9 +18,14 @@ export async function getCatalogue() {
   return catalogue;
 }
 
-/** Fichiers nécessaires à une voix : moteur ONNX + configuration + morceaux du modèle. */
+const modeleDe = (voix) => [{ fichier: voix.config, taille: voix.tailleConfig || 6000 }, ...voix.parts];
+const moteurDe = (cat) => cat.moteur?.fichiers || [];
+const uniques = (fichiers) => [...new Map(fichiers.map((f) => [f.fichier, f])).values()];
+const cleModele = (voix) => JSON.stringify(uniques(modeleDe(voix)).map((f) => f.fichier).sort());
+
+/** Configuration d'abord : une interruption garde des fichiers associés à cette voix. */
 export function fichiersDe(cat, voix) {
-  return [...cat.moteur.fichiers, { fichier: voix.config, taille: voix.tailleConfig || 6000 }, ...voix.parts];
+  return uniques([...modeleDe(voix), ...moteurDe(cat)]);
 }
 export const tailleDe = (cat, voix) => fichiersDe(cat, voix).reduce((a, f) => a + f.taille, 0);
 
@@ -29,16 +34,47 @@ async function ouvrir() {
   return caches.open(CACHE);
 }
 
-/** @returns {Promise<{id:string, nom:string, installe:boolean, taille:number, licence:string, attribution:string}[]>} */
-export async function etatVoix() {
-  const cat = await getCatalogue(), cache = await ouvrir(), out = [];
+/** Inventaire des fichiers conservés, sans télécharger de modèle ni charger ONNX. */
+async function inventaire(cat, cache) {
+  const moteur = uniques(moteurDe(cat));
+  const groupes = new Map();
   for (const v of cat.voix) {
-    let ok = true;
-    for (const f of fichiersDe(cat, v)) if (!(await cache.match(url(f.fichier)))) { ok = false; break; }
-    out.push({ id: v.id, nom: v.nom, installe: ok, taille: tailleDe(cat, v), licence: v.licence, attribution: v.attribution });
+    const cle = cleModele(v);
+    if (!groupes.has(cle)) groupes.set(cle, { fichiers: uniques(modeleDe(v)), voix: [] });
+    groupes.get(cle).voix.push(v);
   }
-  return out;
+  const fichiers = uniques([...moteur, ...[...groupes.values()].flatMap((g) => g.fichiers)]);
+  const presents = new Map();
+  await Promise.all(fichiers.map(async (f) => {
+    const res = await cache.match(url(f.fichier));
+    if (!res) return;
+    const n = res.headers.get('content-length');
+    presents.set(f.fichier, n !== null && /^\d+$/.test(n) ? Number(n) : f.taille);
+  }));
+  const octetsPresents = (liste) => liste.reduce((n, f) => n + (presents.get(f.fichier) || 0), 0);
+  const moteurPret = moteur.every((f) => presents.has(f.fichier));
+  const etats = new Map();
+  const modeles = [];
+  for (const groupe of groupes.values()) {
+    const octets = octetsPresents(groupe.fichiers);
+    const installe = moteurPret && groupe.fichiers.every((f) => presents.has(f.fichier));
+    const partiel = !installe && groupe.fichiers.some((f) => presents.has(f.fichier));
+    const modele = { noms: groupe.voix.map((v) => v.nom), octets, installe, partiel };
+    if (installe || partiel) modeles.push(modele);
+    for (const v of groupe.voix) {
+      const requis = fichiersDe(cat, v);
+      etats.set(v.id, {
+        id: v.id, nom: v.nom, licence: v.licence, attribution: v.attribution, modele,
+        installe, partiel, taille: tailleDe(cat, v),
+        restant: requis.reduce((n, f) => n + (presents.has(f.fichier) ? 0 : f.taille), 0),
+      });
+    }
+  }
+  return { voix: cat.voix.map((v) => etats.get(v.id)), modeles, moteurOctets: octetsPresents(moteur), totalOctets: octetsPresents(fichiers) };
 }
+
+export async function etatStockage() { return inventaire(await getCatalogue(), await ouvrir()); }
+export async function etatVoix() { return (await etatStockage()).voix; }
 
 async function sha256(buf) {
   const h = await crypto.subtle.digest('SHA-256', buf);
@@ -56,6 +92,7 @@ export async function telecharger(id, { onProgress, signal } = {}) {
   try { await navigator.storage?.persist?.(); } catch { /* facultatif */ }
   let fait = 0;
   for (const f of fichiers) {
+    if (signal?.aborted) throw new Error(t('voix.hd.annule'));
     const u = url(f.fichier);
     if (await cache.match(u)) { fait += f.taille; onProgress?.(fait, total); continue; }
     let res;
@@ -77,6 +114,7 @@ export async function telecharger(id, { onProgress, signal } = {}) {
     }
     const blob = new Blob(morceaux, { type: res.headers.get('content-type') || 'application/octet-stream' });
     if (f.sha256 && (await sha256(await blob.arrayBuffer())) !== f.sha256) throw new Error(t('voix.hd.err.corrompu', { fichier: f.fichier }));
+    if (signal?.aborted) throw new Error(t('voix.hd.annule'));
     try {
       await cache.put(u, new Response(blob, { headers: { 'content-type': blob.type, 'content-length': String(blob.size) } }));
     } catch (err) {
@@ -87,12 +125,29 @@ export async function telecharger(id, { onProgress, signal } = {}) {
   }
 }
 
-/** Supprime une voix (le moteur ONNX est gardé tant qu'une autre voix est installée). */
+async function retirerModele(cat, cache, voix) {
+  const cle = cleModele(voix);
+  // Un groupe de locuteurs MLS partage exactement le même modèle. Ne touche ni au
+  // moteur commun, ni à un fichier également référencé par un autre modèle.
+  const autres = new Set([...moteurDe(cat), ...cat.voix.filter((v) => cleModele(v) !== cle).flatMap(modeleDe)].map((f) => f.fichier));
+  let efface = false;
+  for (const f of uniques(modeleDe(voix))) if (!autres.has(f.fichier)) efface = (await cache.delete(url(f.fichier))) || efface;
+  return efface;
+}
+
+export async function supprimerPartiel(id) {
+  const cat = await getCatalogue(), cache = await ouvrir();
+  const cible = (await inventaire(cat, cache)).voix.find((v) => v.id === id);
+  if (!cible?.partiel) return false;
+  return retirerModele(cat, cache, cat.voix.find((v) => v.id === id));
+}
+
+/** Une suppression complète concerne tous les locuteurs du modèle sélectionné. */
 export async function supprimer(id) {
   const cat = await getCatalogue(), cache = await ouvrir(), voix = cat.voix.find((v) => v.id === id);
   if (!voix) return;
-  for (const f of [{ fichier: voix.config }, ...voix.parts]) await cache.delete(url(f.fichier));
-  if (!(await etatVoix()).some((v) => v.installe)) for (const f of cat.moteur.fichiers) await cache.delete(url(f.fichier));
+  await retirerModele(cat, cache, voix);
+  if (!(await inventaire(cat, cache)).modeles.length) for (const f of moteurDe(cat)) await cache.delete(url(f.fichier));
 }
 
 /** « Libérer l'espace » : supprime tout le cache des voix. */
