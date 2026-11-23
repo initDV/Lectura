@@ -1,0 +1,31 @@
+<svg id="lectura-char" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 600" role="img" aria-label="Cyborg">
+<ellipse cx="120" cy="566" rx="102" ry="14" fill="#16141f"/>
+<g id="legs" fill="#1c1830" stroke="#ff4fd8" stroke-width="3">
+<rect x="70" y="354" width="33" height="72" rx="16"/><rect x="136" y="354" width="33" height="72" rx="16"/>
+<rect x="65" y="431" width="42" height="117" rx="20"/><rect x="131" y="431" width="42" height="117" rx="20"/>
+<circle cx="86" cy="424" r="9"/><circle cx="152" cy="424" r="9"/>
+</g>
+<g id="arm-l" fill="#1c1830" stroke="#ff4fd8" stroke-width="3">
+<rect x="20" y="222" width="28" height="43" rx="14"/><rect x="20" y="267" width="28" height="58" rx="14"/></g>
+<g id="arm-r" fill="#1c1830" stroke="#ff4fd8" stroke-width="3">
+<rect x="190" y="222" width="38" height="43" rx="16"/><rect x="190" y="267" width="38" height="58" rx="16"/></g>
+<g id="body">
+<rect x="62" y="222" width="117" height="132" rx="30" fill="#1c1830" stroke="#ff4fd8" stroke-width="3"/>
+<rect x="85" y="259" width="72" height="12" rx="6" fill="#db43b9"/>
+<circle cx="100" cy="296" r="4.5" fill="#ff4fd8"/><circle cx="120" cy="296" r="4.5" fill="#ff4fd8"/><circle cx="140" cy="296" r="4.5" fill="#ff4fd8"/>
+<line x1="120" y1="27" x2="120" y2="58" stroke="#ff4fd8" stroke-width="3"/>
+<circle cx="120" cy="20" r="7" fill="#ff4fd8"/>
+<circle cx="120" cy="136" r="66" fill="#1c1830" stroke="#ff4fd8" stroke-width="3"/>
+<line x1="64" y1="122" x2="80" y2="128" stroke="#ff4fd8" stroke-width="3"/>
+<line x1="176" y1="128" x2="192" y2="122" stroke="#ff4fd8" stroke-width="3"/>
+<rect x="74" y="115" width="36" height="28" rx="12" fill="none" stroke="#ff4fd8" stroke-width="3"/>
+<rect x="130" y="115" width="36" height="28" rx="12" fill="none" stroke="#ff4fd8" stroke-width="3"/>
+<line x1="110" y1="129" x2="130" y2="129" stroke="#ff4fd8" stroke-width="3"/>
+<path id="brow-l" d="M82 108 Q92 100 102 108" fill="none" stroke="#ff4fd8" stroke-width="3" stroke-linecap="round"/>
+<path id="brow-r" d="M138 108 Q148 100 158 108" fill="none" stroke="#ff4fd8" stroke-width="3" stroke-linecap="round"/>
+<circle id="eye-l" cx="92" cy="129" r="11" fill="#3ddc84"/>
+<circle id="eye-r" cx="148" cy="129" r="11" fill="#3ddc84"/>
+<circle cx="88" cy="125" r="3" fill="#dcf8e8"/><circle cx="144" cy="125" r="3" fill="#dcf8e8"/>
+<rect id="mouth" x="96" y="163" width="48" height="5" rx="2.5" fill="#38bdf8"/>
+</g>
+</svg>

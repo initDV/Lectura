@@ -3,49 +3,187 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Télécharge Lectura pour Android 12 et versions ultérieures. Fichier APK signé, vérifié sur Android.">
-  <title>Lectura pour Android — application native (APK)</title>
-  <style>
-    :root { color-scheme: dark; font-family: system-ui, sans-serif; color: #f4f0ff; background: #101017; }
-    body { margin: 0; }
-    main { width: min(42rem, calc(100% - 2rem)); margin: clamp(2rem, 9vw, 6rem) auto; }
-    header, section { border: 1px solid #373047; border-radius: 1rem; background: #191723; padding: clamp(1.1rem, 4vw, 2.1rem); }
-    section { margin-top: 1rem; }
-    h1 { margin: .4rem 0 .75rem; font-size: clamp(2rem, 7vw, 3.5rem); line-height: 1.1; }
-    h2 { font-size: 1.25rem; margin: 0 0 .7rem; }
-    p, li { line-height: 1.55; color: #ddd6ea; }
-    ol { padding-left: 1.5rem; }
-    li + li { margin-top: .5rem; }
-    a { color: #d1b5ff; }
-    a:focus-visible { outline: .18rem solid #e3d1ff; outline-offset: .25rem; }
-    .version { margin: 0; color: #d1b5ff; font-weight: 650; }
-    .button { display: inline-block; margin: .4rem 0; padding: .9rem 1.15rem; border-radius: .7rem; color: #170b29; background: #c6a2ff; font-weight: 750; text-decoration: none; }
-    .button:hover { background: #ddc6ff; }
-    code { display: block; overflow-wrap: anywhere; line-height: 1.65; color: #e1caff; }
-  </style>
+  <meta name="theme-color" content="#08070c">
+  <meta name="description" content="Lectura, le personnage qui lit vos textes à voix haute. Découvrez l’application Android native gratuite et la version Web.">
+  <title>Lectura — Le personnage qui lit vos textes à voix haute</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/lectura-icon.svg">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./reveal.js" defer></script>
 </head>
-<body>
-  <main>
-    <header>
-      <p class="version">Version Android · 1.0.0</p>
-      <h1>Lectura pour Android — application native (APK)</h1>
-      <p>Ceci n'est pas la version Web. C'est l'application Android native, à télécharger et installer séparément. La version Web reste disponible sur la <a href="../">page d'accueil</a>.</p>
-      <a class="button" href="https://github.com/initDV/Lectura/releases/download/v1.0.0/Lectura.apk">Télécharger l'application Android (APK)</a>
-      <p><a href="https://github.com/initDV/Lectura/releases/tag/v1.0.0">Voir la publication et les sources</a></p>
-    </header>
-    <section aria-labelledby="installation">
-      <h2 id="installation">Installation</h2>
-      <p>Cette version nécessite Android 12 ou une version ultérieure.</p>
-      <ol>
-        <li>Télécharge l’APK, puis ouvre-le depuis les téléchargements de ton appareil.</li>
-        <li>Si Android le demande, autorise l’installation pour l’application qui a ouvert le fichier. Tu peux retirer cette autorisation après l’installation.</li>
-        <li>Pour mettre à jour une installation Lectura portant le même certificat, installe l’APK sans désinstaller la version existante.</li>
-      </ol>
+<body id="haut">
+  <svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-android" viewBox="0 0 24 24"><path d="M5 10a7 7 0 0 1 14 0v.5H5zm2-5L5 2.5M17 5l2-2.5M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5M2 13v5m20-5v5M9 20v2m6-2v2"/><circle cx="9" cy="7.5" r=".7" fill="currentColor" stroke="none"/><circle cx="15" cy="7.5" r=".7" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-web" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.2 2.4 3.3 5.4 3.3 9s-1.1 6.6-3.3 9c-2.2-2.4-3.3-5.4-3.3-9s1.1-6.6 3.3-9Z"/></symbol>
+    <symbol id="i-zip" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16m-10 4h4M7 2h10"/></symbol>
+    <symbol id="i-voice" viewBox="0 0 24 24"><path d="M3 10v4m4-8v12m5-15v18m5-15v12m4-8v4"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2c0 6-4 10-10 10 6 0 10 4 10 10 0-6 4-10 10-10-6 0-10-4-10-10Z"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14m10-14v14M3 10h4m-4 4h4m10-4h4m-4 4h4m-10-4 4 2-4 2z"/></symbol>
+    <symbol id="i-plane" viewBox="0 0 24 24"><path d="M21 3 3 10l7 3 3 8 8-18Zm0 0L10 13"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  </svg>
+
+  <a href="#contenu" class="skip-link">Aller au contenu</a>
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="#haut" aria-label="Lectura, haut de la page">
+        <img src="./assets/lectura-icon.svg" alt="" width="42" height="42">
+        <span>Lectura</span>
+      </a>
+      <nav class="site-nav" aria-label="Navigation de la page">
+        <a href="#versions">Versions</a>
+        <a href="#fonctionnalites">Fonctionnalités</a>
+        <a href="#comparatif">Comparatif</a>
+      </nav>
+      <a class="header-release" href="https://github.com/initDV/Lectura/releases/tag/v1.0.0">
+        <span class="status-dot"></span><span class="header-platform">Android</span> v1.0.0
+        <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg>
+      </a>
+    </div>
+  </header>
+
+  <main id="contenu">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="shell hero-layout">
+        <div class="hero-copy">
+          <p class="eyebrow hero-eyebrow"><span class="signal" aria-hidden="true"><i></i><i></i><i></i><i></i></span> Donnez une voix à vos textes</p>
+          <h1 id="hero-title">Lectura</h1>
+          <p class="hero-lede">Le personnage qui lit vos textes à voix haute.</p>
+          <p class="hero-description">Écrivez, choisissez un personnage et donnez vie à votre scène. Sur Android natif ou directement dans votre navigateur.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://github.com/initDV/Lectura/releases/download/v1.0.0/Lectura.apk">
+              <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> Télécharger pour Android
+            </a>
+            <a class="button button-outline" href="https://initdv.github.io/Lectura/">
+              Utiliser dans le navigateur <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg>
+            </a>
+          </div>
+          <p class="hero-details"><span><svg class="icon" aria-hidden="true"><use href="#i-android"/></svg> Android 12+</span><span class="detail-divider"></span><a href="#versions">Préférez-vous le ZIP ?</a></p>
+        </div>
+
+        <figure class="hero-art">
+          <img class="robot-render" src="./assets/lectura-robot.webp" width="1024" height="1024" fetchpriority="high" alt="Le robot Lectura, lunettes violettes et yeux verts, dans un halo lumineux">
+          <div class="art-label" aria-hidden="true"><span class="art-led"></span> LE ROBOT LECTURA</div>
+          <figcaption class="art-caption">
+            <div><span class="art-index">LE ROBOT</span><span class="art-title">Votre texte prend vie.</span></div>
+            <div class="art-signal" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </figcaption>
+        </figure>
+      </div>
+      <div class="shell hero-bottom">
+        <a href="#versions" class="scroll-link"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> Découvrir les versions</a>
+        <div class="hero-bottom-line" aria-hidden="true"></div>
+        <span class="hero-mark">LECTURA / ANDROID &amp; WEB</span>
+      </div>
     </section>
-    <section aria-labelledby="signature">
-      <h2 id="signature">Certificat de signature · SHA‑256</h2>
-      <code>b6873c0f1a2f447163fb9af7e6f4181280b31fd1f5c45b0535993075b3dc7d8b</code>
+
+    <section id="versions" class="section section-versions shell" aria-labelledby="versions-title">
+      <div class="section-head" data-reveal>
+        <div><p class="eyebrow"><span class="section-number">01</span> Choisir sa version</p><h2 id="versions-title">Deux versions.<br>Une même idée<span class="accent">.</span></h2></div>
+        <p>Installez l’application Android, ou ouvrez Lectura Web en un clic. Choisissez ce qui vous convient.</p>
+      </div>
+      <div class="version-grid">
+        <article class="version-card version-android" data-reveal>
+          <div class="card-top"><span class="tile tile-green"><svg class="icon" aria-hidden="true"><use href="#i-android"/></svg></span><span class="badge badge-green">Application native</span></div>
+          <h3>Android <span>(APK)</span></h3>
+          <p>Pour Android 12 et plus. Application native, 43 personnages, voix HD hors ligne.</p>
+          <div class="version-actions">
+            <a class="button button-primary" href="https://github.com/initDV/Lectura/releases/download/v1.0.0/Lectura-v1.0.0-android.zip"><svg class="icon" aria-hidden="true"><use href="#i-zip"/></svg> Télécharger au format ZIP</a>
+            <a class="button button-outline" href="https://github.com/initDV/Lectura/releases/download/v1.0.0/Lectura.apk"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> Télécharger directement (APK)</a>
+          </div>
+          <p class="card-note">Extrayez le ZIP, puis ouvrez <strong>Lectura.apk</strong>.</p>
+        </article>
+        <article class="version-card version-web" data-reveal>
+          <div class="card-top"><span class="tile tile-violet"><svg class="icon" aria-hidden="true"><use href="#i-web"/></svg></span><span class="badge badge-violet">Dans le navigateur</span></div>
+          <h3>Web <span>(PWA)</span></h3>
+          <p>Pour Windows, Linux, macOS et Android. Fonctionne dans le navigateur, installable en un clic sur les navigateurs compatibles.</p>
+          <div class="version-actions">
+            <a class="button button-violet" href="https://initdv.github.io/Lectura/">Ouvrir Lectura Web <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></a>
+          </div>
+          <p class="card-note">Accessible depuis la page d’accueil, sans télécharger d’APK.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="fonctionnalites" class="section section-features shell" aria-labelledby="features-title">
+      <div class="section-head" data-reveal>
+        <div><p class="eyebrow"><span class="section-number">02</span> Tout inclus sur Android</p><h2 id="features-title">De la voix<br>au mouvement<span class="accent">.</span></h2></div>
+        <p>Du premier mot à la vidéo finale, tout ce qu’il faut pour créer vos scènes est dans l’application Android.</p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature feature-cast" data-reveal>
+          <div class="feature-copy"><h3><span class="feature-count">43</span> personnages animés</h3><p>Robots, aventuriers et bien d’autres : trouvez le personnage de votre histoire.</p></div>
+          <div class="cast-cards" aria-hidden="true"><span class="portrait portrait-amina"><img src="./assets/personnage-amina.svg" alt="" loading="lazy" width="240" height="600"></span><span class="portrait portrait-cyborg"><img src="./assets/personnage-cyborg.svg" alt="" loading="lazy" width="240" height="600"></span><span class="portrait portrait-robot"><img src="./assets/personnage-robot.svg" alt="" loading="lazy" width="240" height="600"></span></div>
+        </article>
+        <article class="feature feature-voice" data-reveal>
+          <span class="tile tile-violet"><svg class="icon" aria-hidden="true"><use href="#i-voice"/></svg></span>
+          <svg class="voice-wave" viewBox="0 0 300 120" fill="none" aria-hidden="true">
+            <defs><linearGradient id="wave-gradient"><stop stop-color="#a479ff" stop-opacity="0"/><stop offset=".42" stop-color="#bb91ff"/><stop offset=".71" stop-color="#73f5b3"/><stop offset="1" stop-color="#73f5b3" stop-opacity="0"/></linearGradient></defs>
+            <path d="M0 60H300" stroke="#b491ff" opacity=".18" stroke-dasharray="3 6"/>
+            <path d="M6 55v10m12-14v18m12-22v26m12-17v8m12-24v40m12-34v28m12-47v66m12-53v40m12-68v96m12-73v50m12-61v72m12-53v34m12-64v94m12-72v50m12-42v34m12-59v84m12-60v36m12-41v46m12-53v60m12-47v34m12-23v12m12-31v50m12-36v22m12-18v14m12-12v10" stroke="url(#wave-gradient)" stroke-width="3.4" stroke-linecap="round"/>
+          </svg>
+          <h3>Voix HD hors ligne</h3>
+          <p>Choisissez une voix, téléchargez-la une fois, utilisez-la sans réseau.</p>
+          <ul class="chips" aria-label="Voix et moteurs HD"><li>Estelle</li><li>Kokoro</li><li>Piper Siwis</li><li>Tom</li></ul>
+        </article>
+        <article class="feature feature-small" data-reveal>
+          <span class="tile tile-green"><svg class="icon" aria-hidden="true"><use href="#i-spark"/></svg></span>
+          <h3>100% gratuit, sans compte, sans Pro</h3>
+          <p>Sur Android, toutes les fonctions sont accessibles dès l’installation.</p>
+        </article>
+        <article class="feature feature-small" data-reveal>
+          <span class="tile tile-violet"><svg class="icon" aria-hidden="true"><use href="#i-film"/></svg></span>
+          <h3>Exports SRT/VTT, PNG, vidéo</h3>
+          <p>Sous-titres, captures et vidéos : gardez et partagez vos créations.</p>
+        </article>
+        <article class="feature feature-small" data-reveal>
+          <span class="tile tile-blue"><svg class="icon" aria-hidden="true"><use href="#i-plane"/></svg></span>
+          <h3>Fonctionne en mode avion</h3>
+          <p>Gardez vos projets et vos voix déjà téléchargées à portée de main, même sans connexion.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="comparatif" class="section section-compare shell" aria-labelledby="compare-title">
+      <div class="section-head" data-reveal>
+        <div><p class="eyebrow"><span class="section-number">03</span> Comparatif rapide</p><h2 id="compare-title">Quel Lectura<br>est fait pour vous<span class="accent">&nbsp;?</span></h2></div>
+        <p>Android et Web sont deux applications distinctes. Voici leurs différences en un coup d’œil.</p>
+      </div>
+      <div class="compare-panel" data-reveal>
+        <table class="compare-table" role="table" aria-label="Comparatif Android APK et Web PWA">
+          <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Version</th><th role="columnheader" scope="col">Installation</th><th role="columnheader" scope="col">Hors ligne</th><th role="columnheader" scope="col">Voix HD</th><th role="columnheader" scope="col">Exports vidéo</th></tr></thead>
+          <tbody role="rowgroup">
+            <tr role="row">
+              <th role="rowheader" scope="row"><svg class="icon" aria-hidden="true"><use href="#i-android"/></svg> Android APK</th>
+              <td role="cell"><span class="cell-label" aria-hidden="true">Installation</span> APK à installer<br><span class="muted">Android 12 et plus</span></td>
+              <td role="cell"><span class="cell-label" aria-hidden="true">Hors ligne</span> Oui, en mode avion<br><span class="muted">avec les voix téléchargées</span></td>
+              <td role="cell"><span class="cell-label" aria-hidden="true">Voix HD</span> Estelle, Kokoro et Piper</td>
+              <td role="cell"><span class="cell-label" aria-hidden="true">Exports vidéo</span> MP4 et WebM<br><span class="muted">inclus gratuitement</span></td>
+            </tr>
+            <tr role="row">
+              <th role="rowheader" scope="row"><svg class="icon" aria-hidden="true"><use href="#i-web"/></svg> Web PWA</th>
+              <td role="cell"><span class="cell-label" aria-hidden="true">Installation</span> Navigateur<br><span class="muted">installation PWA facultative</span></td>
+              <td role="cell"><span class="cell-label" aria-hidden="true">Hors ligne</span> Après le premier chargement<br><span class="muted">et le téléchargement des voix</span></td>
+              <td role="cell"><span class="cell-label" aria-hidden="true">Voix HD</span> Piper<br><span class="muted">sur navigateur compatible</span></td>
+              <td role="cell"><span class="cell-label" aria-hidden="true">Exports vidéo</span> WebM, MP4 selon navigateur<br><span class="muted">avec Lectura Pro sur le Web</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
   </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-layout">
+      <div><a class="brand" href="#haut" aria-label="Lectura, retour en haut"><img src="./assets/lectura-icon.svg" alt="" width="42" height="42"><span>Lectura</span></a><p>Le personnage qui lit vos textes à voix haute.</p></div>
+      <nav class="footer-links" aria-label="Liens du projet">
+        <a href="https://github.com/initDV/Lectura/releases/tag/v1.0.0">Release GitHub <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></a>
+        <a href="https://github.com/initDV/Lectura">Dépôt GitHub <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></a>
+      </nav>
+    </div>
+    <div class="shell footer-meta"><p><a href="https://github.com/initDV/Lectura/blob/main/LICENSE">Licence MIT</a><span aria-hidden="true"> · </span>Par <a href="https://github.com/initDV">initDV</a></p><p>Android v1.0.0 · Lectura Web</p></div>
+  </footer>
 </body>
 </html>
