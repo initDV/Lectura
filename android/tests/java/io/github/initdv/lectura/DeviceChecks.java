@@ -80,6 +80,7 @@ public final class DeviceChecks extends Instrumentation {
                 check("catalogue-et-reglages",()->fullAccess(ctx));
                 check("lips-reference",()->lipsReference(ctx,refs));
                 check("audio-importe",()->imported(ctx));
+                check("preparation-et-reprise",()->preparationLifecycle(ctx));
                 check("tts-local",()->tts(ctx));
                 check("minutage-sous-titres",DeviceChecks::preparedSubtitles);
                 check("sous-titres-et-capture",()->subtitlesAndPng(ctx));
@@ -625,6 +626,110 @@ public final class DeviceChecks extends Instrumentation {
             main(a::stop);
             return name+", texte et vitesse 1,25× communs à Pages, "+frames.length()+" observations ; pause, avance, reprise, animation sous muet";
         }finally{input.delete();main(()->{a.db.audio(a.project).delete();a.finish();});}
+    }
+    private String preparationLifecycle(Context ctx)throws Exception{
+        MainActivity a=open(ctx);
+        Project previous=a.project,p=new Project(a.db.settings);
+        p.text="Bonjour, Lectura. Ceci est une lecture de référence.";p.fileAudio=true;
+        p.fileName="preparation.wav";p.duration=6000;p.speed=1;
+        File media=a.db.audio(p),wave=null;
+        try{
+            wave=tone(ctx,6);
+            Files.copy(wave.toPath(),media.toPath());
+            waitFor("La scène doit être au premier plan",()->a.isForeground,6000);
+            main(()->{a.open(p);a.muted=true;});
+            cancelAndRelaunch(a);
+            leaveBeforeDelivery(a,p);
+            preparePausedAndResume(a);
+            return "Annuler/relancer, résultat obsolète et PCM libéré, préparation en pause, reprise sans re-préparation";
+        }finally{
+            try{main(()->{a.open(previous);a.draft();a.finish();});}
+            finally{Files.deleteIfExists(media.toPath());if(wave!=null)Files.deleteIfExists(wave.toPath());}
+        }
+    }
+    private static Future<?> launchPreparation(MainActivity a){
+        require(a.scene.launch.isEnabled()&&a.scene.launch.performClick(),"Lancer doit être disponible");
+        require(a.preparing&&a.reading==null&&a.sceneOverlay!=null&&a.preparation!=null,"Préparation non lancée");
+        return a.preparation;
+    }
+    private static boolean keepsScreenOn(MainActivity a){
+        return (a.getWindow().getAttributes().flags&android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)!=0;
+    }
+    // Cross both queues: negative assertions must run after any stale UI result, not before it.
+    private static void awaitPreparationCallbacks(MainActivity a)throws Exception {
+        a.queue.submit(()->{}).get(8,TimeUnit.SECONDS);
+        CountDownLatch dispatched=new CountDownLatch(1);
+        require(a.handler.post(dispatched::countDown)&&dispatched.await(8,TimeUnit.SECONDS),"Résultat de préparation non traité");
+    }
+    private void cancelAndRelaunch(MainActivity a)throws Exception{
+        CountDownLatch release=new CountDownLatch(1);
+        Future<?> barrier=a.queue.submit(()->{
+            require(release.await(8,TimeUnit.SECONDS),"Barrière d’annulation non libérée");return null;
+        });
+        try{
+            main(()->{
+                Future<?> cancelled=launchPreparation(a);
+                View cancel=action(a.sceneOverlay,a.t("commun.annuler"));
+                require(cancel!=null&&cancel.isEnabled()&&cancel.performClick(),"Action Annuler indisponible");
+                require(cancelled.isCancelled()&&!a.preparing&&a.reading==null&&a.sceneOverlay==null&&a.stopped&&!keepsScreenOn(a),
+                    "Annuler doit retirer la préparation et rendre la scène inactive");
+                require(launchPreparation(a)!=cancelled,"La relance doit demander une nouvelle préparation");
+            });
+        }finally{release.countDown();}
+        barrier.get(8,TimeUnit.SECONDS);
+        awaitPreparationCallbacks(a);
+        main(()->require(a.reading!=null&&a.reading.pcm!=null&&a.reading.playing&&a.reading.text.equals(a.project.text)
+            &&!a.preparing&&a.sceneOverlay==null&&keepsScreenOn(a),"Le WAV doit jouer après la relance"));
+    }
+    private static List<File> preparedWavs(MainActivity a){
+        File[] files=a.getCacheDir().listFiles((dir,name)->name.endsWith(".wav"));
+        require(files!=null,"Cache audio illisible");return new ArrayList<>(Arrays.asList(files));
+    }
+    private void leaveBeforeDelivery(MainActivity a,Project p)throws Exception{
+        AtomicReference<File> stale=new AtomicReference<>();
+        main(()->{
+            a.open(p);List<File> previous=preparedWavs(a);
+            // Raw WAV work does not wait for the UI; keep the callback queued during navigation.
+            launchPreparation(a).get(5,TimeUnit.SECONDS);
+            List<File> created=preparedWavs(a);created.removeAll(previous);
+            require(created.size()==1&&created.get(0).length()>44&&a.reading==null,"Un WAV décodé doit attendre son adoption par la scène");
+            stale.set(created.get(0));
+            a.go("projets");
+            require(a.scene==null&&a.reading==null&&!a.preparing&&a.sceneOverlay==null,"Quitter la scène doit invalider la préparation");
+            a.open(p); // The old callback will find a scene again, but must still be rejected.
+        });
+        awaitPreparationCallbacks(a);
+        main(()->require(a.scene!=null&&a.reading==null&&!a.preparing&&a.sceneOverlay==null&&!keepsScreenOn(a)&&!stale.get().exists(),
+            "Le résultat ancien doit être ignoré sur la nouvelle scène et son WAV temporaire supprimé"));
+    }
+    private void preparePausedAndResume(MainActivity a)throws Exception{
+        boolean[] paused={false};
+        try{
+            main(()->{
+                a.muted=true;launchPreparation(a);
+                // Drive the application's lifecycle callbacks without opening another task.
+                paused[0]=true;callActivityOnPause(a);
+                require(!a.isForeground&&a.preparing&&!keepsScreenOn(a),"Préparation au passage en arrière-plan");
+            });
+            awaitPreparationCallbacks(a);
+            main(()->{
+                Reading ready=a.reading;Future<?> completed=a.preparation;
+                require(!a.isForeground&&ready!=null&&ready.pcm!=null&&!ready.playing&&!ready.ended&&!a.preparing
+                    &&a.sceneOverlay==null&&!keepsScreenOn(a),"Le résultat livré en arrière-plan doit être prêt, sans jouer");
+                callActivityOnResume(a);paused[0]=false;
+                require(a.isForeground&&a.reading==ready&&!ready.playing&&!keepsScreenOn(a),"Le retour au premier plan ne doit pas lancer la lecture");
+                require(a.scene.launch.performClick()&&a.reading==ready&&a.preparation==completed&&ready.playing&&!a.preparing,
+                    "Lancer doit réutiliser le résultat déjà prêt");
+            });
+            waitFor("La lecture du WAV doit progresser",()->a.reading!=null&&a.reading.playing&&a.reading.time()>300,5000);
+            main(()->{
+                Reading ready=a.reading;Future<?> completed=a.preparation;
+                require(a.scene.launch.performClick()&&!ready.playing&&!a.stopped&&!ready.ended&&!keepsScreenOn(a),"Pause de la lecture prête");
+                double position=ready.time();
+                require(a.scene.launch.performClick()&&a.reading==ready&&a.preparation==completed&&ready.playing&&!a.preparing
+                    &&ready.time()>=position-100&&keepsScreenOn(a),"Reprendre doit conserver la lecture et sa position");
+            });
+        }finally{main(()->{if(paused[0])callActivityOnResume(a);});}
     }
     private String tts(Context ctx)throws Exception{
         MainActivity a=open(ctx);
