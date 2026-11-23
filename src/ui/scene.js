@@ -20,7 +20,7 @@ import { wakeLock } from '../modules/pwa.js';
 import { getEngine } from '../modules/voice/engine.js';
 import { prechaufferTexte } from '../modules/voice/prechauffer-texte.js';
 import { logError, notify, report } from '../modules/errors.js';
-import { signaturePreparation } from './scene-calculs.js';
+import { signaturePreparation, varianteCommandes } from './scene-calculs.js';
 import { createControls } from './scene-controls.js';
 import { creerExport } from './scene-export.js';
 import { nettoyer } from '../modules/text-clean.js';
@@ -74,7 +74,7 @@ export async function render(root) {
   const pret = () => !!prep && ['PRET', 'LECTURE', 'PAUSE', 'FIN'].includes(store.etat);
   const pourCanvas = () => ({ projet, svg: perso.svg, terminal, pro: store.pro, titreTerminal: store.settings.titreTerminal, texteMasque: masque });
   const exportScene = creerExport({ projet, badge: badgeRec, pret: () => pret() && !!terminal, pourCanvas, source: () => prep.source, pause, chercher, jouer, format: () => store.settings.formatVideo });
-  const majUi = () => controls.update({ etat: store.etat === 'PREPARATION' ? 'preparation' : store.etat === 'LECTURE' ? 'lecture' : store.etat === 'PAUSE' && !arrete ? 'pause' : 'repos', muet });
+  const majUi = () => controls.update({ etat: varianteCommandes(store.etat, arrete), muet });
   let _brut = '', _propre = '';
   const textePropre = () => {
     if (_brut !== projet.texte) { _brut = projet.texte; _propre = nettoyer(projet.texte); }

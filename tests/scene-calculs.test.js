@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { signaturePreparation } from '../src/ui/scene-calculs.js';
+import { signaturePreparation, varianteCommandes } from '../src/ui/scene-calculs.js';
 import { nettoyer } from '../src/modules/text-clean.js';
 
 // Chaînes capturées avec signer() dans scene.js avant l'extraction (3adc98e).
@@ -35,5 +35,24 @@ describe('signature de préparation', () => {
   }, attendu) => {
     const projet = { audio: { source, nomFichier, voix: { moteur, id, vitesse } }, personnageId, terminal: { vitesseCps } };
     expect(signaturePreparation(nettoyer(texte), apercu, projet)).toBe(attendu);
+  });
+});
+
+describe('variante affichée des commandes', () => {
+  // Valeurs de majUi() avant extraction (74bdfc2) : arrete=false, puis arrete=true.
+  it.each([
+    ['IDLE', 'repos', 'repos'],
+    ['PREPARATION', 'preparation', 'preparation'],
+    ['PRET', 'repos', 'repos'],
+    ['LECTURE', 'lecture', 'lecture'],
+    ['PAUSE', 'pause', 'repos'],
+    ['FIN', 'repos', 'repos'],
+    ['ERREUR', 'repos', 'repos'],
+    ['INCONNU', 'repos', 'repos'],
+  ])('%s : conserve les variantes même après plusieurs appels', (etat, enCours, aLArret) => {
+    expect(varianteCommandes(etat, false)).toBe(enCours);
+    expect(varianteCommandes(etat, true)).toBe(aLArret);
+    expect(varianteCommandes(etat, false)).toBe(enCours);
+    expect(varianteCommandes(etat, true)).toBe(aLArret);
   });
 });
