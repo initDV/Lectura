@@ -2,7 +2,7 @@
 // audio-cache.js : cache IndexedDB des synthèses Piper, une entrée par phrase (révision + texte + voix + vitesse).
 // But : ne jamais synthétiser deux fois la même phrase. Éviction des anciens rendus au-delà du quota.
 // Deux étages (phrases + WAV) partagent cette révision. Ne jamais invalider lectura-models.
-export const PIPER_RENDER_VERSION = 'fr-horaires-4';
+export const PIPER_RENDER_VERSION = 'fr-horaires-5';
 const DB = 'lectura-audio-cache', VERSION = 2, STORE = 'phrases';
 const QUOTA = 80 * 1024 * 1024; // 80 Mo max
 

@@ -3,6 +3,7 @@
 // notre propre origine (models/ort/), jamais depuis un CDN. La phonétisation est faite par g2p_fr.js (maison).
 import { phonemiser, phonemesEnIds } from './g2p_fr.js';
 import { phrasePiper } from './question-pitch.js';
+import { rognerBordsSiwis } from './piper-edges.js';
 
 let ort = null, session = null, config = null;
 
@@ -35,7 +36,10 @@ async function synth({ texte, vitesse, speakerId, prosodie }) {
   let peak = 0;
   for (const x of samples) peak = Math.max(peak, Math.abs(x));
   if (!Number.isFinite(peak)) throw new Error('Signal vocal non fini.');
-  return { samples: prosodie ? phrasePiper(samples, texte, config.audio?.sample_rate || 22050, vitesse, peak) : samples, phonemes, peak };
+  if (!prosodie) return { samples, phonemes, peak };
+  const rate = config.audio?.sample_rate || 22050;
+  const rythme = phrasePiper(samples, texte, rate, vitesse, peak);
+  return { samples: rognerBordsSiwis(rythme, rate, peak), phonemes, peak };
 }
 
 self.onmessage = async (e) => {

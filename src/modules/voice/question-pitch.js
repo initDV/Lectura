@@ -128,7 +128,7 @@ export function releverFinale(x, from, to, rate, extraMs = 70) {
   return out;
 }
 
-/** Piper Web keeps the model's edge padding, unlike the Android render. Use it only to find the tail. */
+/** Use the model's edge padding to locate the tail; leave trimming to the renderer. */
 export function phrasePiper(samples, texte, rate, vitesse, peak) {
   if (!questionFermee(texte) || !Number.isFinite(vitesse) || vitesse <= 0 || !samples.length) return samples;
   if (peak === undefined) { peak = 0; for (const v of samples) peak = Math.max(peak, Math.abs(v)); }
