@@ -445,7 +445,7 @@ public final class DeviceChecks extends Instrumentation {
             }
         }
         MainActivity a=open(ctx);File input=tone(ctx,5),dir=ctx.getExternalFilesDir("verification");
-        String text="Demain, on part à 8 h 30. Tu seras là ? Parfait !", name="Robot-salut-"+System.currentTimeMillis();
+        String text="Demain, on part à 8 h 30. Tu seras là ? Parfait !", name="robot-salut-"+System.currentTimeMillis();
         String format=a.db.settings.optString("formatVideo","9:16");
         try{
             main(()->{
@@ -492,8 +492,10 @@ public final class DeviceChecks extends Instrumentation {
                 }
                 try(android.media.MediaMetadataRetriever frames=new android.media.MediaMetadataRetriever()){
                     frames.setDataSource(kept.file.getPath());
-                    Bitmap begin=frames.getFrameAtTime(5310000,android.media.MediaMetadataRetriever.OPTION_CLOSEST);
-                    Bitmap bow=frames.getFrameAtTime(5750000,android.media.MediaMetadataRetriever.OPTION_CLOSEST);
+                    var bitmapParams=new android.media.MediaMetadataRetriever.BitmapParams();
+                    bitmapParams.setPreferredConfig(Bitmap.Config.ARGB_8888);
+                    Bitmap begin=frames.getFrameAtTime(5310000,android.media.MediaMetadataRetriever.OPTION_CLOSEST,bitmapParams);
+                    Bitmap bow=frames.getFrameAtTime(5750000,android.media.MediaMetadataRetriever.OPTION_CLOSEST,bitmapParams);
                     require(begin!=null&&bow!=null&&begin.getHeight()==1280&&begin.getWidth()==720,"Images MP4 du salut portrait");
                     try{
                         int changes=0;for(int y=880;y<1270;y+=2)for(int x=0;x<269;x+=2){
