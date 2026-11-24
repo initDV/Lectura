@@ -2,7 +2,6 @@
  "id": "kofi",
  "nom": "Kofi",
  "role": "base",
- "pro": false,
  "svg": "kofi.svg",
  "sexe": "m",
  "metier": "cuisinier",

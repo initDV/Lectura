@@ -2,7 +2,6 @@
  "id": "pierre",
  "nom": "Pierre",
  "role": "base",
- "pro": false,
  "svg": "pierre.svg",
  "sexe": "m",
  "metier": "enseignant",

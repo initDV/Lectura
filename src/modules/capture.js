@@ -98,7 +98,7 @@ function drawTerminal(ctx, box, s, sc, tMs) {
 }
 
 /**
- * Dessine toute la scène. sc = { projet, svg, persoImage, terminal, pro, titreTerminal, texteMasque, figer }
+ * Dessine toute la scène. sc = { projet, svg, persoImage, terminal, titreTerminal, texteMasque, figer }
  * Même composition qu'à l'écran, en paysage comme en vertical : robot à gauche (38 %), aligné en bas ; terminal à droite (62 %).
  */
 export function drawScene(ctx, W, H, sc, tMs = performance.now()) {
@@ -110,13 +110,11 @@ export function drawScene(ctx, W, H, sc, tMs = performance.now()) {
   const img = sc.persoImage, vb = sc.svg?.viewBox?.baseVal;
   if (img && vb?.width) {
     const k = Math.min((cb.w * 0.92) / vb.width, (cb.h * 0.94) / vb.height);
+    ctx.save(); ctx.beginPath(); ctx.rect(cb.x, cb.y, cb.w, cb.h); ctx.clip();
     drawSvgImage(ctx, img, vb, cb.x + (cb.w - vb.width * k) / 2 + 6 * s, cb.h - vb.height * k - 10 * s, vb.width * k, vb.height * k);
+    ctx.restore();
   }
   drawTerminal(ctx, tb, s, sc, tMs);
-  if (!sc.pro) { // filigrane (retiré par Pro)
-    ctx.font = `600 ${Math.round(15 * s)}px 'JetBrains Mono', monospace`; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = 'rgba(176,176,184,0.55)'; ctx.fillText('Lectura', W - 30 * s, H - 26 * s);
-  }
 }
 
 /** Capture PNG de la scène (mêmes dessins que la vidéo). Renvoie un Blob. */

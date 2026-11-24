@@ -2,7 +2,6 @@
  "id": "sofia",
  "nom": "Sofia",
  "role": "base",
- "pro": false,
  "svg": "sofia.svg",
  "sexe": "f",
  "metier": "scientifique",

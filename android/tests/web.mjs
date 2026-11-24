@@ -60,8 +60,8 @@ try {
     const play = async (mode) => {
       await page.evaluate(({ text, speed }) => {
         const trace = window.lecturaTrace;
-        if (trace.store.projet.texte !== text || trace.store.projet.audio.voix.vitesse !== speed || trace.store.pro) {
-          throw Error('Texte, vitesse ou licence inattendus sur Pages');
+        if (trace.store.projet.texte !== text || trace.store.projet.audio.voix.vitesse !== speed) {
+          throw Error('Texte ou vitesse inattendus sur Pages');
         }
         trace.frames.length = trace.boundaries.length = 0;
         trace.error = '';

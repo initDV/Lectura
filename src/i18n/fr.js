@@ -1,5 +1,5 @@
 // @ts-check
-// fr.js : textes français (langue de référence). Écrans principaux ; réglages, voix, Pro et À propos sont dans fr-reglages.js.
+// fr.js : textes français (langue de référence). Écrans principaux ; réglages, voix et À propos sont dans fr-reglages.js.
 import suite from './fr-reglages.js';
 
 export default {
@@ -22,7 +22,6 @@ export default {
   'stockage.alerte': 'Stockage presque plein : {usage} utilisés sur {quota}. Libère de l’espace dans Réglages.',
   'nav.scene': 'Scène',
   'nav.reglages': 'Réglages',
-  'nav.pro': 'Pro',
   'nav.apropos': 'À propos',
 
   'accueil.nouveau': 'Nouveau projet',
@@ -105,7 +104,6 @@ export default {
   'scene.apercuSansSon': 'Aperçu sans son',
   'scene.apercuActif': 'Aperçu sans son : le texte défile à la vitesse du terminal.',
   'scene.persoIntrouvable': 'Personnage « {id} » introuvable : le Robot Lectura le remplace.',
-  'scene.persoPro': '« {nom} » est un personnage Pro : le Robot Lectura le remplace.',
   'scene.lecture': 'Lecture',
   'scene.pause': 'Pause',
   'scene.vitesse': 'Vitesse de lecture',
@@ -155,11 +153,10 @@ export default {
   'menu.avance': 'Réglages avancés',
   'menu.exporterSrt': 'Exporter les sous-titres .srt',
   'menu.exporterVtt': 'Exporter les sous-titres .vtt',
-  'persos.aide': 'Tous les personnages ont le même corps et les mêmes animations ; seuls changent la couleur et les accessoires.',
+  'persos.aide': 'Choisis le personnage qui lit ton texte. Le Robot Lectura peut aussi faire un pas de côté, montrer un horaire, s’incliner sur une question et saluer à la fin.',
   'persos.emotions': 'Émotions du robot',
   'persos.emotions.auto': 'Émotions automatiques d’après les mots du texte',
-  'persos.emotions.aide': 'Le robot réagit quand il prononce un mot chargé d’émotion : « bravo », « attention », « oups », « bonjour »… Les yeux, les sourcils, la bouche, la tête et les bras bougent ensemble. Version gratuite : content, concentré, surpris. Pro ajoute 10 émotions (rire, colère, peur, tristesse, fierté…) et leurs mélanges.',
-  'persos.emotions.aidePro': 'Le robot réagit quand il prononce un mot chargé d’émotion : « bravo », « attention », « oups », « bonjour », « j’en ai marre »… Les yeux, les sourcils, la bouche, la tête et les bras bougent ensemble, et deux émotions proches se mélangent.',
+  'persos.emotions.aide': 'Le robot réagit quand il prononce un mot chargé d’émotion : « bravo », « attention », « oups », « bonjour », « j’en ai marre »… Les yeux, les sourcils, la bouche, la tête et les bras bougent ensemble, et deux émotions proches se mélangent.',
   'persos.sansTexte': 'Écris d’abord un texte pour régler l’expression de chaque phrase.',
 
   'dl.titre': 'Télécharger',

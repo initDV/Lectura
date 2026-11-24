@@ -50,7 +50,7 @@ final class Stage extends FrameLayout {
         JSONObject ts=object(a.refs.themes,"terminal");JSONObject t=ts.optJSONObject(project.terminalTheme);term=t==null?object(ts,"sombre"):t;
         termFont=project.font.equals("Système")?Typeface.MONOSPACE:ui.mono(400);
         title=a.db.settings.optString("titreTerminal");radius=Math.round(ui.radiusLg);
-        sprite=new Sprite(a.refs,def);sprite.reduced=reduced||a.db.settings.optBoolean("reduireAnimations");
+        sprite=new Sprite(a.refs,def,true);sprite.reduced=reduced||a.db.settings.optBoolean("reduireAnimations");
         sprite.gain=project.motion.equals("calme")?.6:project.motion.equals("vif")?1.3:1;
         face=new Face();screenText=new ScreenText();addView(face,ui.fp(Ui.MATCH,Ui.MATCH,Gravity.TOP));
         menu=ui.iconButton("menu",a.t("scene.menu"),ui.mutedText,20,a::menu);addView(menu,ui.fp(44,44,Gravity.TOP|Gravity.LEFT));
@@ -71,12 +71,13 @@ final class Stage extends FrameLayout {
             Script.Segment seg=r.timeline.at(ms);
             long end=seg==null?0:seg.speechEnd<0?seg.to:seg.speechEnd;
             boolean voicing=r.playing&&seg!=null&&seg.type==Script.SPOKEN&&ms<end;
+            sprite.choreography=a.stopped&&!r.ended?null:r.choreography;
             sprite.direct(a.stopped?null:r.performance,ms,a.forced);
             sprite.viseme=voicing?r.viseme(ms,ms,cursor):0;sprite.shape=voicing?r.shape():48;
             sprite.letter=voicing?Reading.letterAt(r.text,cursor):"";sprite.quietMouth=!voicing;
             sprite.talk=voicing?(sprite.viseme>0?1:.15)*RigPose.ease((ms-seg.from)/65)*RigPose.ease((end-ms)/85):0;
         }else{
-            sprite.direct(null,-1,a.forced);sprite.quietMouth=false;sprite.viseme=0;sprite.shape=48;sprite.letter="";sprite.talk=0;
+            sprite.choreography=null;sprite.direct(null,-1,a.forced);sprite.quietMouth=false;sprite.viseme=0;sprite.shape=48;sprite.letter="";sprite.talk=0;
         }
         sprite.tick(now);
     }
@@ -133,7 +134,8 @@ final class Stage extends FrameLayout {
         float s=Math.min(w,h)/720f,left=w*.38f;
         c.drawColor(background);decor.export(c,w,h);
         float factor=Math.min(left*.92f/sprite.svg.box[2],h*.94f/sprite.svg.box[3]);
-        sprite.svg.draw(c,(left-sprite.svg.box[2]*factor)/2+6*s,h-sprite.svg.box[3]*factor-10*s,factor);
+        c.save();c.clipRect(0,0,left,h);
+        sprite.svg.draw(c,(left-sprite.svg.box[2]*factor)/2+6*s,h-sprite.svg.box[3]*factor-10*s,factor);c.restore();
         Reading r=a.reading;
         if(r!=null)exportTerminal(c,r.terminal,left,0,w-left,h,s,frozen,now);
     }

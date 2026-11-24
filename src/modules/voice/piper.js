@@ -7,6 +7,13 @@ import { hashPhrase, getPhrase, setPhrase } from './audio-cache.js';
 
 export const LIMITE_CARACTERES = 12000;
 const PAUSE_PHRASE = 0.22, PAUSE_PARAGRAPHE = 0.45;
+function pauseApres(p, suite, paragraphe, siwis) {
+  if (!suite) return .15;
+  if (paragraphe) return PAUSE_PARAGRAPHE;
+  if (!siwis || p.type !== 'parle') return PAUSE_PHRASE;
+  const marques = p.texte.match(/([.!?…]+)[\s»”'’"\])}]*$/u)?.[1] || '';
+  return marques.includes('?') ? .36 : /…|\.\.\./.test(marques) ? .48 : marques.includes('!') ? .32 : marques.includes('.') ? .30 : PAUSE_PHRASE;
+}
 const MAX_WARM_CHARS = 320, MAX_WARM_PHRASES = 3;
 
 export class PiperEngine {
@@ -142,7 +149,7 @@ export class PiperEngine {
         } else n += Math.round((sr * p.texte.length) / (cpsFrappe * vitesse));
         const speechEndMs = Math.round(n * 1000 / sr);
         const suite = phrases[i + 1], paragraphe = suite && /\n/.test(texte.slice(p.end, suite.start));
-        n += Math.round(sr * (suite ? (paragraphe ? PAUSE_PARAGRAPHE : PAUSE_PHRASE) : 0.15) / Math.max(0.5, vitesse));
+        n += Math.round(sr * pauseApres(p, suite, paragraphe, voixId === 'siwis') / Math.max(0.5, vitesse));
         segments.push({ texte: p.texte, type: p.type, debutMs: Math.round(debut * 1000 / sr), speechEndMs, finMs: Math.round(n * 1000 / sr) });
       }
       const samples = new Float32Array(n), gain = crete > 0.001 ? Math.min(4, 0.9 / crete) : 1;

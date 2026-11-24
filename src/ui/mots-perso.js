@@ -1,5 +1,5 @@
 // @ts-check
-// mots-perso.js : catégories de mots-clés personnalisées (Pro). Stockées dans les réglages (motsPerso).
+// mots-perso.js : catégories de mots-clés personnalisées. Stockées dans les réglages (motsPerso).
 import { store } from '../state.js';
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
@@ -31,8 +31,8 @@ export function motsPersoPanel({ sauver }) {
     }
   }
 
-  const nom = h('input', { type: 'text', placeholder: t('reglages.mots.nom'), maxLength: 24, 'aria-label': t('reglages.mots.nom'), disabled: !store.pro });
-  const ajouter = h('button', { type: 'button', class: 'btn', disabled: !store.pro, onClick: () => {
+  const nom = h('input', { type: 'text', placeholder: t('reglages.mots.nom'), maxLength: 24, 'aria-label': t('reglages.mots.nom') });
+  const ajouter = h('button', { type: 'button', class: 'btn', onClick: () => {
     const cle = nomSur(nom.value);
     if (!cle) return notify(t('reglages.mots.nomInvalide'), 'warn');
     if (cats()[cle]) return notify(t('reglages.mots.existe'), 'warn');
@@ -41,7 +41,6 @@ export function motsPersoPanel({ sauver }) {
     dessiner();
   } }, icon('plus'), t('reglages.mots.ajouter'));
   el.append(h('div', { class: 'row' }, h('div', { class: 'grow' }, nom), ajouter));
-  if (!store.pro) el.append(h('p', null, h('a', { href: '#/pro', text: t('pro.decouvrir') })));
   dessiner();
   return { el };
 }

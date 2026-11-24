@@ -6,7 +6,9 @@ import { parseSubtitles, cuesToProject, toSrt, toVtt } from '../../src/modules/s
 import { phonemiser } from '../../src/modules/voice/g2p_fr.js';
 import { autoTiming, estimateDurationMs, Timeline } from '../../src/modules/timeline.js';
 import { nettoyer } from '../../src/modules/text-clean.js';
-import { words, groups, questions } from '../../tests/fixtures/voice-fr.mjs';
+import { words, groups, questions, corrections, siwis } from '../../tests/fixtures/voice-fr.mjs';
+import { robotSegments, robotDuration, robotText } from '../../tests/fixtures/robot-motion.mjs';
+import { planRobot, poseRobot } from '../../src/modules/robot-motion.js';
 const texts = [
   'Bonjour, je suis Lectura !',
   'Les enfants aiment les histoires.',
@@ -28,6 +30,9 @@ fixtures.characters = JSON.parse(await readFile(new URL('../../characters/index.
 fixtures.expressions = NOMS;
 const { data, wav } = lipsFixture();
 fixtures.lips = data;
-fixtures.voice = { words, groups, questions };
+fixtures.voice = { words: [...words, ...corrections], groups, questions, siwis };
+const direction = planRobot(robotSegments, robotDuration);
+const keys = [0, ...Object.values(direction).filter(Array.isArray).flatMap(([a, b]) => [a, a + (b-a)*.32, a + (b-a)*.53, b])];
+fixtures.robot = { text: robotText, duration: robotDuration, segments: robotSegments, direction, poses: keys.map(ms => [ms, poseRobot(direction, ms)]) };
 await writeFile(process.argv[2], JSON.stringify(fixtures));
 await writeFile(join(dirname(process.argv[2]), 'lips-reference.wav'), wav);

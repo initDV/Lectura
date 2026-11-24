@@ -16,7 +16,7 @@ final class SpeechPlan {
     private static final Pattern ABBR=Pattern.compile("(?iu)(?<![\\p{L}\\p{N}])(?:(?:m|mme|mlle|dr|pr|st|ste|av|env|réf|cf|vol|n°|mr|mrs|ms|prof|vs)\\.(?=[ \\t]+[\\p{L}\\p{N}])|p\\.[ \\t]*ex\\.|(?:[a-z]\\.){2,}|(?:etc)\\.(?=[,;:!?]))");
     private static final Pattern URL=Pattern.compile("(?i)(?:https?://|ftp://|mailto:|www\\.)[^\\s<>«»\\[\\]()\"']+");
     private static final Pattern LINK=Pattern.compile("(!?)\\[([^]\\n]*)\\]\\(([^)\\n]*)\\)");
-    private static final Pattern WORD=Pattern.compile("[\\p{L}\\p{M}]+(?:['’\\-][\\p{L}\\p{M}]+)*");
+    private static final Pattern WORD=Pattern.compile("[\\p{L}\\p{M}]+(?:['’\\-‐‑][\\p{L}\\p{M}]+)*");
     private static final Pattern NUMBER=Pattern.compile("(?:[−-][ \\t]*)?([$€])?[0-9]+(?:[.,:][0-9]+)*(?:[ \\t]*[€$])?");
     private static final Pattern END_WORD=Pattern.compile("[\\p{L}\\p{N}]");
 
@@ -120,18 +120,21 @@ final class SpeechPlan {
         while(to>from&&Script.space(line.charAt(to-1)))to--;
         if(from==to)return;
         String raw=line.substring(from,to);boolean fr=!lang.equals("en");Builder b=new Builder();
-        Matcher words=WORD.matcher(line),numbers=NUMBER.matcher(line);
+        Matcher words=WORD.matcher(line),numbers=NUMBER.matcher(line),clock=ClockWords.NUMERIC.matcher(line).useTransparentBounds(true);
         for(int i=from;i<to;) {
             int pos=start+i,cp=line.codePointAt(i),n=Character.charCount(cp);
             if(ignore[i]) {b.space(pos);i+=n;continue;}
+            if(fr&&asciiDigit((char)cp)&&clock.region(i,to).lookingAt()) {
+                b.word(ClockWords.spoken(clock),pos);i=clock.end();continue;
+            }
             if(fr&&(cp=='$'||cp=='€'||cp=='-'||cp=='−'||cp>='0'&&cp<='9')&&numbers.region(i,to).lookingAt()) {
                 String rawNumber=numbers.group();String spoken=number(rawNumber);
                 b.word(spoken,pos);i=numbers.end();if(i<to&&(Character.isLetterOrDigit(line.codePointAt(i))))b.space(start+i);continue;
             }
             if(Character.isLetter(cp)&&words.region(i,to).lookingAt()) {
-                String word=words.group(),replacement=lex.optString(Normalizer.normalize(word,Normalizer.Form.NFC).toLowerCase(Locale.ROOT),"");
+                String word=words.group().replace('‐','-').replace('‑','-'),replacement=lex.optString(Normalizer.normalize(word,Normalizer.Form.NFC).toLowerCase(Locale.ROOT),"");
                 if(!replacement.isEmpty())b.word(replacement,pos);
-                else for(int j=i;j<words.end();j++)b.append(String.valueOf(line.charAt(j)),start+j);
+                else for(int j=i;j<words.end();j++)b.append(String.valueOf(word.charAt(j-i)),start+j);
                 i=words.end();continue;
             }
             switch(cp) {
@@ -167,10 +170,7 @@ final class SpeechPlan {
         s=s.replace("$","").replace("€","");String[] pieces=s.split("[.,:]");
         String spoken=G2p.digits(pieces[0]);int pos=pieces[0].length();
         for(int i=1;i<pieces.length;i++) {char c=s.charAt(pos);String p=pieces[i];
-            if(c==':'&&i==1&&pieces.length==2&&p.length()==2&&pieces[0].length()<=2) {
-                spoken+=pieces[0].equals("1")?" heure":" heures";
-                if(!p.equals("00"))spoken+=" "+G2p.digits(p.startsWith("0")?p.substring(1):p);
-            }else spoken+=(c==','?" virgule ":" point ")+G2p.digits(p);
+            spoken+=(c==','?" virgule ":" point ")+G2p.digits(p);
             pos+=p.length()+1;
         }
         return (minus?"moins ":"")+spoken+(euros?" euro"+(s.equals("1")?"":"s"):dollars?" dollar"+(s.equals("1")?"":"s"):"");

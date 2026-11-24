@@ -11,7 +11,7 @@ const q = new URLSearchParams(location.search), planche = document.getElementByI
 const persos = [], tous = await loadCharacters();
 const cases = q.get('toutes')
   ? NOMS.map((expr) => ({ def: tous.find((d) => d.id === (q.get('perso') || 'robot_lectura')) || tous[0], expr, titre: expr }))
-  : tous.map((def) => ({ def, expr: q.get('expr') || 'neutre', titre: `${def.nom}${def.pro ? ' (Pro)' : ''}` }));
+  : tous.map((def) => ({ def, expr: q.get('expr') || 'neutre', titre: `${def.nom}` }));
 for (const { def, expr, titre } of cases) {
   const fig = document.createElement('figure'), duo = document.createElement('div'), cap = document.createElement('figcaption');
   duo.className = 'duo'; cap.textContent = titre;
@@ -24,7 +24,6 @@ for (const { def, expr, titre } of cases) {
     const c = new Character(svg, def);
     c.setExpression(expr, +(q.get('force') || 1), q.get('mix') || '', +(q.get('poids') || 0));
     c.setTalking(q.get('parle') ? 1 : 0.15); c.setViseme(q.get('parle') ? 2 : 0);
-    if (q.get('riche')) c.setRich(true);
     if (q.get('fige')) { c.nextBlink = Infinity; c.nextCoup = Infinity; c.phase = 1.2; }
     if (q.get('geste')) c.gesture(q.get('fige') ? 1234 - +(q.get('depuis') || 500) : performance.now(), q.get('geste'));
     persos.push({ c, frame: new SvgFrame(svg), ctx: canvas.getContext('2d') });

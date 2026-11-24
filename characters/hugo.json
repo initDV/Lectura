@@ -2,7 +2,6 @@
  "id": "hugo",
  "nom": "Hugo",
  "role": "base",
- "pro": false,
  "svg": "hugo.svg",
  "sexe": "m",
  "metier": "musicien",

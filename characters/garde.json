@@ -1,4 +1,4 @@
-{"id": "garde", "nom": "Garde", "role": "pro", "pro": true, "svg": "garde.svg",
+{"id": "garde", "nom": "Garde", "svg": "garde.svg",
  "couleurContour": "#2dd4bf", "couleurRemplissage": "#1c1830", "couleurYeux": "#3ddc84", "couleurBouche": "#38bdf8",
  "pivots": {"epaule_g": [34, 224], "epaule_d": [208, 224]},
  "mouvements": {"vitesseIdle": 1, "amplitudeBras": 0.5, "style": "fluide"},

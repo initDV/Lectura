@@ -82,6 +82,7 @@ public final class DeviceChecks extends Instrumentation {
                 check("fixtures",()->refsAndModels(refs));
                 check("prosodie-pcm",()->prosody(refs));
                 check("jeu-du-personnage",()->performance(refs));
+                check("quatre-gestes",()->robotChoreo(ctx,refs));
                 check("catalogue-et-reglages",()->fullAccess(ctx));
                 check("lips-reference",()->lipsReference(ctx,refs));
                 check("audio-importe",()->imported(ctx));
@@ -238,6 +239,18 @@ public final class DeviceChecks extends Instrumentation {
                 require(key.equals("words")?ipa.equals(row.getString(1)):ipa.contains(row.getString(1)),text+" : "+ipa+" != "+row.getString(1));
             }
         }
+        JSONArray siwis=voice.getJSONArray("siwis");
+        for(int i=0;i<siwis.length();i++){
+            JSONArray row=siwis.getJSONArray(i);String text=row.getString(0);
+            require(g.phrase(text,true).equals(row.getString(1))&&g.phrase(text).equals(row.getString(2)),"Portée de la correction Siwis : "+text);
+        }
+        String clock="🚆 Demain à 08\u202fh\u00a030, est-ce possible ?";
+        var f=SpeechPlan.plan(clock,"fr",Refs.object(refs.json("prononciation.json"),"fr")).get(0);
+        ClockWords.Time clockTag=ClockWords.first(clock);
+        require(clockTag!=null&&clockTag.label.equals("08:30")&&clockTag.index==clock.indexOf("08")
+            &&f.spoken.contains("huit heures trente")&&f.original.text.equals(clock.substring(0,f.original.end)),"Normalisation des heures sans modifier la source");
+        require(ClockWords.first("x8h30 et 25:59, -8:30 ou 08:30:40")==null,"Faux horaires");
+        require(VoiceRender.siwisPause(140)==105&&VoiceRender.siwisPause(360)==360&&VoiceRender.siwisPause(400)==320,"Pauses Siwis");
         require(Arrays.equals(G2p.ids("ɥ",new JSONObject("{\"^\":[1],\"$\":[2],\"_\":[0],\"y\":[37]}")),new long[]{1,0,37,0,2}),"Repli /ɥ/ Piper");
         tests=fixture.getJSONArray("timeline");for(int i=0;i<tests.length();i++){
             JSONObject t=tests.getJSONObject(i);String clean=Script.clean(t.getString("t"));require(clean.equals(t.getString("text")),"Nettoyage Markdown");
@@ -400,6 +413,67 @@ public final class DeviceChecks extends Instrumentation {
         p.sample(600,at);p.sample(599.999,before);p.sample(600.001,after);
         require(Arrays.equals(at,expected),"Une pose interrompue doit repartir de la position atteinte");
         for(int i=0;i<at.length;i++)require(Math.abs(before[i]-after[i])<.001,"Saut à la coupure d’une pose");
+    }
+    private static void near(double a,double b,String name){require(Math.abs(a-b)<.000001,name+" : "+a+" / "+b);}
+    private String robotChoreo(Context ctx,Refs refs)throws Exception{
+        JSONObject fixture=fixtures().getJSONObject("robot");JSONArray rows=fixture.getJSONArray("segments");
+        List<Script.Segment> parts=new ArrayList<>();int start=0;
+        for(int i=0;i<rows.length();i++){
+            JSONObject span=rows.getJSONObject(i);String line=span.getString("texte");
+            Script.Segment p=new Script.Segment(line,start,start+line.length(),Script.type(line));start=p.end+1;
+            p.from=span.getLong("debutMs");p.speechEnd=span.getLong("speechEndMs");p.to=span.getLong("finMs");parts.add(p);
+        }
+        RobotChoreo direction=RobotChoreo.plan(parts,fixture.getDouble("duration"));
+        JSONObject expected=fixture.getJSONObject("direction");require(direction.label.equals(expected.getString("label")),"Horloge réellement prononcée");
+        double[][] actual={direction.step,direction.hour,direction.question,direction.salute};String[] cues={"pas","h","q","salut"};
+        for(int i=0;i<cues.length;i++)for(int j=0;j<2;j++)near(actual[i][j],expected.getJSONArray(cues[i]).getDouble(j),cues[i]);
+        near(direction.end,expected.getDouble("end"),"Fin avec salut");
+        JSONArray poses=fixture.getJSONArray("poses");RobotChoreo.Pose out=new RobotChoreo.Pose();
+        for(int i=poses.length()-1;i>=0;i--){
+            JSONArray row=poses.getJSONArray(i);direction.sample(row.getDouble(0),true,out);JSONObject p=row.getJSONObject(1);
+            String[] names={"x","y","tilt","blend","head","nod","drop","armL","foreL","armR","foreR","gazeX","gazeY","brow","antenna","clock"};
+            double[] values={out.x,out.y,out.tilt,out.blend,out.head,out.nod,out.drop,out.armL,out.foreL,out.armR,out.foreR,out.gazeX,out.gazeY,out.brow,out.antenna,out.clock};
+            for(int k=0;k<names.length;k++)near(values[k],p.getDouble(names[k]),names[k]);
+            require(out.legs[0].lift==0||out.legs[1].lift==0,"Pas sans appui");
+            for(int leg=0;leg<2;leg++){
+                RobotChoreo.Leg l=out.legs[leg];JSONObject m=p.getJSONArray("legs").getJSONObject(leg);
+                // At full extension hypot/atan2 can differ by a few millionths of a degree between VMs.
+                require(Math.abs(l.thigh-m.getDouble("thigh"))<.00002&&Math.abs(l.shin-m.getDouble("shin"))<.00002,"Articulation Java/JS");
+                near(Math.hypot(l.hx-l.kx,l.hy-l.ky),70,"cuisse de longueur constante");near(Math.hypot(l.kx-l.fx,l.ky-l.fy),104,"tibia de longueur constante");
+            }
+        }
+        MainActivity a=open(ctx);File input=tone(ctx,5),dir=ctx.getExternalFilesDir("verification");
+        String text="Demain, on part à 8 h 30. Tu seras là ? Parfait !";
+        try{
+            main(()->{
+                Project p=new Project(a.db.settings);p.text=text;p.character="robot_lectura";p.speed=1;p.emotions=true;
+                a.open(p);a.stage.sprite.reduced=false; // CI has animator_duration_scale=0; exercise the non-reduced path explicitly.
+                a.importAudio(Uri.fromFile(input),"horloge.wav");
+            });
+            waitFor("Import de la piste du robot",()->a.project.fileAudio,10000);
+            main(()->a.launch(false));
+            waitFor("Lecture avec mise en scène",()->a.reading!=null&&a.reading.playing,12000);
+            main(()->{
+                Reading r=a.reading;RobotChoreo c=r.choreography;
+                require(c!=null&&c.label.equals("08:30")&&c.end>r.mediaDuration,"Plan lié à la lecture native");
+                r.pause();r.seek((c.hour[0]+c.hour[1])*.5);a.stage.updatePose(100);
+                Svg.Node clock=a.stage.sprite.svg.get("robot-clock");require(!clock.hidden&&clock.alpha>.97,"Horloge visible au pointage");
+                require(a.stage.sprite.svg.get("robot-clock-digits").children.size()==24,"Chiffres de 08:30");
+                Bitmap image=Bitmap.createBitmap(720,1280,Bitmap.Config.ARGB_8888);
+                a.stage.exportDraw(new Canvas(image),720,1280,true,100);
+                int green=0;for(int y=950;y<1230;y++)for(int x=0;x<274;x++)if(image.getPixel(x,y)==0xff83edbd)green++;
+                require(green>=30,"Chiffres absents du rendu d’export : "+green);
+                try(var file=Files.newOutputStream(new File(dir,"android-robot-heure.png").toPath())){image.compress(Bitmap.CompressFormat.PNG,100,file);}finally{image.recycle();}
+                double pose=a.stage.sprite.robotStage.pose.foreR;
+                a.stage.updatePose(1000);near(a.stage.sprite.robotStage.pose.foreR,pose,"Image figée pendant la pause");
+                a.stage.sprite.reduced=true;a.stage.updatePose(1100);require(clock.hidden,"Horloge en mouvement réduit");
+                a.stage.sprite.reduced=false;r.seek(r.mediaDuration+730);r.speed(.5f);a.stage.updatePose(1200);
+                require(a.stage.sprite.robotStage.pose.nod<.92&&a.stage.sprite.viseme==0&&r.chars(r.time())==text.length(),"Salut après l’audio");
+                a.startPlaying();
+            });
+            waitFor("Fin naturelle après le salut au ralenti",()->a.reading.ended,5000);
+            return "17 poses Java/JS, appuis et longueurs ; Android : pause, saut dans le salut, ralenti, mouvement réduit, chiffres PNG";
+        }finally{input.delete();main(()->{a.db.audio(a.project).delete();a.finish();});}
     }
     private static Bitmap performanceFrame(Sprite sprite,Performance directions,long audio,long wall) {
         sprite.direct(directions,audio,"");sprite.quietMouth=true;sprite.tick(wall);

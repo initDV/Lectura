@@ -57,7 +57,7 @@ Règles pratiques :
 ## 3. Remplir le JSON
 
 ```json
-{"id":"mon_robot","nom":"Mon robot","role":"pro","pro":true,"svg":"mon_robot.svg",
+{"id":"mon_robot","nom":"Mon robot","svg":"mon_robot.svg",
  "couleurContour":"#ff4d4d","couleurRemplissage":"#1c1830","couleurYeux":"#ffd23f","couleurBouche":"#38bdf8",
  "pivots":{"epaule_g":[34,224],"epaule_d":[208,224]},
  "mouvements":{"vitesseIdle":1,"amplitudeBras":1,"style":"fluide"},
@@ -65,7 +65,7 @@ Règles pratiques :
 ```
 
 - `id` doit être identique au nom du fichier.
-- `pro: true` réserve le personnage à Lectura Pro. Gratuits aujourd'hui : `robot_lectura` et `robot_rouge`.
+- Tout personnage ajouté est accessible gratuitement. Le Robot Lectura utilise en plus un `svgScene` articulé en lecture ; les autres dessins continuent à utiliser leur rig habituel.
 - `mouvements.style` : `fluide`, `saccade`, `sec`, `frappe`, `flottant`, `ondulant`, `calme` ou `expressif`.
 - `vitesseIdle` et `amplitudeBras` multiplient la vitesse et l'ampleur des mouvements.
 

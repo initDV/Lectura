@@ -79,7 +79,7 @@ final class VoiceRender {
                         zeros(out,silence,count);frames+=count;
                     }
                     p.speechEnd=ms(frames,rate);
-                    long gap=fragment.pauseFrames(rate);zeros(out,silence,gap);frames+=gap;
+                    long gap=profile==Profile.SIWIS?Math.round(siwisPause(fragment.pauseMs)*rate/1000.):fragment.pauseFrames(rate);zeros(out,silence,gap);frames+=gap;
                     p.to=ms(frames,rate);parts.add(p);times.put(new JSONArray().put(p.from).put(p.speechEnd).put(p.to));
                 }
                 if(frames==0)throw new IOException("Aucun son n’a été synthétisé.");
@@ -92,6 +92,8 @@ final class VoiceRender {
             return new Hd.Synthesis(new Pcm(wav,1,rate,frames,false),parts);
         }finally{if(!keep)temp.delete();}
     }
+    // Natural French dialogue pacing, limited to Siwis. Keep command/paragraph and question margins.
+    static int siwisPause(int ms){switch(ms){case 140:return 105;case 320:return 300;case 400:return 320;default:return ms;}}
     private static void zeros(RandomAccessFile file,byte[] blank,long count)throws IOException {
         long bytes=count*2;
         if(file.getFilePointer()+bytes>Pcm.MAX_BYTES)throw new IOException("Synthèse trop volumineuse.");

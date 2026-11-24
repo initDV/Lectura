@@ -1,5 +1,5 @@
 // @ts-check
-// Thèmes et polices du terminal (personnalisation = Pro ; « sombre » + JetBrains Mono = gratuit).
+// Thèmes et polices du terminal.
 export const THEMES = {
   // prompt = « $ », cmd = texte d'une commande (accent éclairci pour rester lisible), com = commentaire (atténué), bord = bordure
   sombre: { nom: 'Sombre', bg: '#13131a', bar: '#13131a', fg: '#b0b0b8', prompt: '#9b45e0', cmd: '#c08cf5', com: '#8a8a98', bord: '#2a2a35' },

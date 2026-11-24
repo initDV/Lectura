@@ -19,3 +19,15 @@ export const questions = [
   ['Où vas-tu ?', false], ['Tu viens quand ?', false], ['Quel jour venez-vous ?', false], ['Tu prends du thé ou du café ?', false],
   ['Tu viens ?!', false], ['! Vraiment.', false], ['Tu viens ce soir.', false], ['Mr. Lectura ?', false],
 ];
+
+// The six shared word corrections and the two model-specific pronunciations approved in the comparisons.
+export const siwis = [
+  ['Demain, on part à 8 h 30. Tu seras là ?', 'dəmˈɛ̃, ɔ̃ pˈaʁ a yˈit ˈœʁ tʁˈɑ̃t. ty səʁˈa lˈa?', 'dəmˈɛ̃, ɔ̃ pˈaʁ a ɥˈit ˈœʁ tʁˈɑ̃t. ty səʁˈa lˈa?'],
+  ['La nuit, la pluie et lui.', 'la- nyˈi, la- plɥˈi e lɥˈi.', 'la- nɥˈi, la- plɥˈi e lɥˈi.'],
+  ['Huit heures trente-deux.', 'ɥˈit ˈœʁ tʁˈɑ̃t dˈø.', 'ɥˈit ˈœʁ tʁˈɑ̃t dˈø.'],
+  ['Huit heures de travail.', 'ɥˈit ˈœʁ də- tʁavˈaj.', 'ɥˈit ˈœʁ də- tʁavˈaj.'],
+  ['D’où est-ce qu’on part ?', 'dˈu ɛs kɔ̃ pˈaʁ?', 'dˈu ɛs kɔ̃ pˈaʁ?'],
+  ['Qu’est-ce ? N’est‑ce pas ?', 'kɛs? nˈɛs pˈa?', 'kɛs? nˈɛs pˈa?'],
+];
+export const corrections = [['notamment','notamɑ̃'], ['faisait','fəzɛ'], ['derrière','dɛʁjɛʁ'],
+  ['compter','kɔ̃te'], ['moyen','mwajɛ̃'], ['doigt','dwa']];

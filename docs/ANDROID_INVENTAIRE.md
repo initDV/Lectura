@@ -1,5 +1,7 @@
 # Inventaire de la référence web
 
+> Inventaire historique du portage initial. Les classifications Pro ci-dessous ne s’appliquent plus depuis la 1.1.
+
 Comparaison des objets Git avec le contenu du checkout : 231 fichiers de `39e429522cc715aeda6ce0db9d3eb5690ba1f2fd`, les sources web sont inchangées (seul le fichier d’ignorés a évolué). Ce relevé est un index d’audit, pas une validation de comportement. Les binaires de polices/icônes et les tiers minifiés/WASM sont suivis comme ressources, pas réécrits. Les voix déployées sont générées par `tools/fetch_voice.mjs` et ne figurent pas dans Git.
 
 ## Dessins et rigs

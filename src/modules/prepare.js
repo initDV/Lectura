@@ -26,11 +26,10 @@ async function json(url, quoi) {
   }
 }
 
-/** Dictionnaire de mots-clés : base (gratuit) + enrichi et catégories personnalisées (Pro). */
+/** Dictionnaire de mots-clés : base, enrichi français et catégories personnalisées. */
 export async function loadDict() {
   const langue = getLang(), base = await json(`data/keywords_${langue === 'en' ? 'en' : 'fr'}.json`, 'les mots-clés');
-  if (!store.pro) return base;
-  const extras = [await json('data/keywords_fr_pro.json', 'les mots-clés enrichis')];
+  const extras = [await json('data/keywords_fr_extended.json', 'les mots-clés enrichis')];
   const perso = store.settings?.motsPerso;
   if (perso && Object.keys(perso).length) extras.push({ categories: perso });
   return mergeDicts(base, ...extras);
@@ -44,14 +43,11 @@ export async function loadLexique() {
   return lexiques.get(langue);
 }
 
-/** Personnage du projet ; un personnage Pro sans licence est remplacé par le Professeur (avec message). */
+/** Personnage du projet ; repli uniquement si le dessin demandé est indisponible. */
 export async function loadProjectCharacter(projet) {
   let def = await getCharacter(projet.personnageId);
   if (!def || def.erreur) {
     notify(t('scene.persoIntrouvable', { id: projet.personnageId }), 'warn');
-    def = await getCharacter(PERSO_DEFAUT);
-  } else if (def.pro && !store.pro) {
-    notify(t('scene.persoPro', { nom: def.nom }), 'warn');
     def = await getCharacter(PERSO_DEFAUT);
   }
   if (!def) throw new Error('Aucun personnage disponible : le fichier characters/robot_lectura.json est introuvable.');

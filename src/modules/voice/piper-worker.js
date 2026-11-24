@@ -16,7 +16,7 @@ async function init({ ortUrl, wasmBase, modele, cfg }) {
 }
 
 async function synth({ texte, vitesse, speakerId, prosodie }) {
-  const phonemes = phonemiser(texte);
+  const phonemes = phonemiser(texte, prosodie);
   if (!phonemes) return { samples: new Float32Array(0), phonemes, peak: 0 };
   const ids = phonemesEnIds(phonemes, config.phoneme_id_map);
   const inf = config.inference || {};

@@ -1,4 +1,4 @@
-{"id": "ninja", "nom": "Ninja", "role": "pro", "pro": true, "svg": "ninja.svg",
+{"id": "ninja", "nom": "Ninja", "svg": "ninja.svg",
  "couleurContour": "#ffffff", "couleurRemplissage": "#1c1830", "couleurYeux": "#3ddc84", "couleurBouche": "#38bdf8",
  "pivots": {"epaule_g": [34, 224], "epaule_d": [208, 224]},
  "mouvements": {"vitesseIdle": 1, "amplitudeBras": 1, "style": "sec"},

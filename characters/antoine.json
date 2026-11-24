@@ -2,7 +2,6 @@
  "id": "antoine",
  "nom": "Antoine",
  "role": "base",
- "pro": false,
  "svg": "antoine.svg",
  "sexe": "m",
  "metier": "avocat",

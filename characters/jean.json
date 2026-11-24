@@ -2,7 +2,6 @@
  "id": "jean",
  "nom": "Jean",
  "role": "base",
- "pro": false,
  "svg": "jean.svg",
  "sexe": "m",
  "metier": "boucher",

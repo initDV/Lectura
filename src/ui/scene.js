@@ -9,6 +9,9 @@ import { transition, majReglages } from '../app.js';
 import { go } from '../router.js';
 import { AudioEngine } from '../modules/audio.js';
 import { prepare, loadProjectCharacter } from '../modules/prepare.js';
+import { planRobot, poseRobot } from '../modules/robot-motion.js';
+import { rigRobot } from '../modules/robot-stage.js';
+import { WithOutro } from '../modules/player.js';
 import { Character } from '../modules/character.js';
 import { creerHumeur } from '../modules/humeur.js';
 import { Terminal } from '../modules/terminal.js';
@@ -37,7 +40,7 @@ export async function render(root) {
   const projet = store.projet, audio = new AudioEngine();
   /** @type {any} */ let prep = null; /** @type {any} */ let perso = null; /** @type {any} */ let character = null; /** @type {any} */ let terminal = null;
   /** @type {any} */ let humeur = null;
-  let preparation = null, essaiLecture = 0;
+  let preparation = null, essaiLecture = 0, robotRig = null, direction = null, pausedFrame = null;
   let raf = 0, vivant = true, exprManuelle = '', derniereExpr = '', dernierSeg = null, dernierRang = 0, muet = false, clic = 0, arrete = true, signature = '', masque = false;
 
   const charPane = h('div', { class: 'char-pane' });
@@ -48,8 +51,7 @@ export async function render(root) {
   const badgeRec = h('div', { class: 'rec-badge', hidden: true, text: 'REC' });
   const menuBtn = h('button', { type: 'button', class: 'menu-btn', 'aria-label': t('scene.menu'), title: t('scene.menu'), 'aria-haspopup': 'dialog', onClick: menu }, icon('menu'));
   const fabBtn = h('button', { type: 'button', class: 'fab-settings', 'aria-label': t('reglages.themeApp') || 'Réglages', title: t('reglages.themeApp') || 'Réglages', onClick: () => go('reglages') }, icon('settings'));
-  const stage = h('div', { class: 'stage' }, menuBtn, fabBtn, charPane, h('div', { class: 'term-pane' }, fenetre), overlay, badgeRec,
-    store.pro ? null : h('div', { class: 'watermark', text: 'Lectura', 'aria-hidden': 'true' }));
+  const stage = h('div', { class: 'stage' }, menuBtn, fabBtn, charPane, h('div', { class: 'term-pane' }, fenetre), overlay, badgeRec);
   const toucher = () => { store.modifie = true; };
   const controls = createControls({
     texte: projet.texte, vitesse: projet.audio.voix.vitesse, volume: store.settings.volume ?? 1,
@@ -69,7 +71,7 @@ export async function render(root) {
 
   const temps = () => (prep ? prep.source.timeMs() : 0);
   const pret = () => !!prep && ['PRET', 'LECTURE', 'PAUSE', 'FIN'].includes(store.etat);
-  const pourCanvas = () => ({ projet, svg: perso.svg, terminal, pro: store.pro, titreTerminal: store.settings.titreTerminal, texteMasque: masque });
+  const pourCanvas = () => ({ projet, svg: perso.svg, terminal, titreTerminal: store.settings.titreTerminal, texteMasque: masque });
   const exportScene = creerExport({ projet, badge: badgeRec, pret: () => pret() && !!terminal, pourCanvas, source: () => prep.source, pause, chercher, jouer, format: () => store.settings.formatVideo });
   const majUi = () => controls.update({ etat: varianteCommandes(store.etat, arrete), muet });
   let _brut = '', _propre = '';
@@ -112,9 +114,9 @@ export async function render(root) {
       perso = p;
       clear(charPane).append(creerDecor(store.settings.decor), p.svg);
       character = new Character(p.svg, p.def);
+      robotRig = p.def.id === 'robot_lectura' ? rigRobot(p.svg) : null;
       character.setReduced(store.settings.reduireAnimations || character.reduce);
       character.setGain(GAINS[projet.reglages.mouvements] || 1);
-      character.setRich(store.pro);
     } catch (err) { erreur(err); }
   }
 
@@ -149,8 +151,11 @@ export async function render(root) {
       const projetLecture = { ...projet, texte: textePropre(), audio: { ...projet.audio, voix: { ...projet.audio.voix } } };
       const nouveau = await prepare(projetLecture, { audio, apercu, perso, signal: a.signal, onProgress: (fait, total, texte) => { barre.value = total ? fait / total : 0; if (texte) etape.textContent = texte; } });
       if (!vivant || a.signal.aborted) { nouveau.source.dispose(); return false; }
-      prep = nouveau; signature = sig; derniereExpr = ''; dernierSeg = null;
-      humeur = creerHumeur({ lexique: prep.lexique, matcher: prep.matcher, pro: store.pro, actif: projet.reglages.emotions });
+      prep = nouveau; signature = sig; derniereExpr = ''; dernierSeg = null; pausedFrame = null;
+      direction = robotRig && !character.reduce && projet.reglages.emotions ? planRobot(prep.segments, prep.source.dureeMs) : null;
+      robotRig?.plan(direction);
+      if (direction?.end > prep.source.dureeMs) prep.source = new WithOutro(prep.source, direction.end);
+      humeur = creerHumeur({ lexique: prep.lexique, matcher: prep.matcher, actif: projet.reglages.emotions });
       terminal = new Terminal(termBody, prep.dict, prep.matcher);
       terminal.load(textePropre());
       prep.source.onEnd = fin;
@@ -229,7 +234,7 @@ export async function render(root) {
   }
 
   function expressionSuivante() { // touche E : force une expression (puis revient à « auto »)
-    exprManuelle = prochaineExpression(exprManuelle, store.pro);
+    exprManuelle = prochaineExpression(exprManuelle);
     notify(`${t('scene.expression')} : ${t(`expr.${exprManuelle || 'auto'}`)}`, 'info', 1800);
   }
 
@@ -253,19 +258,27 @@ export async function render(root) {
     if (!vivant) return;
     raf = requestAnimationFrame(image);
     if (!character) return;
+    let robot = null, quietMouth = false;
     if (prep && terminal && store.etat !== 'PREPARATION' && store.etat !== 'ERREUR') {
       const s = prep.source, lecture = store.etat === 'LECTURE', ms = s.timeMs();
       const chars = store.etat === 'FIN' ? textePropre().length : s.charPos ? s.charPos() : prep.timeline.charAt(ms);
       terminal.revealTo(chars);
-      const seg = prep.timeline.segmentAtChar(chars), parle = lecture && !!seg && typeLigne(seg.texte) === 'parle';
-      if (lecture && seg && parle) detecterPonctuation(seg, chars, now);
+      const seg = prep.timeline.segmentAtChar(chars);
+      const audioSpan = s.kind === 'voix-systeme' ? seg : prep.timeline.segmentAt(ms);
+      const parle = lecture && !!audioSpan && typeLigne(audioSpan.texte) === 'parle' && ms < (audioSpan.speechEndMs ?? audioSpan.finMs);
+      const anime = direction && (!arrete || store.etat === 'FIN');
+      // Web Speech fournit un curseur réel/estimé par mot ; sa projection dans la timeline respecte les plages parlées.
+      const sceneMs = s.kind === 'voix-systeme' && ms < (s.finAudio ?? s.dureeMs) ? prep.timeline.timeAt(chars) : ms;
+      if (anime) robot = poseRobot(direction, sceneMs, !exprManuelle);
+      quietMouth = !parle;
+      if (lecture && seg && parle && !robot?.blend) detecterPonctuation(seg, chars, now);
       // Expression : imposée (touche E), sinon humeur de la phrase à la position du texte (donc au temps de la voix).
       const hu = arrete || !seg ? { expr: 'neutre', force: 1, mix: '', poids: 0, rang: 0, geste: '' }
         : exprManuelle ? { expr: exprManuelle, force: 1, mix: '', poids: 0, rang: 0, geste: '' } : humeur.etat(seg, chars - seg.start);
       const cle = `${hu.expr}|${hu.force.toFixed(2)}|${hu.mix}`;
       if (cle !== derniereExpr) { derniereExpr = cle; character.setExpression(hu.expr, hu.force, hu.mix, hu.poids); bus.emit('character:expression', hu.expr); }
-      if (seg !== dernierSeg) { dernierSeg = seg; dernierRang = 0; if (parle && prep.matcher(seg.texte).some((j) => j.cat)) character.gesture(now); }
-      if (lecture && hu.rang !== dernierRang) { if (hu.rang > dernierRang && hu.geste) character.gesture(now, hu.geste); dernierRang = hu.rang; } // mot déclencheur
+      if (seg !== dernierSeg) { dernierSeg = seg; dernierRang = 0; if (parle && seg && !robot?.blend && prep.matcher(seg.texte).some((j) => j.cat)) character.gesture(now); }
+      if (lecture && hu.rang !== dernierRang) { if (hu.rang > dernierRang && hu.geste && !robot?.blend) character.gesture(now, hu.geste); dernierRang = hu.rang; } // mot déclencheur
       const niveau = parle ? s.viseme(now) : 0; // commandes et commentaires : bouche fermée, bras au repos
       // Passer la lettre en cours au personnage : mouth.js l'utilise pour arrondir (o/u)
       // ou étirer (i/e) la bouche → lip-sync naturel au lieu d'un simple rectangle qui bouge.
@@ -273,10 +286,16 @@ export async function render(root) {
       const lettreEnCours = chars < texteLu.length ? texteLu[chars] : '';
       character.setViseme(niveau, lettreEnCours);
       character.setTalking(parle ? (niveau > 0 ? 1 : 0.15) : 0);
-      if (store.pro && s.bands) character.setMouthShape(parle ? mouthShape(s.bands()) : 'normal'); // Pro : lip-sync par bandes
+      const bandes = parle ? s.bands?.() : null;
+      character.setMouthShape(bandes ? mouthShape(bandes) : 'normal');
       if (lecture) bus.emit('timeline:tick', { ms, chars });
-    } else { character.setViseme(0); character.setTalking(0); }
-    character.tick(now);
+      // Un arrêt sur image conserve la pose jusqu'au prochain déplacement du curseur.
+      const cadre = !lecture && robot ? `${ms}|${exprManuelle}|${store.etat}` : null;
+      if (cadre !== null && cadre === pausedFrame) { exportScene.image(now); return; }
+      pausedFrame = cadre;
+    } else { pausedFrame = null; character.setViseme(0); character.setTalking(0); character.setMouthShape('normal'); }
+    character.tick(now, robot, quietMouth);
+    robotRig?.paint(robot);
     exportScene.image(now);
   }
 

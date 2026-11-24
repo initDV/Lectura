@@ -1,4 +1,4 @@
-{"id": "alien", "nom": "Alien", "role": "pro", "pro": true, "svg": "alien.svg",
+{"id": "alien", "nom": "Alien", "svg": "alien.svg",
  "couleurContour": "#b6ff4f", "couleurRemplissage": "#1c1830", "couleurYeux": "#3ddc84", "couleurBouche": "#38bdf8",
  "pivots": {"epaule_g": [34, 224], "epaule_d": [208, 224]},
  "mouvements": {"vitesseIdle": 1, "amplitudeBras": 1, "style": "ondulant"},

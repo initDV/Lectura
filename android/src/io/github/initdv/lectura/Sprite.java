@@ -23,6 +23,8 @@ final class Sprite {
         {.54,-125,-90,-6,-4},{.62,-120,-80,-6,-4},{.85,-120,-80,-6,-4},{1,0,0,0,0}};
     private static final double[][] GLASSES={{0,0,0,0,0},{.3,-140,-110,-2,1},{.45,-145,-120,-2,1},{.55,-140,-110,-2,1},{.7,-142,-115,-2,1},{1,0,0,0,0}};
     final Svg svg;
+    final RobotStage robotStage;
+    RobotChoreo choreography;
     private final RigPose rig;
     private final Svg.Node head,body,legs,left,right,foreL,foreR,eyeL,eyeR,browL,browR,mouth;
     private final Svg.Node[] lips;
@@ -49,10 +51,14 @@ final class Sprite {
     private double sceneTime=-1;
     private boolean onClock;
 
-    Sprite(Refs refs,JSONObject def) {
+    Sprite(Refs refs,JSONObject def) {this(refs,def,false);}
+    Sprite(Refs refs,JSONObject def,boolean scene) {
         rig=refs.rig;pose=rig.rest();sampled=rig.rest();transitionFrom=rig.rest();target=rig.rest();
-        try (InputStream in=refs.open("characters/"+def.optString("svg"))) {svg=new Svg(in);}
+        String filename=def.optString("svg");
+        if(scene&&def.optString("id").equals("robot_lectura"))filename=def.optString("svgScene",filename);
+        try (InputStream in=refs.open("characters/"+filename)) {svg=new Svg(in);}
         catch(IOException e){throw new IllegalArgumentException(e);}
+        robotStage=svg.get("robot-trunk")==null?null:new RobotStage(svg,refs.json("robot-stage.json"));
         body=need("body"); left=need("arm-l");right=need("arm-r");legs=svg.get("legs");
         head=svg.get("head")!=null?svg.get("head"):group(body,true,205,"head");
         foreL=forearm(left,"forearm-l");foreR=forearm(right,"forearm-r");
@@ -133,7 +139,8 @@ final class Sprite {
         else if(clock||last<0)System.arraycopy(goal,0,pose,0,pose.length);
         else rig.idle(pose,goal,dt);
         if(clock&&!onClock){micro="";script="";}
-        beat=scripted&&!reduced?directions.gesture(sceneTime):null;beatTime=sceneTime;beatGain=blend;
+        RobotChoreo.Pose robot=robotStage==null?null:robotStage.sample(reduced?null:choreography,sceneTime,forcedPose==null);
+        beat=scripted&&!reduced&&(robot==null||robot.blend==0)?directions.gesture(sceneTime):null;beatTime=sceneTime;beatGain=blend;
         if(beat==null&&blend<1&&!reduced){beat=leavingBeat;beatTime=leavingTime;beatGain=leavingGain*(1-blend);}
         if(blend==1)leavingBeat=null;
         onClock=clock;last=t;
@@ -202,11 +209,16 @@ final class Sprite {
         double dy=-(sin(s*.9)+1)*floatAmplitude*k-abs(sin(s*3.2))*v("bounce")*k+jump+cos(t*.047)*tr*.4+rd;
         if(abs(dx)+abs(dy)<=.004){dx=0;dy=0;}
         double lean=v("lean")*sk+tilt;
-        body.reset().preTranslate(f(dx),f(dy));body.transform.preTranslate(f(sway),f(v("bodyY")-breath*1.3));rotate(body.transform,lean,hip);
-        if(legs!=null){legs.reset().preTranslate(f(dx),f(dy));legs.transform.preRotate(f(sway*.8),120,354);}
+        body.reset();if(legs!=null)legs.reset();
+        if(robot==null){
+            body.transform.preTranslate(f(dx),f(dy));body.transform.preTranslate(f(sway),f(v("bodyY")-breath*1.3));rotate(body.transform,lean,hip);
+            if(legs!=null){legs.transform.preTranslate(f(dx),f(dy));legs.transform.preRotate(f(sway*.8),120,354);}
+        }
         double hr=v("headR")+rhr+sin(s*1.1)*max(v("sway"),2.5*sk)*k+sin(s*2.1)*1.3*talk*k*sk;
         double hy=v("headY")+gy+breath*.55+sin(s*4.2)*.9*talk*k+rhy,hx=v("headX")+gx;
+        if(robot!=null){hx=robot.mix(hx,0);hy=robot.mix(hy,robot.drop);hr=robot.mix(hr,robot.head);}
         moveRotate(head,hx,hy,hr,neck);
+        if(robot!=null)head.transform.preScale(1,(float)robot.nod,neck[0],neck[1]);
         double scriptedArm=0,scriptedFore=0,scriptedLook=0;
         if(!clock&&!script.isEmpty()){
             double p=(t-scriptAt)/(script.equals("scratch")?2000:1500);
@@ -229,9 +241,10 @@ final class Sprite {
         double aa=-v("armR")+step(-sin(s*(human?.7:1.1)+1)*amount)+mr+scriptedArm+armR;
         double aFl=fl+(shakeHand-204-fl)*waveHand+step(sin(s*1.4+2)*amount*.8)+mfl+elbowLeft;
         double aFr=-v("foreR")+step(-sin(s*1.2)*amount*.8)+mfr+scriptedFore+elbowRight;
-        for(Svg.Node n:new Svg.Node[]{left,right}){n.reset().preTranslate(f(dx),f(dy));n.transform.preTranslate(0,f(v("bodyY")));rotate(n.transform,lean,hip);}
+        if(robot!=null){al=robot.mix(al,robot.armL);aa=robot.mix(aa,robot.armR);aFl=robot.mix(aFl,robot.foreL);aFr=robot.mix(aFr,robot.foreR);}
+        for(Svg.Node n:new Svg.Node[]{left,right}){n.reset();if(robot==null){n.transform.preTranslate(f(dx),f(dy));n.transform.preTranslate(0,f(v("bodyY")));rotate(n.transform,lean,hip);}}
         rotate(left.transform,al,shoulderL);rotate(right.transform,aa,shoulderR);rotate(foreL.reset(),aFl,elbowL);rotate(foreR.reset(),aFr,elbowR);
-        double h=quietMouth?0:max(VIS[max(0,min(3,viseme))],v("h")),w=v("w")*(shape/48);
+        double h=quietMouth?(robot==null||human?0:VIS[0]):max(VIS[max(0,min(3,viseme))],v("h")),w=v("w")*(shape/48);
         if(human)drawLips(cx+v("gx")*.2,cy+v("my"),halfWidth*(w/48),h*(maxOpening/19));
         else if(mouth.kind.equals("rect")){
             // character.js rounds each SVG attribute, after computing the centre and corner radius.
@@ -241,12 +254,15 @@ final class Sprite {
         }
         double lid=clamp(v("lid")-lidDrop,.15,1),sy=lid+(.15-lid)*blink,eyex=v("gx")+gazeX+sin(s*.55)*1.3*k+sin(s*1.5)*.6*k+rgx+scriptedLook;
         double eyey=v("gy")+gazeY+cos(s*.45)*.8*k+rgy;
+        if(robot!=null){eyex=robot.mix(eyex,robot.gazeX);eyey=robot.mix(eyey,robot.gazeY);}
         for(Svg.Node eye:new Svg.Node[]{eyeL,eyeR}){
             eye.reset().preTranslate(f(eyex),f(eyey)); if(sy<=.995)eye.transform.preScale(1,f(sy),0,(float)eyeY);
             if(eye.kind.equals("circle"))eye.path().addCircle(eye.f("cx"),eye.f("cy"),f(v("r")*rBase/11),Path.Direction.CW);
         }
         for(Svg.Node n:reflections){n.reset().preTranslate(f(eyex),f(eyey));n.alpha=sy>.6?1:0;}
-        moveRotate(browL,0,v("browL")+rb,-v("rot")*sk,browPivotL);moveRotate(browR,0,v("browR")+rb,v("rot")*sk,browPivotR);
+        double bl=v("browL")+rb,br=v("browR")+rb;
+        if(robot!=null){bl=robot.mix(bl,robot.brow*.71);br=robot.mix(br,robot.brow);}
+        moveRotate(browL,0,bl,-v("rot")*sk,browPivotL);moveRotate(browR,0,br,v("rot")*sk,browPivotR);
     }
     private static double variation(long index){long n=(index+1)*0x9e3779b97f4a7c15L;n^=n>>>30;n*=0xbf58476d1ce4e5b9L;return (n>>>48)/65536.;}
     private static void rotate(Matrix m,double a,float[] p){m.preRotate(f(a),p[0],p[1]);}

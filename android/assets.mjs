@@ -5,6 +5,7 @@ import fr from '../src/i18n/fr.js';
 import en from '../src/i18n/en.js';
 import { DEFAUTS } from '../src/modules/storage.js';
 import { EXPRESSIONS, NEUTRE } from '../src/modules/expressions.js';
+import { ROBOT_RIG, DIGITS, SEGMENTS, DIGIT_X, DIGIT_Y } from '../src/modules/robot-motion.js';
 import { THEMES } from '../src/modules/themes.js';
 import * as phonemes from '../src/modules/voice/g2p_lexique.js';
 
@@ -31,33 +32,14 @@ const voices = [
   ...piper.filter((v) => !['siwis', 'tom'].includes(v.id)),
 ];
 const versions = JSON.parse(await read('package.json'));
-// Android uses the full catalogue; the web originals keep their own access rules.
-const characterIndex = JSON.parse(await read('characters/index.json'));
+// Both platforms expose the full catalogue. Keep the native asset schema unchanged.
 const defaults = { ...DEFAUTS, moteurVoix: 'auto', voixId: '' };
-delete defaults.licence;
-delete defaults.idInstallation;
-const androidStrings = (labels, overrides) => ({
-  ...Object.fromEntries(Object.entries(labels).filter(([key]) => !/^(?:pro\.|nav\.pro$|scene\.persoPro$|reglages\.terminal\.pro$|persos\.emotions\.aidePro$|voix\.enLigne$)/.test(key))),
-  ...overrides,
-});
-const expressions = Object.fromEntries(Object.entries(EXPRESSIONS).map(([id, pose]) => {
-  const data = { ...pose };
-  delete data.pro;
-  delete data.base;
-  return [id, data];
-}));
+const androidStrings = (labels, overrides) => ({ ...labels, ...overrides });
 await mkdir(output, { recursive: true });
 await mkdir(resolve(res, 'mipmap-xxxhdpi'), { recursive: true });
 await Promise.all([
-  cp(new URL('characters/', root), resolve(output, 'characters'), { recursive: true, filter: (path) => !path.endsWith('.json') || path.endsWith('/index.json') })
-    .then(() => Promise.all(characterIndex.personnages.map(async (id) => {
-      const rig = JSON.parse(await read(`characters/${id}.json`));
-      delete rig.pro;
-      if (rig.role === 'pro') delete rig.role;
-      await put(`characters/${id}.json`, rig);
-    }))),
-  cp(new URL('data/', root), resolve(output, 'data'), { recursive: true, filter: (path) => !path.endsWith('/keywords_fr_pro.json') })
-    .then(() => cp(new URL('data/keywords_fr_pro.json', root), resolve(output, 'data/keywords_fr_extended.json'))),
+  cp(new URL('characters/', root), resolve(output, 'characters'), { recursive: true }),
+  cp(new URL('data/', root), resolve(output, 'data'), { recursive: true }),
   cp(new URL('android/data/prononciation.json', root), resolve(output, 'prononciation.json')),
   cp(new URL('android/data/direction.json', root), resolve(output, 'direction.json')),
   cp(new URL('icons/favicon.svg', root), resolve(output, 'favicon.svg')),
@@ -66,7 +48,6 @@ await Promise.all([
   cp(new URL('LICENSE', root), resolve(output, 'LICENSE')),
   cp(new URL('THIRD_PARTY_LICENSES.md', root), resolve(output, 'THIRD_PARTY_LICENSES.md')),
   put('fr.json', androidStrings(fr, {
-    'persos.emotions.aide': fr['persos.emotions.aidePro'],
     'apropos.confidentialite.texte': 'Tes textes, projets et lectures restent sur cet appareil. Lectura utilise Internet seulement pour télécharger les voix HD à ta demande. Aucun compte ni traceur.',
     'voix.err.aucune': 'Aucune voix locale disponible. Installe une voix dans les réglages du téléphone ou télécharge une voix Lectura HD.',
     'android.terminal.fontSystem': 'Système',
@@ -84,7 +65,6 @@ await Promise.all([
     'voix.hd.err.tropLong': 'Texte trop long pour la synthèse ({n} caractères sur {max} maximum). Coupe-le en plusieurs projets ou importe un audio.',
   })),
   put('en.json', androidStrings(en, {
-    'persos.emotions.aide': en['persos.emotions.aidePro'],
     'apropos.confidentialite.texte': 'Your text, projects and playback stay on this device. Lectura only uses the Internet to download HD voices on request. No accounts or trackers.',
     'voix.err.aucune': 'No local voice available. Install one in your phone settings or download a Lectura HD voice.',
     'android.terminal.fontSystem': 'System',
@@ -101,8 +81,9 @@ await Promise.all([
     'android.voice.noAudio': 'Download Estelle or choose an already installed voice.',
     'voix.hd.err.tropLong': 'Text too long for synthesis ({n} characters; maximum {max}). Split it into projects or import audio.',
   })),
+  put('robot-stage.json', { rig: ROBOT_RIG, digits: DIGITS, segments: SEGMENTS, digitX: DIGIT_X, digitY: DIGIT_Y }),
   put('defaults.json', defaults),
-  put('themes.json', { app: themes, terminal: THEMES }), put('expressions.json', { neutral: NEUTRE, expressions }),
+  put('themes.json', { app: themes, terminal: THEMES }), put('expressions.json', { neutral: NEUTRE, expressions: EXPRESSIONS }),
   put('g2p.json', { ...phonemes, CLITIQUES: [...phonemes.CLITIQUES], TIRET: [...phonemes.TIRET] }),
   put('hd-voices.json', { voices }), put('icons.json', await table('src/ui/icons.js', 'TRACES')),
   put('version.json', { version: versions.version, native: process.env.LECTURA_BUILD || 'android', base: '39e429522cc715aeda6ce0db9d3eb5690ba1f2fd' }),

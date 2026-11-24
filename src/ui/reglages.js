@@ -1,5 +1,5 @@
 // @ts-check
-// Écran Réglages : langue, voix, voix HD, terminal, animations, mots-clés personnalisés (Pro), stockage, version.
+// Écran Réglages : langue, voix, voix HD, terminal, animations, mots-clés personnalisés, stockage, version.
 import { store } from '../state.js';
 import { h, add, clear, field, debounce } from './dom.js';
 import { t, taille, LANGUES } from '../modules/i18n.js';
@@ -39,7 +39,6 @@ export async function render(root) {
   const sauverDoux = debounce(sauver, 300);
   /** Reporte aussi le réglage du terminal sur le projet ouvert (les réglages sont les valeurs par défaut). */
   const terminal = (cleReglage, cleProjet, v) => { if (store.projet) { store.projet.terminal[cleProjet] = v; store.modifie = true; } sauverDoux({ [cleReglage]: v }); };
-  const pro = () => h('span', { class: 'badge badge-pro', text: 'PRO' });
 
   // Langue
   const langue = h('select', null, ...Object.entries(LANGUES).map(([c, n]) => h('option', { value: c, text: n })));
@@ -59,17 +58,16 @@ export async function render(root) {
   const hd = voixHdPanel({ onChange: () => panneau.refresh() });
 
   // Terminal
-  const verrou = !store.pro;
-  const theme = h('select', { disabled: verrou }, ...Object.entries(THEMES).map(([c, d]) => h('option', { value: c, text: d.nom })));
+  const theme = h('select', null, ...Object.entries(THEMES).map(([c, d]) => h('option', { value: c, text: d.nom })));
   theme.value = THEMES[s.themeTerminal] ? s.themeTerminal : 'sombre';
   theme.addEventListener('change', () => terminal('themeTerminal', 'theme', theme.value));
-  const police = h('select', { disabled: verrou }, ...Object.keys(POLICES).map((p) => h('option', { value: p, text: p })));
+  const police = h('select', null, ...Object.keys(POLICES).map((p) => h('option', { value: p, text: p })));
   police.value = POLICES[s.policeTerminal] ? s.policeTerminal : 'JetBrains Mono';
   police.addEventListener('change', () => terminal('policeTerminal', 'police', police.value));
   const tailleTxt = h('input', { type: 'range', min: 12, max: 40, step: 1, value: s.tailleTexte });
   const champTaille = field(`${t('reglages.taille')} : ${s.tailleTexte} px`, tailleTxt);
   tailleTxt.addEventListener('input', () => { champTaille.querySelector('label').textContent = `${t('reglages.taille')} : ${tailleTxt.value} px`; terminal('tailleTexte', 'taille', +tailleTxt.value); });
-  const vitesse = h('input', { type: 'range', min: 5, max: 120, step: 1, value: s.vitesseDefilement, disabled: verrou });
+  const vitesse = h('input', { type: 'range', min: 5, max: 120, step: 1, value: s.vitesseDefilement });
   const champVitesse = field(`${t('reglages.vitesse')} : ${s.vitesseDefilement} ${t('reglages.cps')}`, vitesse, t('reglages.vitesse.aide'));
   vitesse.addEventListener('input', () => { champVitesse.querySelector('label').textContent = `${t('reglages.vitesse')} : ${vitesse.value} ${t('reglages.cps')}`; terminal('vitesseDefilement', 'vitesseCps', +vitesse.value); });
   const fond = h('input', { type: 'color', value: store.projet?.reglages.fond || '#0b0f14', disabled: !store.projet });
@@ -109,8 +107,7 @@ export async function render(root) {
     h('section', { class: 'card' }, h('h2', { text: t('reglages.langue') }), field(t('reglages.langue.choix'), langue)),
     h('section', { class: 'card' }, h('h2', { text: t('reglages.voix') }), panneau.el),
     h('section', { class: 'card' }, h('h2', { text: t('voix.hd.titre') }), hd.el),
-    h('section', { class: 'card' }, h('h2', null, t('reglages.terminal'), ' ', verrou ? pro() : null),
-      verrou ? h('p', { class: 'muted small', text: t('reglages.terminal.pro') }) : null,
+    h('section', { class: 'card' }, h('h2', { text: t('reglages.terminal') }),
       field(t('reglages.titreTerminal'), titreTerm),
       h('section', { class: 'card' }, h('h2', { text: t('reglages.themeApp') || 'Apparence' }),
       h('p', { class: 'muted small', text: t('reglages.themeApp.aide') || 'Choisis un thème visuel. L\'aperçu est immédiat.' }),
@@ -124,7 +121,7 @@ export async function render(root) {
     h('section', { class: 'card' }, h('h2', { text: t('reglages.animations') }),
       coche('reduireAnimations', t('reglages.reduire')), coche('modePresentation', t('reglages.presentation'))),
     h('section', { class: 'card' }, h('h2', { text: t('reglages.decor') }), decorPanel()),
-    h('section', { class: 'card' }, h('h2', null, t('reglages.mots'), ' ', pro()), motsPersoPanel({ sauver }).el),
+    h('section', { class: 'card' }, h('h2', { text: t('reglages.mots') }), motsPersoPanel({ sauver }).el),
     h('section', { class: 'card' }, h('h2', { text: t('reglages.stockage') }), jauge, stock, h('div', { class: 'row' }, proteger, liberer)),
     h('section', { class: 'card' }, h('h2', { text: t('reglages.version') }), h('p', { text: `Lectura ${VERSION} (${BUILD})` }),
       h('a', { class: 'btn', href: '#/apropos', text: t('nav.apropos') })),

@@ -38,7 +38,7 @@ diagnostic=djaɡnostik stagnation=staɡnasjɔ̃ technique=tɛknik techniques=tɛ
 archive=aʁʃiv architecture=aʁʃitɛktyʁ chiffrement=ʃifʁəmɑ̃ œil=œj yeux=jø œuvre=œvʁ sœur=sœʁ cœur=kœʁ
 aiment=ɛm ferment=fɛʁm dorment=dɔʁm forment=fɔʁm nomment=nɔm estiment=ɛstim expriment=ɛkspʁim confirment=kɔ̃fiʁm affirment=afiʁm
 consomment=kɔ̃sɔm transforment=tʁɑ̃sfɔʁm informent=ɛ̃fɔʁm
-vraiment=vʁɛmɑ̃ absolument=apsɔlymɑ̃ poliment=polimɑ̃ suffisamment=syfizamɑ̃ constamment=kɔ̃stamɑ̃ élégamment=eleɡamɑ̃ apparemment=apaʁamɑ̃
+vraiment=vʁɛmɑ̃ absolument=apsɔlymɑ̃ poliment=polimɑ̃ notamment=notamɑ̃ faisait=fəzɛ derrière=dɛʁjɛʁ moyen=mwajɛ̃ compter=kɔ̃te doigt=dwa suffisamment=syfizamɑ̃ constamment=kɔ̃stamɑ̃ élégamment=eleɡamɑ̃ apparemment=apaʁamɑ̃
 poêle=pwal poêles=pwal orgueil=ɔʁɡœj orgueilleux=ɔʁɡœjø orgueilleuse=ɔʁɡœjøz aïeul=ajœl aïeux=ajø aïe=aj maïs=mais yaourt=jauʁt yaourts=jauʁt
 chœur=kœʁ œuf=œf œufs=ø bœuf=bœf bœufs=bø paysage=peizaʒ abbaye=abei gageure=ɡaʒyʁ gnome=ɡnom agnostique=aɡnostik
 poing=pwɛ̃ poings=pwɛ̃ longtemps=lɔ̃tɑ̃ compte=kɔ̃t comptes=kɔ̃t comptent=kɔ̃t taon=tɑ̃ paon=pɑ̃ faon=fɑ̃ saoul=su soûl=su

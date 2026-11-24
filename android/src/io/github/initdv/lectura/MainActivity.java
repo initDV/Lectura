@@ -212,7 +212,10 @@ public final class MainActivity extends Activity {
                 if(!silent&&!cfg.fileAudio&&!choices.isEmpty()&&!choices.get(0).equals(voiceUsed)){
                     JSONObject fallback=hd.voice(voiceUsed);note(t("android.voice.fallback","nom",fallback==null?voiceUsed:fallback.optString("nom")),"warn",5000);
                 }
-                reading.performance=prepared.performance;preparing=false;sig=signature;clearOverlay();reading.volume(volume(),muted);reading.speed(project.speed);
+                reading.performance=prepared.performance;
+                if(stage.sprite.robotStage!=null&&!stage.sprite.reduced&&cfg.emotions)
+                    reading.choreograph(RobotChoreo.plan(prepared.segments,reading.mediaDuration));
+                preparing=false;sig=signature;clearOverlay();reading.volume(volume(),muted);reading.speed(project.speed);
                 if(silent)note(t("scene.apercuActif"),"info");if(isForeground)startPlaying();else playState();
             }catch(Exception e){if(reading==null)prepared.close();sceneError(e);}},prepared::close),
             e->handler.post(()->{if(ticket==generation)sceneError(e);})));

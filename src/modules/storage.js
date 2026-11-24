@@ -12,7 +12,7 @@ const memoire = Object.fromEntries(MAGASINS.map((m) => [m, new Map()]));
 export const DEFAUTS = {
   langue: 'fr', moteurVoix: 'webspeech', voixId: '', vitesseVoix: 1, hauteurVoix: 1, volume: 1,
   themeTerminal: 'sombre', policeTerminal: 'JetBrains Mono', tailleTexte: 18, vitesseDefilement: 28,
-  reduireAnimations: false, modePresentation: false, idInstallation: '', licence: '',
+  reduireAnimations: false, modePresentation: false,
   tutorielVu: false, motsPerso: {}, formatVideo: '9:16', themeApp: 'actuel',
   personnageId: 'robot_lectura', titreTerminal: 'rhak_override@sentinel: ~/cours',
   decor: { mur: '#28324d', sol: '#211a33', horizon: '#5ba5c9', neon: '#c67fa6' },
@@ -76,12 +76,19 @@ export async function dbUpdate(m, cle, modifier) {
   });
 }
 
-/** Réglages complets ; crée l'identifiant d'installation à la première visite. */
+/** Ne migre que les deux champs de l'ancien système de paiement ; aucun projet ni pack n'est touché. */
 export async function loadSettings() {
   const s = { ...DEFAUTS, ...((await dbGet('settings', 'main')) || {}) };
-  if (!s.idInstallation) {
-    s.idInstallation = uuid();
-    await dbPut('settings', 'main', s);
+  if (Object.hasOwn(s, 'licence') || Object.hasOwn(s, 'idInstallation')) {
+    const sansLicence = (saved) => {
+      const clean = { ...saved };
+      delete clean.licence;
+      delete clean.idInstallation;
+      return clean;
+    };
+    delete s.licence;
+    delete s.idInstallation;
+    try { await dbUpdate('settings', 'main', sansLicence); } catch (err) { logError('réglages', err); }
   }
   return s;
 }

@@ -21,16 +21,18 @@ function indexPersonnages() {
       const def = JSON.parse(readFileSync(join(dossier, f), 'utf8')), id = f.slice(0, -5);
       if (def.id !== id) throw new Error(`"id" vaut "${def.id}" mais le fichier s'appelle ${f}`);
       for (const k of ['nom', 'svg', 'mouvements']) if (!def[k]) throw new Error(`champ "${k}" manquant`);
-      const svg = readFileSync(join(dossier, def.svg), 'utf8');
-      for (const p of PIECES) if (!svg.includes(`id="${p.slice(1)}"`)) throw new Error(`${def.svg} : élément ${p} manquant`);
-      if (/href="(?!#)|<image|<foreignObject/i.test(svg)) throw new Error(`${def.svg} : le dessin doit être autonome (aucune référence externe)`);
-      if (/<script|\son\w+=|javascript:/i.test(svg)) throw new Error(`${def.svg} : script interdit dans un personnage`);
-      ids.push({ id, pro: !!def.pro });
+      for (const nom of [def.svg, def.svgScene].filter(Boolean)) {
+        const svg = readFileSync(join(dossier, nom), 'utf8');
+        for (const p of PIECES) if (!svg.includes(`id="${p.slice(1)}"`)) throw new Error(`${nom} : élément ${p} manquant`);
+        if (/href="(?!#)|<image|<foreignObject/i.test(svg)) throw new Error(`${nom} : le dessin doit être autonome (aucune référence externe)`);
+        if (/<script|\son\w+=|javascript:/i.test(svg)) throw new Error(`${nom} : script interdit dans un personnage`);
+      }
+      ids.push(id);
     } catch (err) { erreurs.push(`  ✖ ${f} : ${err.message}`); }
   }
   if (erreurs.length) throw new Error(`Personnages invalides :\n${erreurs.join('\n')}`);
-  const ordre = ['robot_lectura', 'robot_rouge'], rang = (x) => (ordre.includes(x.id) ? ordre.indexOf(x.id) : x.pro ? 100 : 50);
-  const liste = ids.sort((a, b) => rang(a) - rang(b)).map((x) => x.id); // gratuits d'abord
+  const ordre = ['robot_lectura', 'robot_rouge'], rang = (id) => (ordre.includes(id) ? ordre.indexOf(id) : ordre.length);
+  const liste = ids.sort((a, b) => rang(a) - rang(b));
   const ancien = JSON.parse(readFileSync(join(dossier, 'index.json'), 'utf8'));
   const garde = (ancien.personnages || ancien).filter((id) => liste.includes(id)); // conserve l'ordre déjà choisi
   const final = [...garde, ...liste.filter((id) => !garde.includes(id))];
@@ -91,9 +93,6 @@ function construire() {
   console.log(`✔ version ${version} · ${date} · ${h}`);
   console.log(`✔ code + styles + polices : ${(gz / 1024).toFixed(0)} Ko compressés ${gz < 300 * 1024 ? '(< 300 Ko : objectif tenu)' : '(> 300 Ko : objectif dépassé !)'}`);
   console.log(`✔ voix Lectura HD : ${voix}`);
-  if (/export const DEMO = true/.test(readFileSync(join(racine, 'src/modules/license-key.js'), 'utf8'))) {
-    console.warn('⚠ La clé de licence est celle de DÉMONSTRATION. Avant de vendre : node tools/generate_license.mjs keygen --force');
-  }
   if (gz >= 300 * 1024) process.exitCode = 2;
 }
 

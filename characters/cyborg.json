@@ -1,4 +1,4 @@
-{"id": "cyborg", "nom": "Cyborg", "role": "pro", "pro": true, "svg": "cyborg.svg",
+{"id": "cyborg", "nom": "Cyborg", "svg": "cyborg.svg",
  "couleurContour": "#ff4fd8", "couleurRemplissage": "#1c1830", "couleurYeux": "#3ddc84", "couleurBouche": "#38bdf8",
  "pivots": {"epaule_g": [34, 224], "epaule_d": [208, 224]},
  "mouvements": {"vitesseIdle": 1, "amplitudeBras": 1, "style": "saccade"},

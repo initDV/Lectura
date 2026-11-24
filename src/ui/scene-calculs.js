@@ -1,5 +1,5 @@
 // @ts-check
-import { EXPRESSIONS_BASE, EXPRESSIONS_PRO } from '../modules/project.js';
+import { NOMS } from '../modules/expressions.js';
 
 /**
  * @param {string} texteNettoye
@@ -26,9 +26,8 @@ export function varianteCommandes(etat, arrete) {
 /**
  * Calcule l'expression suivante ; toute valeur absente du cycle, y compris 'auto', ramène à ''.
  * @param {string} expression
- * @param {boolean} pro
  */
-export function prochaineExpression(expression, pro) {
-  const liste = ['', ...EXPRESSIONS_BASE.slice(1), ...(pro ? EXPRESSIONS_PRO : [])];
+export function prochaineExpression(expression) {
+  const liste = ['', ...NOMS];
   return liste[(liste.indexOf(expression) + 1) % liste.length];
 }

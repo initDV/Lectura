@@ -1,6 +1,6 @@
 // @ts-check
 // menu.js : menu discret de l'écran principal. Tout ce qui n'est pas sur la capture de référence vit ici :
-// projet, aperçu, capture PNG, export vidéo, personnages, réglages, licence Pro, à propos.
+// projet, aperçu, capture PNG, export vidéo, personnages, réglages, à propos.
 import { store } from '../state.js';
 import { h } from './dom.js';
 import { icon } from './icons.js';
@@ -16,9 +16,8 @@ import { ouvrirModale } from './modale.js';
  */
 export function ouvrirMenu(a) {
   ouvrirModale(t('scene.menu'), (fermer) => {
-    const pro = () => (store.pro ? null : h('span', { class: 'badge badge-pro', text: 'PRO' }));
-    const bouton = (ic, texte, cle, badge) => h('li', null, h('button', { type: 'button', onClick: () => { fermer(); a.actions[cle](); } },
-      icon(ic), h('span', { class: 'grow', text: texte }), badge ? pro() : null));
+    const bouton = (ic, texte, cle) => h('li', null, h('button', { type: 'button', onClick: () => { fermer(); a.actions[cle](); } },
+      icon(ic), h('span', { class: 'grow', text: texte })));
     const lien = (ic, route) => h('li', null, h('a', { href: `#/${route}`, onClick: fermer }, icon(ic), h('span', { class: 'grow', text: t(`nav.${route}`) })));
     const titre = h('input', { type: 'text', value: a.projet.titre, maxLength: 200, placeholder: t('editeur.sansTitre'), autocomplete: 'off', 'aria-label': t('editeur.titreProjet') });
     titre.addEventListener('input', () => a.onTitre(titre.value));
@@ -36,18 +35,18 @@ export function ouvrirMenu(a) {
         lien('folder', 'projets'),
         bouton('upload', t('editeur.importerTexte'), 'importerTexte'),
         bouton('download', t('editeur.exporter'), 'exporter'),
-        bouton('upload', t('editeur.importerSrt'), 'importerSrt', true),
-        bouton('download', t('menu.exporterSrt'), 'exporterSrt', true),
-        bouton('download', t('menu.exporterVtt'), 'exporterVtt', true)),
+        bouton('upload', t('editeur.importerSrt'), 'importerSrt'),
+        bouton('download', t('menu.exporterSrt'), 'exporterSrt'),
+        bouton('download', t('menu.exporterVtt'), 'exporterVtt')),
       h('h3', { text: t('menu.scene') }),
       h('ul', { class: 'choix' },
         bouton('eye', t('scene.apercuSansSon'), 'apercu'),
         bouton('camera', t('scene.capture'), 'capture'),
-        bouton(a.enregistrement ? 'stop' : 'record', t(a.enregistrement ? 'scene.arreterEnregistrement' : 'scene.enregistrer'), 'video', true),
+        bouton(a.enregistrement ? 'stop' : 'record', t(a.enregistrement ? 'scene.arreterEnregistrement' : 'scene.enregistrer'), 'video'),
         bouton('fullscreen', t('scene.pleinEcran'), 'pleinEcran')),
       h('div', { class: 'field' }, h('label', { text: t('scene.format') }), format),
       h('h3', { text: t('menu.avance') }),
-      h('ul', { class: 'choix' }, bouton('video', t('menu.mesVideos'), 'mesVideos'), lien('smile', 'personnages'), lien('settings', 'reglages'), lien('star', 'pro'), lien('info', 'apropos')),
+      h('ul', { class: 'choix' }, bouton('video', t('menu.mesVideos'), 'mesVideos'), lien('smile', 'personnages'), lien('settings', 'reglages'), lien('info', 'apropos')),
       installer,
       h('p', { class: 'muted small' }, h('span', { class: `pill ${store.enLigne ? 'pill-on' : 'pill-off'}`, text: t(store.enLigne ? 'net.enLigne' : 'net.horsLigne') })),
     ];

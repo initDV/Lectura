@@ -6,7 +6,7 @@ import { icon } from './icons.js';
 import { t } from '../modules/i18n.js';
 import { applyUpdate } from '../modules/pwa.js';
 
-const LIENS = [['scene', 'back'], ['projets', 'folder'], ['personnages', 'smile'], ['reglages', 'settings'], ['pro', 'star'], ['apropos', 'info']];
+const LIENS = [['scene', 'back'], ['projets', 'folder'], ['personnages', 'smile'], ['reglages', 'settings'], ['apropos', 'info']];
 
 export function renderNav(route = '') {
   const nav = document.getElementById('nav');

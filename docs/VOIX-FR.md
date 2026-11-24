@@ -4,13 +4,17 @@ La voix et les modèles sont les mêmes. Ce lot change les phonèmes envoyés à
 
 | Source | Prononciation | Finale de question |
 | --- | --- | --- |
-| Piper Siwis, PWA et APK | Lexique commun, liaisons et homographes en contexte | Relèvement local et +70 ms à 1× si la finale est faible et suffisamment périodique |
+| Piper Siwis, PWA et APK | Lexique commun, corrections de diction ciblées et pauses selon la ponctuation | Relèvement local et +70 ms à 1× si la finale est faible et suffisamment périodique |
 | Autres voix Piper | Même phonétisation ; repli de `/ɥ/` sur `/y/` si le modèle n'a pas le phonème | Pas de traitement ajouté sur le Web. Sur Android, traitement existant limité aux finales faibles, sans allongement |
 | Siwis Kokoro (APK) | Même phonétisation locale, vérification de `/ɥ/` dans les tokens du pack | Finale Android sans allongement |
-| Estelle et voix système Android | Prononciation du moteur, pas de lexique IPA Piper | Finale Android sans allongement |
+| Estelle et voix système Android | Heures écrites normalisées avant la lecture ; prononciation du moteur, pas de lexique IPA Piper | Finale Android sans allongement |
 | Web Speech, audio importé, aperçu silencieux | Inchangé | Inchangé |
 
 ## Cas retenus
+
+- Depuis la 1.1 : `8 h 30`, `8h30` et `08:30` deviennent « huit heures trente » à la synthèse, pas dans le projet. « Est-ce », « qu’est-ce » et « n’est-ce » sont phonétisés comme un groupe.
+- Les formes écoutées « notamment », « faisait », « derrière », « compter », « moyen » et « doigt » entrent dans le lexique partagé. Seul **Siwis Piper** utilise la variante du modèle (`y` à la place de `ɥ`) pour « nuit » et le « huit » de « huit heures trente » ; le `/t/` est gardé. Ni « pluie », ni les autres heures, ni les autres modèles n’héritent de ce remplacement.
+- Les pauses de Siwis suivent la ponctuation (notamment 300 ms après un point, 360 ms après une question et 320 ms après un point d’exclamation à 1×). Les coupes des fragments et les durées de voix peuvent différer entre le Web et Android. La prise D a servi de référence d’écoute : ce n’est pas un enregistrement incorporé, et une nouvelle synthèse ne reproduit pas son PCM à l’identique.
 
 - `/jø/` reste intact seul ; « les yeux » et « deux yeux » reçoivent la liaison `/z/`. Pas de liaison introduite devant « yaourt », « héros » ou « haricot ».
 - « Vraiment ? » inclut bien `/ɑ̃/`, sans élargir aveuglément la règle de `-ent` aux verbes. « Fils », « couvent » et « président » ne changent de lecture qu'en présence d'un indice clair. Les formes isolées ambiguës gardent leur lecture par défaut.

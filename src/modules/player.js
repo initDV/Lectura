@@ -73,3 +73,57 @@ export class SilentSource {
   viseme(now) { return simulatedViseme(now, this.playing, this.texte[Math.floor((this.timeMs() / this.dureeMs) * this.texte.length)] || ' '); }
   dispose() { this.playing = false; }
 }
+
+/** Prolonge la source par une courte fin muette, sans modifier ni recopier le fichier audio. */
+export class WithOutro {
+  constructor(source, dureeMs, now = () => performance.now()) {
+    this.source = source; this.dureeMs = dureeMs; this.finAudio = source.dureeMs; this.now = now;
+    this.kind = source.kind; this.rate = 1; this.position = null; this.mark = 0; this.active = false; this.ended = false;
+    this.onEnd = null; this.onError = null;
+    source.onEnd = () => { if (this.active && this.position === null) this.#placer(this.finAudio); };
+    source.onError = (e) => { this.active = false; this.onError?.(e); };
+    if (source.charPos) this.charPos = () => this.position === null ? source.charPos() : source.queue.total;
+  }
+  #placer(ms) { this.position = ms; this.mark = this.now(); }
+  get playing() { return this.active && (this.position !== null || this.source.playing); }
+  get stream() { return this.source.stream; }
+  timeMs() {
+    if (this.position === null) return this.source.timeMs();
+    if (!this.active) return this.position;
+    const t = this.position + (this.now() - this.mark) * this.rate;
+    if (t < this.dureeMs) return t;
+    this.#placer(this.dureeMs); this.active = false; this.ended = true;
+    queueMicrotask(() => { if (this.ended) this.onEnd?.(); });
+    return this.dureeMs;
+  }
+  play() {
+    if (this.ended) this.seek(0);
+    if (this.active) return;
+    this.active = true; this.mark = this.now();
+    if (this.position === null) return this.source.play();
+  }
+  pause() {
+    if (this.position === null) {
+      this.source.pause();
+      if (this.source.timeMs() >= this.finAudio) this.#placer(this.finAudio);
+    } else this.#placer(this.timeMs());
+    this.active = false;
+  }
+  seek(ms) {
+    const t = Math.max(0, Math.min(this.dureeMs, ms));
+    this.ended = false;
+    if (t >= this.finAudio) { this.source.pause(); this.#placer(t); return; }
+    const fromOutro = this.position !== null;
+    this.position = null;
+    this.source.seek(t);
+    if (fromOutro && this.active) {
+      Promise.resolve(this.source.play()).catch((e) => { if (this.active && this.position === null) { this.active = false; this.onError?.(e); } });
+    }
+  }
+  setRate(r) { if (this.position !== null) this.#placer(this.timeMs()); this.rate = r; this.source.setRate(r); }
+  setVolume(v) { this.source.setVolume(v); }
+  setMuted(m) { this.source.setMuted(m); }
+  viseme(now) { return this.position === null ? this.source.viseme(now) : 0; }
+  bands() { return this.position === null ? this.source.bands?.() : null; }
+  dispose() { this.active = false; this.ended = false; this.source.dispose(); }
+}

@@ -3,6 +3,7 @@
 // Remplace espeak-ng (GPLv3, exclu par la règle de licences du projet). Voir docs/DECISIONS.md.
 import { LEXIQUE, LETTRES, SYMBOLES, CLITIQUES, TIRET, LIAISONS } from './g2p_lexique.js';
 import { nombresEnMots } from './nombres.js';
+import { heuresEnMots } from '../horaire.js';
 
 const VOY = 'aeiouyàâäéèêëîïôöùûüœæ';
 const V = (c) => !!c && VOY.includes(c);
@@ -183,20 +184,25 @@ function liaisonPermise(suiv) {
 }
 
 /** Phrase → chaîne de phonèmes (ponctuation conservée), prête à être convertie en identifiants Piper. */
-export function phonemiser(texte) {
+export function phonemiser(texte, siwis = false) {
   let t = texte.normalize('NFC').replace(/[’`]/g, "'").replace(/[«»“”"()[\]{}]/g, ' ').replace(/\.{3}|…/g, '.').replace(/aujourd'hui/gi, 'aujourdhui');
-  t = nombresEnMots(t.replace(/(\d)\s*%/g, '$1 pour cent'));
-  t = t.replace(/[@%&+=/\\#$€*_|<>~°]/g, (s) => ` ${SYMBOLES[s]} `).replace(/([A-Za-zÀ-ÿ])-(?=[A-Za-zÀ-ÿ])/g, '$1 ').replace(/(^|\s)-+(?=\S)/g, '$1');
-  const jetons = t.match(/[A-Za-zÀ-ÿœŒ]+'?|[.,;:!?]/g) || [];
+  t = nombresEnMots(heuresEnMots(t).replace(/(\d)\s*%/g, '$1 pour cent'));
+  t = t.replace(/[@%&+=/\\#$€*_|<>~°]/g, (s) => ` ${SYMBOLES[s]} `).replace(/(^|\s)-+(?=\S)/g, '$1');
+  const matches = [...t.matchAll(/(?<![\p{L}\p{M}\p{N}'-])(?:(?:qu|n)')?est[-‐‑]ce(?![\p{L}\p{M}\p{N}])|[A-Za-zÀ-ÿœŒ]+'?|[.,;:!?]/giu)];
+  const jetons = matches.map((m) => m[0]);
   const out = [];
   for (let k = 0; k < jetons.length; k++) {
     const j = jetons[k];
     if (/^[.,;:!?]$/.test(j)) { if (out.length) out[out.length - 1] = out[out.length - 1].replace(/ $/, '') + j + ' '; continue; }
     const m = j.toLowerCase();
+    if (/est[-‐‑]ce$/.test(m)) { out.push(`${m.startsWith("qu'") ? 'kɛs' : m.startsWith("n'") ? 'nˈɛs' : 'ɛs'} `); continue; }
     if (ELISION.test(m)) { out.push(ELIDE[m.slice(0, -1)] || 'k'); continue; }
     const avant = jetons[k - 1]?.toLowerCase() || '', suiv = jetons[k + 1]?.toLowerCase() || '';
     const variante = contexte(m, jetons[k - 2]?.toLowerCase() || '', avant, suiv, jetons[k + 2]?.toLowerCase() || '');
     let ph = variante ? accent(variante) : motEnPhonemes(j.replace(/'$/, ''));
+    // Ces deux codages sont propres au modèle Siwis Piper ; pas de remplacement général de /ɥ/.
+    if (siwis && m === 'huit' && /^huit[ \t\u00a0\u202f]+heures[ \t\u00a0\u202f]+trente(?![\p{L}\p{M}\p{N}‐‑-]|[ \t\u00a0\u202f]+et[ \t\u00a0\u202f]+un\b)/iu.test(t.slice(matches[k].index))) ph = 'yˈit';
+    if (siwis && m === 'nuit') ph = 'nyˈi';
     if (TIRET.has(m)) ph += '-';
     if (LIAISONS[m] && liaisonPermise(suiv)) ph += LIAISONS[m];
     out.push(`${ph} `);

@@ -31,7 +31,6 @@ export function creerExport(o) {
   }
 
   async function demarrer() {
-    if (!store.pro) return notify(t('pro.requis.video'), 'info');
     if (!o.pret()) return notify(t('scene.err.rienACapturer'), 'info');
     if (!supportedMime()) return notify(t('scene.err.videoNonGeree'), 'error');
     try {

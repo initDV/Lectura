@@ -1,6 +1,6 @@
 {
   "name": "lectura",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "PWA hors ligne : un personnage animé lit ton texte à côté d'un faux terminal.",
   "private": true,
   "type": "module",
@@ -15,8 +15,7 @@
     "format": "prettier --write .",
     "icons": "node tools/generate_icons.mjs",
     "characters": "node tools/build.mjs --index",
-    "voice": "node tools/fetch_voice.mjs",
-    "keygen": "node tools/generate_license.mjs keygen"
+    "voice": "node tools/fetch_voice.mjs"
   },
   "devDependencies": {
     "eslint": "^9.14.0",

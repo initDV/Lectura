@@ -151,19 +151,26 @@ final class G2p {
             re("^[aeiouyhàâéèêîôûœ]",next)&&!re("^(h[aiou]|onze|oui|y[aeo]|héros$)",next);
     }
     private static String token(List<String> sequence,int i){return i<0||i>=sequence.size()?"":sequence.get(i).toLowerCase(Locale.ROOT);}
-    String phrase(String source){
+    String phrase(String source){return phrase(source,false);}
+    String phrase(String source,boolean siwis){
         String s=Normalizer.normalize(source,Normalizer.Form.NFC).replace('’','\'').replace('`','\'')
             .replaceAll("[«»“”\"()\\[\\]{}]"," ").replaceAll("\\.{3}|…",".").replaceAll("(?i)aujourd'hui","aujourdhui");
-        s=numbers(s.replaceAll("([0-9])\\s*%","$1 pour cent"));
+        s=numbers(ClockWords.normalize(s).replaceAll("([0-9])\\s*%","$1 pour cent"));
         s=replace(s,"[@%&+=/\\\\#$€*_|<>~°]",m->" "+symbols.optString(m.group())+" ")
-            .replaceAll("([A-Za-zÀ-ÿ])-(?=[A-Za-zÀ-ÿ])","$1 ").replaceAll("(^|\\s)-+(?=\\S)","$1");
-        Matcher m=pat("[A-Za-zÀ-ÿœŒ]+'?|[.,;:!?]").matcher(s);List<String> tokens=new ArrayList<>();while(m.find())tokens.add(m.group());
+            .replaceAll("(^|\\s)-+(?=\\S)","$1");
+        Matcher m=pat("(?iu)(?<![\\p{L}\\p{M}\\p{N}'-])(?:(?:qu|n)')?est[-‐‑]ce(?![\\p{L}\\p{M}\\p{N}])|[A-Za-zÀ-ÿœŒ]+'?|[.,;:!?]").matcher(s);
+        List<String> tokens=new ArrayList<>();List<Integer> offsets=new ArrayList<>();
+        while(m.find()){tokens.add(m.group());offsets.add(m.start());}
         List<String> out=new ArrayList<>();for(int i=0;i<tokens.size();i++){
             String word=tokens.get(i),lower=word.toLowerCase(Locale.ROOT),bare=word.replaceFirst("'$","");
             if(word.length()==1&&has(".,;:!?",word.charAt(0))){if(!out.isEmpty()){int k=out.size()-1;out.set(k,out.get(k).replaceFirst(" $","")+word+" ");}continue;}
+            if(re("est[-‐‑]ce$",lower)){out.add(lower.startsWith("qu'")?"kɛs ":lower.startsWith("n'")?"nˈɛs ":"ɛs ");continue;}
             if(lower.endsWith("'")&&ELIDE.containsKey(cut(lower,1))){out.add(ELIDE.get(cut(lower,1)));continue;}
             String variant=context(lower,token(tokens,i-2),token(tokens,i-1),token(tokens,i+1),token(tokens,i+2));
-            String ph=variant==null?word(bare):accent(variant);if(tiret.contains(lower))ph+="-";
+            String ph=variant==null?word(bare):accent(variant);
+            if(siwis&&lower.equals("huit")&&re("(?iu)^huit[ \\t\u00a0\u202f]+heures[ \\t\u00a0\u202f]+trente(?![\\p{L}\\p{M}\\p{N}‐‑-]|[ \\t\u00a0\u202f]+et[ \\t\u00a0\u202f]+un\\b)",s.substring(offsets.get(i))))ph="yˈit";
+            if(siwis&&lower.equals("nuit"))ph="nyˈi";
+            if(tiret.contains(lower))ph+="-";
             if(liaisons.has(lower)&&liaison(token(tokens,i+1)))ph+=liaisons.optString(lower);
             out.add(ph+" ");
         }

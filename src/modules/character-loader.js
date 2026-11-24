@@ -32,10 +32,10 @@ export async function loadCharacters() {
       try {
         const def = await (await fetchOk(`${BASE}${id}.json`, `le personnage « ${id} »`)).json();
         if (!def.id || !def.svg) throw new Error(`Fiche ${id}.json incomplète : "id" et "svg" sont obligatoires.`);
-        return { nom: def.id, pro: false, ...def };
+        return { nom: def.id, ...def };
       } catch (err) {
         console.error(err); // un personnage défectueux n'empêche pas les autres de fonctionner
-        return { id, nom: id, erreur: err.message, pro: false, svg: '' };
+        return { id, nom: id, erreur: err.message, svg: '' };
       }
     }),
   );
@@ -71,7 +71,7 @@ function nettoyer(src, mode) {
 
 async function lireSvg(def, mode) {
   if (def.erreur) throw new Error(def.erreur);
-  const txt = await (await fetchOk(BASE + def.svg, `le dessin de « ${def.nom} »`)).text();
+  const txt = await (await fetchOk(BASE + (mode === 'direct' && def.svgScene ? def.svgScene : def.svg), `le dessin de « ${def.nom} »`)).text();
   const doc = new DOMParser().parseFromString(txt, 'image/svg+xml');
   if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'svg') {
     throw new Error(`Le fichier ${def.svg} n'est pas un SVG valide.`);

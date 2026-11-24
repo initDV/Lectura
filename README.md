@@ -48,7 +48,6 @@ Commande de build : `npm ci && npm run voice && npm run build` — dossier de so
 | `npm run voice` | Télécharge la voix HD dans `models/` (≈ 71 Mo). Inutile en local si tu ne testes pas la voix HD. |
 | `npm run characters` | Vérifie les personnages et met à jour `characters/index.json`. |
 | `npm run icons` | Régénère les icônes de l'application. |
-| `npm run keygen` | Crée la paire de clés des licences Pro. |
 
 ## Utilisation
 
@@ -85,23 +84,21 @@ les sourcils, la bouche, la tête et les bras.
 | « Bravo », « réussi », « parfait », « ça marche » | content, hoche la tête |
 | « Attention », « Quoi ?! », « tout à coup » | surpris, sursaute, mains levées |
 | « Regarde », « étape », « important », ligne `$ ` | concentré, regarde et montre le terminal |
-| « Génial », « incroyable », « c'est parti » (Pro) | enthousiaste, bras en l'air |
-| « Haha », « trop drôle », 😂 (Pro) | rit, mains sur le ventre |
-| « Je suis fier », « mission accomplie » (Pro) | fier, poings sur les hanches |
-| « Merci beaucoup », « ne t'inquiète pas » (Pro) | tendre, mains sur le cœur |
-| « Bizarre », « je me demande », « Tu es sûr ? » (Pro) | sceptique, main contre la joue |
-| « Oups », « désolé », « erreur » (Pro) | gêné, main derrière la tête |
-| « Dommage », « échec », « ça ne marche pas » (Pro) | triste, tête baissée |
-| « Épuisé », « ennuyeux », « pff » (Pro) | fatigué, yeux mi-clos |
-| « J'en ai marre », « interdit », « inadmissible » (Pro) | en colère, poings serrés |
-| « Danger », « au secours », « catastrophe » (Pro) | effrayé, tremble, mains sur les joues |
+| « Génial », « incroyable », « c'est parti » | enthousiaste, bras en l'air |
+| « Haha », « trop drôle », 😂 | rit, mains sur le ventre |
+| « Je suis fier », « mission accomplie » | fier, poings sur les hanches |
+| « Merci beaucoup », « ne t'inquiète pas » | tendre, mains sur le cœur |
+| « Bizarre », « je me demande », « Tu es sûr ? » | sceptique, main contre la joue |
+| « Oups », « désolé », « erreur » | gêné, main derrière la tête |
+| « Dommage », « échec », « ça ne marche pas » | triste, tête baissée |
+| « Épuisé », « ennuyeux », « pff » | fatigué, yeux mi-clos |
+| « J'en ai marre », « interdit », « inadmissible » | en colère, poings serrés |
+| « Danger », « au secours », « catastrophe » | effrayé, tremble, mains sur les joues |
 | « Oui », « d'accord » / « Non », « jamais » | hoche la tête / fait non de la tête |
 
 - La négation est comprise : « pas content » rend triste, « pas grave » rassure.
 - « très », « trop », les MAJUSCULES et « ! » renforcent ; « un peu » atténue.
 - Deux émotions dans la même phrase se mélangent (« J'en ai marre de ce bug » : colère puis gêne).
-- En version gratuite, les émotions Pro sont jouées avec l'expression de base la plus proche (content, concentré,
-  surpris).
 - Menu « ⋮ » → **Personnages** : coupe les émotions automatiques, ou impose une expression phrase par phrase. La
   liste indique ce que « Auto » a détecté.
 - Pour ajouter tes mots : ouvre `data/sentiments_fr.json` et ajoute-les dans la liste de l'émotion voulue
@@ -113,7 +110,7 @@ les sourcils, la bouche, la tête et les bras.
 - **Vitesse** (0.5x à 2.0x) : agit sur la voix et sur le défilement du terminal.
 - **Œil** dans la barre du terminal : masque ou affiche le texte, pour ne montrer que le robot.
 - **Menu « ⋮ »** en haut à gauche de la scène : projets, import/export, aperçu sans son, capture PNG, export vidéo,
-  personnages, réglages, licence Pro, à propos.
+  personnages, réglages, à propos.
 
 Raccourcis clavier (hors zone de texte) : `Espace` lancer/pause · `←` `→` ±5 s · `P` mode capture · `S` capture PNG ·
 `R` enregistrer la vidéo · `M` couper le son · `F` plein écran · `E` expression suivante.
@@ -127,28 +124,26 @@ Raccourcis clavier (hors zone de texte) : `Espace` lancer/pause · `←` `→` �
   Elle peut être enregistrée dans la vidéo.
 - Si rien ne marche, l'**aperçu sans son** fait quand même défiler le texte.
 
-## Gratuit et Pro
+## Tout est gratuit, sur le Web et sur Android
 
-| Gratuit | Pro |
-|---|---|
-| 2 robots (Robot Lectura, Robot rouge) | 11 robots de plus |
-| Fichier audio, voix du système, voix HD | Voix HD enregistrée dans la vidéo |
-| Terminal coloré, mode capture, raccourcis | Thèmes, police et vitesse du terminal |
-| Capture PNG | Export vidéo MP4 ou WebM, en 16:9 et 9:16 |
-| Projets locaux, export/import `.lectura` | Import/export `.srt` et `.vtt` |
-| Lip-sync à 4 niveaux | Lip-sync plus fin |
-| Émotions : content, concentré, surpris, salut de la main | 10 émotions de plus et leurs mélanges |
-| Filigrane « Lectura » sur les captures | Sans filigrane, mots-clés personnalisés |
+Le catalogue de 43 personnages, les 38 expressions et leurs mélanges, les lèvres avancées, les thèmes et les mots-clés
+personnalisés sont disponibles sans compte ni clé. Les imports et exports SRT/VTT, la capture PNG, les exports vidéo et
+MP3 et la médiathèque locale sont également disponibles. Les formats proposés dépendent des codecs de l'appareil.
+La PWA 1.1.0 conserve les projets, le brouillon, les audios, les vidéos et les voix installées en mettant à jour une ancienne version.
 
-**Avant de vendre une licence**, crée ta propre clé (celle du dépôt est une clé de démonstration) :
+### Essayer les quatre gestes
 
-```bash
-node tools/generate_license.mjs keygen --force
-git add src/modules/license-key.js && git commit -m "Licence : clé publique de production" && git push
-node tools/generate_license.mjs sign <identifiant-du-client>
+Choisis le **Robot Lectura**, laisse ses émotions automatiques activées et colle ce texte :
+
+```text
+Demain, on part à 8 h 30. Tu seras là ?
+Oui ! D’où est-ce qu’on part ? De la gare. Parfait !
 ```
 
-`private.pem` ne doit jamais quitter ta machine. Détails et limites : [docs/PRO_LICENSE.md](docs/PRO_LICENSE.md).
+Le robot fait un pas de côté au début de la lecture, montre `08:30`, s'incline sur la première question et salue après
+la dernière phrase. Tu peux vérifier en **Aperçu sans son**, avec la voix **Siwis (Piper)** ou avec ton fichier audio.
+La mise en scène suit le curseur : la pause fige la pose et l'export vidéo inclut le salut. Le réglage de réduction
+des animations et les expressions imposées par phrase sont respectés. [Détails de la mise en scène](docs/MISE-EN-SCENE.md).
 
 ## Mises à jour et hors-ligne
 
@@ -174,7 +169,7 @@ node tools/generate_license.mjs sign <identifiant-du-client>
 - [docs/DECISIONS.md](docs/DECISIONS.md) : choix techniques et écarts par rapport au cahier des charges.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) : organisation du code.
 - [docs/ADD_CHARACTER.md](docs/ADD_CHARACTER.md) : ajouter un personnage sans toucher au code.
-- [docs/PRO_LICENSE.md](docs/PRO_LICENSE.md) : licences Pro.
+- [docs/PRO_LICENSE.md](docs/PRO_LICENSE.md) : retrait du mode Pro et mise à jour des données.
 - [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) : licences des composants tiers.
 
 ## Licence

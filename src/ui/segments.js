@@ -1,9 +1,8 @@
 // @ts-check
 // segments.js : liste des phrases du texte avec, pour chacune, l'expression du personnage.
-import { store } from '../state.js';
 import { h, clear } from './dom.js';
 import { t } from '../modules/i18n.js';
-import { EXPRESSIONS_BASE, EXPRESSIONS_PRO } from '../modules/project.js';
+import { EXPRESSIONS_PROJET } from '../modules/project.js';
 
 /** @param {{ onChange: ()=>void, humeur?: (()=>any)|null }} o `humeur` (humeur.js) : affiche à côté de « Auto » l'émotion détectée. */
 export function segmentList({ onChange, humeur = null }) {
@@ -17,8 +16,7 @@ export function segmentList({ onChange, humeur = null }) {
     const max = 200; // au-delà, la liste devient inutilement lourde : les phrases suivantes restent en « auto »
     segments.slice(0, max).forEach((s, i) => {
       const sel = h('select', { 'aria-label': t('editeur.expressionDe', { n: i + 1 }) },
-        ...EXPRESSIONS_BASE.map((e) => h('option', { value: e, text: t(`expr.${e}`) })),
-        ...EXPRESSIONS_PRO.map((e) => h('option', { value: e, text: `${t(`expr.${e}`)}${store.pro ? '' : ' (Pro)'}`, disabled: !store.pro })));
+        ...EXPRESSIONS_PROJET.map((e) => h('option', { value: e, text: t(`expr.${e}`) })));
       const auto = hu ? hu.de({ ...s, expression: 'auto' }) : null; // ce que « Auto » jouera pour cette phrase
       if (auto) sel.options[0].textContent = `${t('expr.auto')} → ${t(`expr.${auto.expr}`)}${auto.second ? ` + ${t(`expr.${auto.second}`)}` : ''}`;
       sel.value = s.expression || 'auto';
