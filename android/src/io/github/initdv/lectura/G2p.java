@@ -161,6 +161,7 @@ final class G2p {
         Matcher m=pat("(?iu)(?<![\\p{L}\\p{M}\\p{N}'-])(?:(?:qu|n)')?est[-‐‑]ce(?![\\p{L}\\p{M}\\p{N}])|[A-Za-zÀ-ÿœŒ]+'?|[.,;:!?]").matcher(s);
         List<String> tokens=new ArrayList<>();List<Integer> offsets=new ArrayList<>();
         while(m.find()){tokens.add(m.group());offsets.add(m.start());}
+        Set<Integer> siwisHours=siwis?ClockWords.huitTrente(s):Set.of();
         List<String> out=new ArrayList<>();for(int i=0;i<tokens.size();i++){
             String word=tokens.get(i),lower=word.toLowerCase(Locale.ROOT),bare=word.replaceFirst("'$","");
             if(word.length()==1&&has(".,;:!?",word.charAt(0))){if(!out.isEmpty()){int k=out.size()-1;out.set(k,out.get(k).replaceFirst(" $","")+word+" ");}continue;}
@@ -168,7 +169,7 @@ final class G2p {
             if(lower.endsWith("'")&&ELIDE.containsKey(cut(lower,1))){out.add(ELIDE.get(cut(lower,1)));continue;}
             String variant=context(lower,token(tokens,i-2),token(tokens,i-1),token(tokens,i+1),token(tokens,i+2));
             String ph=variant==null?word(bare):accent(variant);
-            if(siwis&&lower.equals("huit")&&re("(?iu)^huit[ \\t\u00a0\u202f]+heures[ \\t\u00a0\u202f]+trente(?![\\p{L}\\p{M}\\p{N}‐‑-]|[ \\t\u00a0\u202f]+et[ \\t\u00a0\u202f]+un\\b)",s.substring(offsets.get(i))))ph="yˈit";
+            if(siwisHours.contains(offsets.get(i)))ph="yˈit";
             if(siwis&&lower.equals("nuit"))ph="nyˈi";
             if(tiret.contains(lower))ph+="-";
             if(liaisons.has(lower)&&liaison(token(tokens,i+1)))ph+=liaisons.optString(lower);

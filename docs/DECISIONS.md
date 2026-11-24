@@ -9,11 +9,11 @@ Les parties B (personnage) et D (interface) du cahier des charges ont été remp
 
 - **Personnage** : le bonhomme pictogramme est supprimé. `robot_lectura.svg` reproduit la référence B2 à l'identique.
   Les 12 autres robots en dérivent (même corps, couleur et accessoires différents).
-- **Personnage gratuit en plus de `robot_lectura`** : `robot_rouge`, le plus proche du robot de base.
+- **Catalogue** : les 43 personnages sont tous accessibles. La vignette de `robot_lectura` reste intacte ; la scène utilise un SVG articulé distinct.
 - **Anciens projets** : `professor_1` devient `robot_lectura`, `robot` devient `robot_rouge`, l'ancien fond devient `#0d0d12`.
 - **`character.js`** : le code de référence B3 est repris (hauteurs de bouche, respiration, bras, clignement,
   expressions). Ajouts, sans le contourner : style de mouvement lu dans la fiche JSON, geste sur les mots-clés,
-  expressions Pro, largeur de bouche (Pro). Correction : les reflets des yeux sont masqués pendant le clignement
+  expressions et largeur de bouche. Correction : les reflets des yeux sont masqués pendant le clignement
   (sinon un point blanc reste affiché).
 - **Export (B5)** : le robot n'est plus redessiné à la main. Son SVG vivant est sérialisé puis dessiné sur le canvas,
   une image sur deux, sans jamais lancer deux conversions à la fois. Précaution ajoutée : largeur et hauteur sont
@@ -25,7 +25,7 @@ Les parties B (personnage) et D (interface) du cahier des charges ont été remp
   sans faire défiler la page (64 % sur un téléphone de 844 px de haut).
 - **Menu discret** : un bouton « ⋮ » en haut à gauche de la scène. C'est le seul élément ajouté à l'écran de la
   capture ; sans lui, les réglages avancés seraient inaccessibles. Il ouvre : projet (titre, enregistrer, importer,
-  exporter), aperçu sans son, capture PNG, export vidéo, puis Personnages, Réglages, Pro, À propos.
+  exporter), aperçu sans son, capture PNG, export vidéo, puis Personnages, Réglages et À propos.
 - **Bouton « Lancer »** : pendant la lecture il devient « Pause », puis « Reprendre ». « Arrêter » coupe la voix,
   remet le robot au repos et garde le texte affiché ; « Lancer » repart alors du début.
 - **Lignes « $ » et « # »** : affichées, jamais prononcées. Avec une voix, elles défilent en silence à la vitesse de
@@ -130,9 +130,7 @@ Chaque échec affiche un message en français avec les boutons pour passer à la
 - **Expressions combinées.** Une expression est un jeu de nombres (yeux, sourcils, bouche, tête, bras, corps). On
   peut donc glisser de l'une à l'autre et en mélanger deux. Exception pour les bras : une demi-pose ne ressemble à
   rien, ils prennent la pose entière de l'expression principale dès que la force dépasse 0,56.
-- **Gratuit / Pro.** Le cahier des charges réserve à Pro les « expressions et gestes avancés ». Gratuit : détection
-  complète, mais jouée avec content, concentré, surpris et le salut de la main. Pro : 10 expressions de plus et les
-  mélanges. Pour changer la répartition, retire `pro: true` d'une ligne de `src/modules/expressions.js`.
+- **Accès complet** : les 38 expressions, les mélanges et les gestes sont disponibles pour tout le monde.
 - **Le SVG de référence n'est pas modifié.** La tête et les avant-bras n'y sont pas des groupes séparés : `rig.js`
   les regroupe à la volée au chargement (`#head`, `#forearm-l`, `#forearm-r`) et place les bras devant le corps.
   Au repos le dessin est identique.
@@ -150,11 +148,10 @@ Chaque échec affiche un message en français avec les boutons pour passer à la
 - La carte d'erreur propose toujours : réessayer, ouvrir les réglages, aperçu sans son, fermer.
 - Liste des expressions par phrase (écran Personnages) limitée à 200 lignes ; les suivantes restent en automatique.
 
-## 8. Licence Pro
+## 8. Accès sans clé
 
-- Clé = `base64url(données).base64url(signature)`, signature ECDSA P-256 / SHA-256 vérifiée par Web Crypto.
-- La clé publique livrée est une clé de **démonstration** (`DEMO = true`) ; le build affiche un avertissement tant
-  qu'elle n'a pas été remplacée. Voir `docs/PRO_LICENSE.md`.
+Depuis la 1.1, il n’existe plus de niveau Pro. La migration retire seulement les deux champs de l’ancien système.
+Voir [mise à jour des données](PRO_LICENSE.md) et [les quatre gestes](MISE-EN-SCENE.md).
 
 ## 9. Réglages ajoutés
 

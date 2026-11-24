@@ -88,7 +88,16 @@ body.route-scene main#app { max-width: 1100px; padding: 10px 12px max(16px, env(
 .pilule.lancer { background: var(--violet-fill); color: #fff; }
 .pilule.arreter { background: #24242e; color: var(--text); }
 .actions-bar input[type='range'] { flex: 1; min-width: 60px; accent-color: var(--violet-fill); }
-@media (max-width: 420px) { .pilule { padding: 0 14px; font-size: 1rem; } .actions-bar { gap: 6px; } }
+@media (max-width: 420px) {
+  .pilule { padding: 0 12px; font-size: 1rem; }
+  .actions-bar { gap: 6px; }
+  .actions-bar input[type='range'] { min-width: 0; margin-inline: 0; }
+}
+@media (max-width: 360px) {
+  .pilule { padding: 0 8px; font-size: .875rem; gap: 5px; }
+  .pilule .icon { width: 16px; height: 16px; }
+  .actions-bar { gap: 3px; }
+}
 
 /* Mode capture : seule la scène reste à l'écran */
 .scene.presenting .panel, .scene.presenting .menu-btn { display: none; }

@@ -23,22 +23,22 @@ Les deux s’appuient sur un socle de ressources et de formats, tout en disposan
 - **Partagé** : le Web et Android partent de la même source, même si Android l’adapte à la compilation.
 - **Contrat commun** : format ou règle défini une fois et implémenté de façon indépendante sur chaque plateforme (cas du `.lectura` v1).
 
-La vérification de licence Pro (ECDSA) est actuellement spécifique au Web. L’Android n’active plus ce mécanisme. Elle est distincte du certificat qui signe les APK.
+Les deux applications donnent accès à toutes les fonctions sans clé. Le certificat qui signe l’APK sert à vérifier l’identité de l’éditeur et la continuité des mises à jour, pas à débloquer des fonctions.
 
 ## Architecture Web
 
 ```
 index.html ── src/boot.js (garde de démarrage)
-           └─ src/main.js → src/app.js (états, réglages, licence)
+           └─ src/main.js → src/app.js (états et réglages)
                               ├─ src/router.js  → src/ui/<écran>.js   (chargés à la demande)
-                              │    scene (écran principal) · projets · personnages · reglages · pro · apropos
+                              │    scene (écran principal) · projets · personnages · reglages · apropos
                               ├─ src/state.js     bus d'événements + état partagé
                               └─ src/modules/*    logique sans interface
 sw.js        service worker (réseau d'abord, copie locale hors ligne)
 characters/  1 SVG + 1 JSON par personnage, index.json
 data/        dictionnaires de mots-clés, textes d'exemple
 models/      voix HD (hors Git, créé par tools/fetch_voice.mjs)
-tools/       serveur, build, icônes, licences, voix
+tools/       serveur, build, icônes, voix
 tests/       tests Vitest
 ```
 
@@ -83,7 +83,7 @@ quelque chose manque.
 |---|---|
 | `keywords.js` | Repère les mots-clés du terminal ; expression de secours d'une phrase (alerte, commande). |
 | `sentiment.js` | Lexique des sentiments : mots, expressions, négation, intensifs, émojis → émotion et position. |
-| `humeur.js` | Expression à jouer à chaque instant : imposée > sentiment > mots-clés ; version gratuite ou Pro. |
+| `humeur.js` | Expression à jouer à chaque instant : imposée > sentiment > mots-clés. |
 | `expressions.js` | Table des expressions (yeux, sourcils, bouche, tête, bras, corps), force, mélange, transition. |
 | `rig.js` | Regroupe à la volée la tête et les avant-bras du SVG, place les bras devant le corps. |
 | `terminal.js` | Faux terminal ; ne garde que 40 lignes dans la page. |
@@ -91,13 +91,13 @@ quelque chose manque.
 | `subtitles.js` | Lecture et écriture `.srt` / `.vtt`. |
 | `project.js` | Format `.lectura` (création, validation, export, import). |
 | `audio.js` | Un seul `AudioContext`, lecture par `<audio>`, analyse du volume, encodage WAV. |
-| `lipsync.js` | Volume → ouverture de bouche (4 niveaux), formes de bouche par bandes (Pro). |
+| `lipsync.js` | Volume → ouverture de bouche (4 niveaux), formes de bouche par bandes. |
 | `character.js`, `character-loader.js` | Chargement, nettoyage et animation des robots. |
 | `capture.js`, `recorder.js`, `svgframe.js` | Capture PNG et enregistrement vidéo sur canvas ; le robot vient du SVG vivant sérialisé. |
 | `voice/webspeech.js`, `voice/queue.js` | Voix du système, file de phrases, reprise, chien de garde. |
 | `voice/piper.js`, `piper-store.js`, `piper-worker.js` | Voix HD : téléchargement, cache, synthèse dans un worker. |
-| `voice/g2p_fr.js`, `g2p_lexique.js`, `nombres.js` | Texte français → phonèmes. |
-| `license.js`, `license-key.js` | Vérification hors ligne de la clé Pro. |
+| `voice/g2p_fr.js`, `g2p_lexique.js`, `nombres.js`, `horaire.js` | Texte français → phonèmes. |
+| `robot-motion.js`, `robot-stage.js`, `player.js` | Mise en scène liée au temps source et marge finale muette du Robot Lectura. |
 | `storage.js` | IndexedDB : réglages, projets, audio, brouillon. |
 | `pwa.js` | Service worker, installation, quota, verrou d'écran. |
 | `errors.js` | Journal local et messages à l'écran. |
@@ -113,13 +113,13 @@ quelque chose manque.
 | `voix-liste.js` | Liste des voix françaises et import d'un fichier audio. |
 | `menu.js`, `modale.js` | Menu discret et fenêtre modale accessible. |
 | `projet-actions.js` | Enregistrer, importer, exporter le projet et les sous-titres. |
-| `projets.js`, `personnages.js`, `reglages.js`, `pro.js`, `apropos.js` | Écrans ouverts depuis le menu. |
+| `projets.js`, `personnages.js`, `reglages.js`, `apropos.js` | Écrans ouverts depuis le menu. |
 | `styles/tokens.css` | Variables de design (D1). |
 
 ## Bus d'événements (`src/state.js`)
 
 `audio:ready/play/pause/end/error`, `tts:sentence-start/sentence-end/boundary`, `timeline:tick`, `terminal:line`,
-`character:expression`, `license:changed`, `net:online/offline`, `sw:update-available`, plus `app:state`, `ui:toast`,
+`character:expression`, `net:online/offline`, `sw:update-available`, plus `app:state`, `ui:toast`,
 `settings:changed`, `pwa:installable`, `pwa:installed`.
 
 ## Sécurité

@@ -187,7 +187,7 @@ final class Hd implements AutoCloseable {
         float[] prev=l1.put(key,pcm);l1Bytes+=4L*(pcm.length-(prev==null?0:prev.length));while(l1Bytes>8*1024*1024&&l1.size()>1){String first=l1.keySet().iterator().next();l1Bytes-=4L*l1.remove(first).length;}}
     private float[] phrase(JSONObject v,String text,JSONObject config)throws Exception {
         boolean estelle=pack(v)==VoicePacks.ESTELLE;
-        String id=key("SHA-1",(estelle?"phrase-mimi-4|":pack(v)==null?"phrase-piper-fr-5|":"phrase-4|")+v.optString("id")+"|"+text);float[] out=l1.get(id);if(out!=null)return out;
+        String id=key("SHA-1",(estelle?"phrase-mimi-4|":pack(v)==null?"phrase-piper-fr-6|":"phrase-4|")+v.optString("id")+"|"+text);float[] out=l1.get(id);if(out!=null)return out;
         File f=new File(phrases,id+".f32");long bytes=f.length();
         int stride=estelle?Mimi.SAMPLES_PER_LATENT*4:4,limit=estelle?Mimi.MAX_FRAMES*stride:64*1024*1024;
         if(bytes>0&&bytes%stride==0&&bytes<=limit){try(InputStream in=new FileInputStream(f)){
@@ -247,7 +247,7 @@ final class Hd implements AutoCloseable {
         if(text.length()>SpeechPlan.MAX_TEXT)throw new IOException("Texte trop long pour la synthèse.");
         JSONObject v=voice(id);if(!installed(v))throw new IOException("Voix HD non installée.");
         VoicePacks.Spec spec=pack(v);boolean estelle=spec==VoicePacks.ESTELLE;
-        String key=key("SHA-256",(estelle?"rendu-mimi-6|":"rendu-6|")+id+"|"+cps+"|"+text);
+        String key=key("SHA-256",(estelle?"rendu-mimi-7|":"rendu-7|")+id+"|"+cps+"|"+text);
         File wav=new File(whole,key+".wav"),json=new File(whole,key+".json");
         JSONObject config=spec==null?Library.readJson(cfg(v)):null;
         int rate=estelle?Pocket.RATE:config==null?24000:object(config,"audio").optInt("sample_rate",22050);

@@ -26,6 +26,8 @@ export const siwis = [
   ['La nuit, la pluie et lui.', 'la- nyˈi, la- plɥˈi e lɥˈi.', 'la- nɥˈi, la- plɥˈi e lɥˈi.'],
   ['Huit heures trente-deux.', 'ɥˈit ˈœʁ tʁˈɑ̃t dˈø.', 'ɥˈit ˈœʁ tʁˈɑ̃t dˈø.'],
   ['Huit heures de travail.', 'ɥˈit ˈœʁ də- tʁavˈaj.', 'ɥˈit ˈœʁ də- tʁavˈaj.'],
+  ['18:30 et 8 h 30.', 'dˈis ɥˈit ˈœʁ tʁˈɑ̃t e yˈit ˈœʁ tʁˈɑ̃t.', 'dˈis ɥˈit ˈœʁ tʁˈɑ̃t e ɥˈit ˈœʁ tʁˈɑ̃t.'],
+  ['Huit heures trente et une.', 'ɥˈit ˈœʁ tʁˈɑ̃t e yn.', 'ɥˈit ˈœʁ tʁˈɑ̃t e yn.'],
   ['D’où est-ce qu’on part ?', 'dˈu ɛs kɔ̃ pˈaʁ?', 'dˈu ɛs kɔ̃ pˈaʁ?'],
   ['Qu’est-ce ? N’est‑ce pas ?', 'kɛs? nˈɛs pˈa?', 'kɛs? nˈɛs pˈa?'],
 ];

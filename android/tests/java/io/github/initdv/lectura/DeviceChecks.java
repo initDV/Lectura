@@ -250,6 +250,8 @@ public final class DeviceChecks extends Instrumentation {
         require(clockTag!=null&&clockTag.label.equals("08:30")&&clockTag.index==clock.indexOf("08")
             &&f.spoken.contains("huit heures trente")&&f.original.text.equals(clock.substring(0,f.original.end)),"Normalisation des heures sans modifier la source");
         require(ClockWords.first("x8h30 et 25:59, -8:30 ou 08:30:40")==null,"Faux horaires");
+        require(ClockWords.first("Dix‑huit heures trente").label.equals("18:30")&&ClockWords.first("huit heures trente‑deux").label.equals("08:32")
+            &&ClockWords.first("huit heures trente et une").label.equals("08:31")&&ClockWords.normalize("À 21:00").equals("À vingt et une heures"),"Heures longues et variantes de tiret");
         require(VoiceRender.siwisPause(140)==105&&VoiceRender.siwisPause(360)==360&&VoiceRender.siwisPause(400)==320,"Pauses Siwis");
         require(Arrays.equals(G2p.ids("ɥ",new JSONObject("{\"^\":[1],\"$\":[2],\"_\":[0],\"y\":[37]}")),new long[]{1,0,37,0,2}),"Repli /ɥ/ Piper");
         tests=fixture.getJSONArray("timeline");for(int i=0;i<tests.length();i++){
@@ -443,10 +445,11 @@ public final class DeviceChecks extends Instrumentation {
             }
         }
         MainActivity a=open(ctx);File input=tone(ctx,5),dir=ctx.getExternalFilesDir("verification");
-        String text="Demain, on part à 8 h 30. Tu seras là ? Parfait !";
+        String text="Demain, on part à 8 h 30. Tu seras là ? Parfait !", name="Robot-salut-"+System.currentTimeMillis();
+        String format=a.db.settings.optString("formatVideo","9:16");
         try{
             main(()->{
-                Project p=new Project(a.db.settings);p.text=text;p.character="robot_lectura";p.speed=1;p.emotions=true;
+                Project p=new Project(a.db.settings);p.text=text;p.title=name;p.character="robot_lectura";p.speed=1;p.emotions=true;
                 a.open(p);a.stage.sprite.reduced=false; // CI has animator_duration_scale=0; exercise the non-reduced path explicitly.
                 a.importAudio(Uri.fromFile(input),"horloge.wav");
             });
@@ -472,8 +475,42 @@ public final class DeviceChecks extends Instrumentation {
                 a.startPlaying();
             });
             waitFor("Fin naturelle après le salut au ralenti",()->a.reading.ended,5000);
-            return "17 poses Java/JS, appuis et longueurs ; Android : pause, saut dans le salut, ralenti, mouvement réduit, chiffres PNG";
-        }finally{input.delete();main(()->{a.db.audio(a.project).delete();a.finish();});}
+            main(()->{a.db.set("formatVideo","9:16");a.reading.speed(1);a.record();});
+            waitFor("Export du robot jusqu’au salut",()->a.exports.capturing(),12000);
+            waitFor("Fin automatique de la vidéo",()->a.modal!=null&&action(a.modal,a.t("dl.bouton.telecharger"))!=null,28000);
+            click(a,a.t("dl.bouton.telecharger"));
+            Movies library=new Movies(ctx);Movies.Entry kept=null;
+            for(int i=0;i<100&&kept==null;i++){
+                for(Movies.Entry e:library.list())if(e.title.equals(name)){kept=e;break;}
+                if(kept==null)Thread.sleep(80);
+            }
+            require(kept!=null&&kept.format.equals("mp4"),"Export MP4 du salut absent de Mes vidéos");
+            try{
+                try(Pcm mixed=Pcm.decode(kept.file,dir)){
+                    require(mixed.duration()>=6360&&pcmPeak(mixed,500,4400)>5000&&pcmPeak(mixed,5500,6300)<180,
+                        "La vidéo doit garder la piste originale et la fin muette du salut : "+mixed.duration()+" ms");
+                }
+                try(android.media.MediaMetadataRetriever frames=new android.media.MediaMetadataRetriever()){
+                    frames.setDataSource(kept.file.getPath());
+                    Bitmap begin=frames.getFrameAtTime(5310000,android.media.MediaMetadataRetriever.OPTION_CLOSEST);
+                    Bitmap bow=frames.getFrameAtTime(5750000,android.media.MediaMetadataRetriever.OPTION_CLOSEST);
+                    require(begin!=null&&bow!=null&&begin.getHeight()==1280&&begin.getWidth()==720,"Images MP4 du salut portrait");
+                    try{
+                        int changes=0;for(int y=880;y<1270;y+=2)for(int x=0;x<269;x+=2){
+                            int first=begin.getPixel(x,y),next=bow.getPixel(x,y);
+                            if(Math.abs((first>>16&255)-(next>>16&255))+Math.abs((first>>8&255)-(next>>8&255))>45)changes++;
+                        }
+                        require(changes>100,"Image du robot figée avant le salut : "+changes+" pixels modifiés");
+                    }finally{begin.recycle();bow.recycle();}
+                }
+                Files.copy(kept.file.toPath(),new File(dir,"android-robot-salut.mp4").toPath(),StandardCopyOption.REPLACE_EXISTING);
+            }finally{library.delete(kept);}
+            return "17 poses Java/JS, appuis et longueurs ; pause, saut dans le salut, ralenti, mouvement réduit, chiffres PNG et salut MP4 avec fin muette";
+        }finally{
+            input.delete();main(()->{a.db.set("formatVideo",format);a.db.audio(a.project).delete();a.finish();});
+            var catalog=android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY);
+            ctx.getContentResolver().delete(catalog,android.provider.MediaStore.MediaColumns.DISPLAY_NAME+" = ?",new String[]{name+".mp4"});
+        }
     }
     private static Bitmap performanceFrame(Sprite sprite,Performance directions,long audio,long wall) {
         sprite.direct(directions,audio,"");sprite.quietMouth=true;sprite.tick(wall);
@@ -1209,7 +1246,20 @@ public final class DeviceChecks extends Instrumentation {
                 a.startPlaying();
             });
             waitFor("Fin sans coupure de Siwis Piper",()->a.reading.ended,13000);
-            return "Piper Siwis réel en avion ; démarrage à froid "+cold+" ms ; WAV 22 050 Hz, pause, saut, curseur et silence vérifiés";
+            String dialogue="Demain, on part à 8 h 30. Tu seras là ? Oui ! D’où est-ce qu’on part ? De la gare. Parfait !";
+            Hd.Synthesis dialogueAudio=a.hd.synth(dialogue,"siwis",28,(n,total)->{});
+            try(Pcm wav=dialogueAudio.pcm){
+                var spans=dialogueAudio.segments;
+                require(spans.size()==7&&spans.get(1).text.equals("on part à 8 h 30.")&&spans.get(4).text.startsWith("D’où est-ce"),"Segments originaux du dialogue Siwis");
+                int[] pauses={105,300,360,320,360,300,320};
+                for(int i=0;i<spans.size();i++){
+                    var p=spans.get(i);
+                    require(Math.abs(p.to-p.speechEnd-pauses[i])<=1&&pcmPeak(wav,p.from+1,p.speechEnd-1)>900
+                        &&pcmPeak(wav,p.speechEnd+1,p.to-1)==0,"Durée et signal Siwis : "+p.text);
+                }
+                Files.copy(wav.file.toPath(),new File(ctx.getExternalFilesDir("verification"),"android-siwis-dialogue-1.1.wav").toPath(),StandardCopyOption.REPLACE_EXISTING);
+            }
+            return "Piper Siwis réel en avion ; démarrage à froid "+cold+" ms ; WAV 22 050 Hz, pause, saut, curseur et silence ; dialogue corrigé rendu en PCM";
         }finally{main(a::finish);}
     }
     private String hd(Refs refs)throws Exception {

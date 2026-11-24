@@ -3,7 +3,7 @@
 // Remplace espeak-ng (GPLv3, exclu par la règle de licences du projet). Voir docs/DECISIONS.md.
 import { LEXIQUE, LETTRES, SYMBOLES, CLITIQUES, TIRET, LIAISONS } from './g2p_lexique.js';
 import { nombresEnMots } from './nombres.js';
-import { heuresEnMots } from '../horaire.js';
+import { heuresEnMots, huitTrente } from '../horaire.js';
 
 const VOY = 'aeiouyàâäéèêëîïôöùûüœæ';
 const V = (c) => !!c && VOY.includes(c);
@@ -189,7 +189,7 @@ export function phonemiser(texte, siwis = false) {
   t = nombresEnMots(heuresEnMots(t).replace(/(\d)\s*%/g, '$1 pour cent'));
   t = t.replace(/[@%&+=/\\#$€*_|<>~°]/g, (s) => ` ${SYMBOLES[s]} `).replace(/(^|\s)-+(?=\S)/g, '$1');
   const matches = [...t.matchAll(/(?<![\p{L}\p{M}\p{N}'-])(?:(?:qu|n)')?est[-‐‑]ce(?![\p{L}\p{M}\p{N}])|[A-Za-zÀ-ÿœŒ]+'?|[.,;:!?]/giu)];
-  const jetons = matches.map((m) => m[0]);
+  const jetons = matches.map((m) => m[0]), heuresSiwis = siwis ? huitTrente(t) : null;
   const out = [];
   for (let k = 0; k < jetons.length; k++) {
     const j = jetons[k];
@@ -201,7 +201,7 @@ export function phonemiser(texte, siwis = false) {
     const variante = contexte(m, jetons[k - 2]?.toLowerCase() || '', avant, suiv, jetons[k + 2]?.toLowerCase() || '');
     let ph = variante ? accent(variante) : motEnPhonemes(j.replace(/'$/, ''));
     // Ces deux codages sont propres au modèle Siwis Piper ; pas de remplacement général de /ɥ/.
-    if (siwis && m === 'huit' && /^huit[ \t\u00a0\u202f]+heures[ \t\u00a0\u202f]+trente(?![\p{L}\p{M}\p{N}‐‑-]|[ \t\u00a0\u202f]+et[ \t\u00a0\u202f]+un\b)/iu.test(t.slice(matches[k].index))) ph = 'yˈit';
+    if (heuresSiwis?.has(matches[k].index)) ph = 'yˈit';
     if (siwis && m === 'nuit') ph = 'nyˈi';
     if (TIRET.has(m)) ph += '-';
     if (LIAISONS[m] && liaisonPermise(suiv)) ph += LIAISONS[m];
