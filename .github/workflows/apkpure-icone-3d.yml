@@ -1,0 +1,42 @@
+name: Dossier APKPure — icône de fiche 3D
+
+on:
+  push:
+    branches: ['arena/d2229c4f-lectura']
+    paths: ['.github/workflows/apkpure-icone-3d.yml']
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  kit:
+    if: github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Récupérer le dossier validé et remplacer uniquement l’icône de la fiche
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          endpoint=repos/initDV/Lectura/actions/artifacts/14872559818
+          old="$RUNNER_TEMP/lectura-apkpure-verifie.zip"
+          gh api "$endpoint" | jq -e '.name == "Lectura-APKPure-v1.0.0" and .expired == false
+            and .workflow_run.id == 45290163867
+            and .digest == "sha256:7579b52300f99edd1a0f57bb8f860087d88b26cf9f852507c6fe9ce5ddb00256"' > /dev/null
+          gh api "$endpoint/zip" > "$old"
+          printf '7579b52300f99edd1a0f57bb8f860087d88b26cf9f852507c6fe9ce5ddb00256  %s\n' "$old" | sha256sum -c -
+          python3 -m pip install --disable-pip-version-check --no-input --only-binary=:all: \
+            --target "$RUNNER_TEMP/kit-python" Pillow==11.3.0
+          PYTHONPATH="$RUNNER_TEMP/kit-python" python3 tools/apkpure-icone-3d.py "$old" "$RUNNER_TEMP/kit-3d"
+          sha256sum "$RUNNER_TEMP/kit-3d/icone-512.png"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Lectura-APKPure-v1.0.0-icone-3D
+          path: ${{ runner.temp }}/kit-3d/
+          if-no-files-found: error
+          retention-days: 90

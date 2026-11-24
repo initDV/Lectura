@@ -7,10 +7,11 @@ LECTURA POUR ANDROID — SOUMISSION APKPURE
 2. Choisis Productivité (Outils / Tools si indisponible). Copie les textes de
    Fiche-FR.txt et Fiche-EN.txt dans les langues correspondantes. Utilise EN
    si une seule fiche est possible et que le français n’est pas proposé.
-3. Ajoute icone-512.png et les cinq PNG du dossier captures/FR ou captures/EN,
-   dans l’ordre 01 → 05. Les captures font 1080 × 1920 pixels. Une bannière
-   1024 × 500 est fournie en option si la console affiche un champ pour elle.
-   Suis les indications de format affichées par APKPure.
+3. Pour l’icône de la fiche, utilise icone-512.png : c’est le robot 3D violet
+   de la page de présentation, pas l’icône intégrée à l’APK v1.0.0. Ajoute
+   les cinq captures de captures/FR ou captures/EN dans l’ordre 01 → 05
+   (1080 × 1920 pixels). La bannière 1024 × 500 est facultative, si le
+   formulaire propose ce champ. Suis les indications de format d’APKPure.
 4. Colle cette URL dans le champ Politique de confidentialité :
    https://initdv.github.io/Lectura/privacy/
 5. Télécharge Lectura.apk et envoie ce fichier, PAS l’archive du dossier.
