@@ -1063,7 +1063,7 @@ public final class DeviceChecks extends Instrumentation {
         }
     }
     private static int peak(short[] samples,int n){int p=0;for(int i=0;i<n;i++)p=Math.max(p,Math.abs((int)samples[i]));return p;}
-    private static int pcmPeak(Pcm pcm,long fromMs,long toMs)throws Exception {
+    static int pcmPeak(Pcm pcm,long fromMs,long toMs)throws Exception {
         long pos=Math.max(0,Math.round(fromMs*pcm.rate/1000.));
         long end=Math.min(pcm.frames,Math.round(toMs*pcm.rate/1000.));
         require(pos<end,"Plage PCM vide : "+fromMs+"–"+toMs+" ms");

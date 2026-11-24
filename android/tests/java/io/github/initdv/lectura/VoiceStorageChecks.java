@@ -75,12 +75,20 @@ final class VoiceStorageChecks implements DeviceChecks.FeatureCheck {
                 a.open(p);a.muted=true;a.launch(false);
             });
             d.waitFor("Lecture complète d’un texte neuf avec le modèle repris, hors ligne",()->a.reading!=null&&a.reading.ended,65000);
-            AtomicReference<Pcm> played=new AtomicReference<>();
-            d.main(()->{require(a.reading.text.equals(text)&&a.reading.pcm!=null&&DeviceChecks.noNetwork(ctx),"Lecture sans modèle local");played.set(a.reading.pcm);});
-            Pcm pcm=played.get();short[] samples=new short[pcm.rate*pcm.channels];int n=pcm.read(0,samples,pcm.rate),peak=0;
-            for(int i=0;i<n*pcm.channels;i++)peak=Math.max(peak,Math.abs((int)samples[i]));
-            require(peak>1000,"Synthèse muette après reprise : "+peak);
-            return "Inventaire en avion : six locuteurs MLS, un modèle et un comptage ; annulation puis effacement du seul partiel ; retour en ligne sans reprise automatique ; Gilles repris sur confirmation ("+saved+" octets conservés), texte neuf lu jusqu’au bout en avion";
+            AtomicReference<Reading> played=new AtomicReference<>();
+            d.main(()->{
+                require(a.reading.text.equals(text)&&a.reading.pcm!=null&&a.synthesisVoice.equals("gilles")
+                    &&DeviceChecks.noNetwork(ctx),"Lecture hors ligne sans le modèle Gilles repris");
+                played.set(a.reading);
+            });
+            Reading reading=played.get();List<Script.Segment> spans=reading.timeline.parts;
+            require(spans.size()==2,"Deux phrases attendues après la reprise du modèle");
+            // Le début peut être faible selon le tirage Piper : mesurer toute la parole de chaque phrase.
+            for(Script.Segment span:spans){
+                int peak=DeviceChecks.pcmPeak(reading.pcm,span.from,span.speechEnd);
+                require(span.type==Script.SPOKEN&&peak>1000,"Phrase muette après reprise : "+span.text+" ; pic "+peak);
+            }
+            return "Inventaire en avion : six locuteurs MLS, un modèle et un comptage ; annulation puis effacement du seul partiel ; retour en ligne sans reprise automatique ; Gilles repris sur confirmation ("+saved+" octets conservés), deux phrases vérifiées en PCM jusqu’au bout en avion";
         }finally{
             try{if(reconnected){radios(d,false);d.waitFor("Restaurer le mode avion",()->DeviceChecks.noNetwork(ctx),30000);}}
             finally{
