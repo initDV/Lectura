@@ -1,0 +1,29 @@
+name: Publier Lectura Android 1.1.0
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lectura-android-release-v1.1.0
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Publier les octets vérifiés par la recette Android #38
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash tools/release-android-1.1.sh
