@@ -15,8 +15,9 @@ export const robotStepCases = [
     spoken('Demain,', 0, 282, 387), spoken('on part à 8 h 30.', 387, 2320, 2620),
     spoken('Tu seras là ?', 2620, 3260, 3620), spoken('Parfait !', 3620, 3920, 4240),
   ] },
-  { name: 'pas de faible amplitude', duration: 580, segments: [spoken('Bonjour.', 0, 485, 580)] },
+  { name: 'pas de faible amplitude', duration: 660, segments: [spoken('Bonjour.', 0, 580, 660)] },
   { name: 'pose imposée juste après une entrée trop brève', duration: 2200, segments: [
     spoken('Demain,', 0, 282, 387), spoken('on part à 8 h 30.', 387, 1900, 2200, 'pensif'),
   ] },
+  { name: 'salut après une parole très brève', duration: 650, segments: [spoken('Oui !', 0, 330, 650)] },
 ];

@@ -89,6 +89,7 @@ describe('mise en scène sur les dates de la source', () => {
     const { segments, duration } = robotStepCases[1];
     const short = planRobot(segments, duration), last = poseRobot(short, short.pas[1]);
     expect(short.pas[1] - short.pas[0]).toBeGreaterThanOrEqual(520);
+    expect(short.pas[1]).toBeLessThanOrEqual(short.salut[0]);
     expect(last.x).toBeGreaterThan(10);
     expect(last.x).toBeLessThan(ROBOT_RIG.stride * .6);
     expect(last.legs[0].fx - ROBOT_RIG.x[0]).toBeCloseTo(last.x);
@@ -99,6 +100,10 @@ describe('mise en scène sur les dates de la source', () => {
     expect(planRobot(segments, duration).pas).toBeNull();
     expect(planRobot([segments[0], { ...segments[1], texte: '$ écho' }], duration).pas).toBeNull();
     expect(planRobot([segments[0], { ...segments[1], expression: 'auto', debutMs: 787 }], duration).pas).toBeNull();
+  });
+  it('laisse la priorité au salut si la parole est trop brève pour un pas', () => {
+    const { segments, duration } = robotStepCases[3];
+    expect(planRobot(segments, duration)).toMatchObject({ pas: null, salut: [330, 1760] });
   });
   it('respecte les plages manuelles, sans inventer une fin parlée pour un média importé', () => {
     const auto = robotSegments.map(({ speechEndMs: _ignore, ...s }) => s);

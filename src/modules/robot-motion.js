@@ -10,7 +10,7 @@ const rise = (t, a, b) => ease((t - a) / (b - a));
 const pulse = (t, a, b, c, d) => rise(t, a, b) * (1 - rise(t, c, d));
 const phase = (t, p) => p ? clamp((t - p[0]) / (p[1] - p[0])) : 0;
 export const ROBOT_RIG = { x: [86, 152], hip: 354, knee: 424, ankle: 528, stride: 28 };
-const PAS_MIN = 520, PAS_MAX = 1300, PAUSE_PAS_MAX = 120;
+const PAS_MIN = 520, PAS_NOMINAL = 1050, PAS_MAX = 1300, PAUSE_PAS_MAX = 120;
 const SALUT_MS = 1430;
 
 /** Une entrée, le premier horaire, la première question et la sortie. Les lignes muettes et poses imposées sont exclues. */
@@ -43,10 +43,14 @@ export function planRobot(segments, duration) {
     else h = null;
     break;
   }
+  // Après la parole, réutilise la marge du moteur s'il en a une. Les audios importés ne sont ni réécrits ni recadrés.
+  const last = spans.at(-1);
+  const start = last.ok && last.speechEndMs != null ? Math.max(last.speechEnd, q?.[1] || 0, h?.[1] || 0) : duration;
+  const salut = last.ok ? [start, start + SALUT_MS] : null;
   // Certains moteurs coupent « Demain, on part… » à la virgule. Un pas peut continuer
   // sur les fragments Auto contigus, pas sur une pose imposée, une ligne muette ou un autre geste.
   let continuous = first.end;
-  const limit = Math.min(first.start + PAS_MAX, h?.[0] ?? Infinity, q?.[0] ?? Infinity);
+  const limit = Math.min(first.start + PAS_MAX, h?.[0] ?? Infinity, q?.[0] ?? Infinity, salut?.[0] ?? Infinity);
   for (let i = firstIndex + 1; i < spans.length && continuous < limit; i++) {
     if (!spans[i].ok || spans[i].start - continuous > PAUSE_PAS_MAX) break;
     continuous = Math.max(continuous, spans[i].end);
@@ -55,10 +59,6 @@ export function planRobot(segments, duration) {
   const begin = first.start + Math.min(80, (cap - first.start) * .065);
   // S'il n'y a pas le temps de poser les deux pieds, ne pas accélérer artificiellement le pas.
   const pas = cap - begin >= PAS_MIN ? [begin, cap] : null;
-  // Après la parole, réutilise la marge du moteur s'il en a une. Les audios importés ne sont ni réécrits ni recadrés.
-  const last = spans.at(-1);
-  const start = last.ok && last.speechEndMs != null ? Math.max(last.speechEnd, q?.[1] || 0, h?.[1] || 0) : duration;
-  const salut = last.ok ? [start, start + SALUT_MS] : null;
   return { pas, h, q, salut, label, end: Math.max(duration, salut?.[1] || 0) };
 }
 
@@ -69,11 +69,12 @@ export function poseRobot(plan, ms, accents = true) {
   const present = pulse(h, .07, .37, .55, 1), back = pulse(h, 0, .09, .13, .24), look = pulse(h, 0, .23, .64, .97);
   const ask = pulse(q, 0, .40, .59, 1), salute = pulse(s, 0, .41, .57, 1), bow = pulse(s, .12, .49, .60, .95);
   // Une fenêtre plus courte donne un pas plus petit, pas une accélération des semelles.
-  const size = plan.pas ? .52 + .48 * clamp((plan.pas[1] - plan.pas[0] - PAS_MIN) / (1050 - PAS_MIN)) : 0;
+  const size = plan.pas ? .52 + .48 * clamp((plan.pas[1] - plan.pas[0] - PAS_MIN) / (PAS_NOMINAL - PAS_MIN)) : 0;
   const stride = R.stride * size;
   const transfer = pulse(u, .03, .30, .72, .99) * size, breath = .5 - .5 * Math.cos(2 * Math.PI * t / 3.6);
   const x = stride * (-.18 * rise(u, 0, .18) + .67 * rise(u, .19, .52) + .51 * rise(u, .52, .94));
-  const bend = .65 * breath + 1.8 * transfer + 2.5 * ask + 3.8 * bow;
+  const stepBlend = pulse(u, 0, .18, .86, 1);
+  const bend = (1.3 - .65 * stepBlend) * breath + 1.8 * transfer + 2.5 * ask + 3.8 * bow;
   const tilt = .9 * Math.sin(t * 1.22) - 1.6 * transfer + 3 * present - 6.2 * ask + 3.2 * bow;
   const rad = tilt * Math.PI / 180, up = R.knee - R.hip, low = R.ankle - R.knee;
   const feet = R.x.map((base, i) => {
@@ -94,7 +95,7 @@ export function poseRobot(plan, ms, accents = true) {
     return { hx, hy, kx, ky, fx, fy, lift, footTilt, thigh: Math.atan2(hx - kx, ky - hy) * deg, shin: Math.atan2(kx - fx, fy - ky) * deg };
   });
   const swing = (feet[0].lift - feet[1].lift) / 9;
-  return { x, y, tilt, legs, blend: accents ? Math.max(pulse(u, 0, .18, .86, 1), present, back, look, ask, salute, bow) : 0,
+  return { x, y, tilt, legs, blend: accents ? Math.max(stepBlend, present, back, look, ask, salute, bow) : 0,
     head: 1.15 * Math.sin(t * 1.70) + 4.5 * look - 5.1 * ask - 3.6 * bow,
     nod: 1 - .058 * ask - .110 * bow, drop: -.9 * breath + 2.4 * ask + 3.3 * bow,
     armL: 2 + 7 * swing + 9 * ask + 4 * present, foreL: 2 - 7 * swing + 10 * ask + 3 * present,

@@ -8,7 +8,7 @@ import static java.lang.Math.*;
 final class RobotChoreo {
     static final double[] X={86,152};
     static final int HIP=354,KNEE=424,ANKLE=528;
-    private static final int STEP_MIN=520,STEP_MAX=1300,STEP_GAP=120,STRIDE=28;
+    private static final int STEP_MIN=520,STEP_NOMINAL=1050,STEP_MAX=1300,STEP_GAP=120,STRIDE=28;
     static final int BOW_MS=1430;
     private static final Pattern QUESTION=Pattern.compile("\\?[!?…]*[\\s\\p{Z}»”'’\"\\])}*_`]*$");
     private static final Pattern SPOKEN=Pattern.compile("[\\p{L}\\p{N}]");
@@ -47,8 +47,12 @@ final class RobotChoreo {
             if(until<=begin){begin=start;until=q!=null&&clock==question?q[0]:end;}
             if(until>begin){h=new double[]{begin,until};label=time.label;}
         }
+        Script.Segment last=parts.get(parts.size()-1);
+        double out=last.speechEnd>=0?max(voiceEnd(last,duration),max(q==null?0:q[1],h==null?0:h[1])):duration;
+        double[] salute=can(last,duration)?new double[]{out,out+BOW_MS}:null;
         double start=from(first,duration),continuous=to(first,duration);
         double limit=min(start+STEP_MAX,min(h==null?Double.POSITIVE_INFINITY:h[0],q==null?Double.POSITIVE_INFINITY:q[0]));
+        if(salute!=null)limit=min(limit,salute[0]);
         for(int i=firstIndex+1;i<parts.size()&&continuous<limit;i++){
             Script.Segment s=parts.get(i);
             if(!can(s,duration)||from(s,duration)-continuous>STEP_GAP)break;
@@ -56,9 +60,6 @@ final class RobotChoreo {
         }
         double cap=min(continuous,limit),begin=start+min(80,(cap-start)*.065);
         double[] step=cap-begin>=STEP_MIN?new double[]{begin,cap}:null;
-        Script.Segment last=parts.get(parts.size()-1);
-        double out=last.speechEnd>=0?max(voiceEnd(last,duration),max(q==null?0:q[1],h==null?0:h[1])):duration;
-        double[] salute=can(last,duration)?new double[]{out,out+BOW_MS}:null;
         return new RobotChoreo(step,h,q,salute,label,salute==null?duration:max(duration,salute[1]));
     }
     static final class Leg {
@@ -76,10 +77,11 @@ final class RobotChoreo {
         double t=max(0,ms)/1000,u=phase(ms,step),h=accents?phase(ms,hour):0,q=accents?phase(ms,question):0,s=accents?phase(ms,salute):0;
         double present=pulse(h,.07,.37,.55,1),back=pulse(h,0,.09,.13,.24),look=pulse(h,0,.23,.64,.97);
         double ask=pulse(q,0,.40,.59,1),bow=pulse(s,.12,.49,.60,.95),saluteHand=pulse(s,0,.41,.57,1);
-        double size=step==null?0:.52+.48*clamp((step[1]-step[0]-STEP_MIN)/(1050-STEP_MIN),0,1);
+        double size=step==null?0:.52+.48*clamp((step[1]-step[0]-STEP_MIN)/(STEP_NOMINAL-STEP_MIN),0,1);
         double stride=STRIDE*size,transfer=pulse(u,.03,.30,.72,.99)*size,breath=.5-.5*cos(2*PI*t/3.6);
         p.x=stride*(-.18*rise(u,0,.18)+.67*rise(u,.19,.52)+.51*rise(u,.52,.94));
-        double y=.65*breath+1.8*transfer+2.5*ask+3.8*bow;
+        double stepBlend=pulse(u,0,.18,.86,1);
+        double y=(1.3-.65*stepBlend)*breath+1.8*transfer+2.5*ask+3.8*bow;
         p.tilt=.9*sin(t*1.22)-1.6*transfer+3*present-6.2*ask+3.2*bow;
         double rad=toRadians(p.tilt),up=KNEE-HIP,low=ANKLE-KNEE;
         for(int i=0;i<2;i++){
@@ -98,7 +100,7 @@ final class RobotChoreo {
             l.thigh=toDegrees(atan2(l.hx-l.kx,l.ky-l.hy));l.shin=toDegrees(atan2(l.kx-l.fx,l.fy-l.ky));
         }
         double swing=(p.legs[0].lift-p.legs[1].lift)/9;
-        p.blend=accents?max(max(pulse(u,0,.18,.86,1),present),max(max(back,look),max(ask,max(saluteHand,bow)))):0;
+        p.blend=accents?max(max(stepBlend,present),max(max(back,look),max(ask,max(saluteHand,bow)))):0;
         p.head=1.15*sin(t*1.70)+4.5*look-5.1*ask-3.6*bow;p.nod=1-.058*ask-.110*bow;p.drop=-.9*breath+2.4*ask+3.3*bow;
         p.armL=2+7*swing+9*ask+4*present;p.foreL=2-7*swing+10*ask+3*present;
         p.armR=-2-54*present+9*back+36*saluteHand-6*swing;p.foreR=-2-52*present+75*saluteHand+8*swing;

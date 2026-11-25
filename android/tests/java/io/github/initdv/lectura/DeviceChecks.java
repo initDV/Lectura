@@ -483,8 +483,10 @@ public final class DeviceChecks extends Instrumentation {
                 for(int i=0;i<2;i++){
                     float[] ankle={(float)RobotChoreo.X[i],RobotChoreo.ANKLE};
                     Svg.Node boot=a.stage.sprite.svg.get(i==0?"robot-foot-l":"robot-foot-r");
-                    boot.transform.mapPoints(ankle);
-                    require(Math.abs(ankle[0]-posePas.legs[i].fx)<.011&&Math.abs(ankle[1]-posePas.legs[i].fy)<.011,"Semelle désolidarisée du pivot");
+                    float[] lower=ankle.clone();
+                    Svg.Node shin=a.stage.sprite.svg.get(i==0?"robot-shin-l":"robot-shin-r");
+                    boot.transform.mapPoints(ankle);shin.transform.mapPoints(lower);
+                    require(Math.hypot(ankle[0]-lower[0],ankle[1]-lower[1])<.03,"Semelle désolidarisée du tibia");
                 }
                 r.seek((c.hour[0]+c.hour[1])*.5);a.stage.updatePose(100);
                 Svg.Node clock=a.stage.sprite.svg.get("robot-clock");require(!clock.hidden&&clock.alpha>.97,"Horloge visible au pointage");
