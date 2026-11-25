@@ -38,6 +38,8 @@ export function creerExport(o) {
       if (!ctx) throw new Error(t('scene.err.videoNonGeree'));
       await document.fonts?.ready;
       o.pause(); o.chercher(0);
+      // Le SVG vivant doit refléter le début, pas la pose qui était en pause avant le retour à zéro.
+      await new Promise((resolve) => requestAnimationFrame(resolve));
       const sc = o.pourCanvas(), frame = new SvgFrame(sc.svg);
       sc.terminal.revealTo(0);
       const decorImage = store.settings?.decor ? await renderDecor(store.settings.decor) : null;
