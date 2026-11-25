@@ -9,10 +9,8 @@ const ease = (v) => { const x = clamp(v); return x * x * x * (10 + x * (-15 + 6 
 const rise = (t, a, b) => ease((t - a) / (b - a));
 const pulse = (t, a, b, c, d) => rise(t, a, b) * (1 - rise(t, c, d));
 const phase = (t, p) => p ? clamp((t - p[0]) / (p[1] - p[0])) : 0;
-export const ROBOT_RIG = {
-  x: [86, 152], hip: 354, knee: 424, ankle: 528, stride: 38,
-  box: [-32, -6, 382, 588], clockBox: [-24, -6, 409, 588],
-};
+export const ROBOT_RIG = { x: [86, 152], hip: 354, knee: 424, ankle: 528, stride: 28 };
+const PAS_MIN = 520, PAS_MAX = 1300, PAUSE_PAS_MAX = 120;
 const SALUT_MS = 1430;
 
 /** Une entrée, le premier horaire, la première question et la sortie. Les lignes muettes et poses imposées sont exclues. */
@@ -23,11 +21,12 @@ export function planRobot(segments, duration) {
     const spoken = typeLigne(s.texte) === 'parle' && (!s.type || s.type === 'parle') && /[\p{L}\p{N}]/u.test(s.texte);
     return { ...s, start, end, speechEnd, ok: spoken && speechEnd > start && (!s.expression || s.expression === 'auto') };
   });
-  const first = spans.find((s) => s.ok);
-  if (!first) return null;
+  const firstIndex = spans.findIndex((s) => s.ok);
+  if (firstIndex < 0) return null;
+  const first = spans[firstIndex];
   const question = spans.find((s) => s.ok && QUESTION.test(s.texte));
   const q = question ? [question.speechEnd - Math.min(640, (question.speechEnd - question.start) * .57), question.end] : null;
-  let h = null, label = '', hourSpan;
+  let h = null, label = '';
   for (const s of spans) {
     if (!s.ok) continue;
     const time = premierHoraire(s.texte);
@@ -40,13 +39,22 @@ export function planRobot(segments, duration) {
     if (q && s === question) q[0] = Math.min(q[1] - (q[1] - s.start) * .28, Math.max(q[0], end));
     h = [begin, q && s === question ? Math.min(q[0], end) : end];
     if (h[1] <= h[0]) h = [s.start, q && s === question ? q[0] : end];
-    if (h[1] > h[0]) { label = time.label; hourSpan = s; }
+    if (h[1] > h[0]) label = time.label;
     else h = null;
     break;
   }
-  // Laisse une place aux deux appuis avant d'enchaîner le geste de la main ou de la tête.
-  const cap = Math.min(first.end, first === hourSpan && h ? h[0] : Infinity, first === question ? q[0] : Infinity);
-  const pas = cap - first.start >= 180 ? [first.start + Math.min(80, (cap - first.start) * .065), Math.min(cap, first.start + 1300)] : null;
+  // Certains moteurs coupent « Demain, on part… » à la virgule. Un pas peut continuer
+  // sur les fragments Auto contigus, pas sur une pose imposée, une ligne muette ou un autre geste.
+  let continuous = first.end;
+  const limit = Math.min(first.start + PAS_MAX, h?.[0] ?? Infinity, q?.[0] ?? Infinity);
+  for (let i = firstIndex + 1; i < spans.length && continuous < limit; i++) {
+    if (!spans[i].ok || spans[i].start - continuous > PAUSE_PAS_MAX) break;
+    continuous = Math.max(continuous, spans[i].end);
+  }
+  const cap = Math.min(continuous, limit);
+  const begin = first.start + Math.min(80, (cap - first.start) * .065);
+  // S'il n'y a pas le temps de poser les deux pieds, ne pas accélérer artificiellement le pas.
+  const pas = cap - begin >= PAS_MIN ? [begin, cap] : null;
   // Après la parole, réutilise la marge du moteur s'il en a une. Les audios importés ne sont ni réécrits ni recadrés.
   const last = spans.at(-1);
   const start = last.ok && last.speechEndMs != null ? Math.max(last.speechEnd, q?.[1] || 0, h?.[1] || 0) : duration;
@@ -60,28 +68,32 @@ export function poseRobot(plan, ms, accents = true) {
   const h = accents ? phase(ms, plan.h) : 0, q = accents ? phase(ms, plan.q) : 0, s = accents ? phase(ms, plan.salut) : 0;
   const present = pulse(h, .07, .37, .55, 1), back = pulse(h, 0, .09, .13, .24), look = pulse(h, 0, .23, .64, .97);
   const ask = pulse(q, 0, .40, .59, 1), salute = pulse(s, 0, .41, .57, 1), bow = pulse(s, .12, .49, .60, .95);
-  const transfer = pulse(u, .03, .30, .72, .99), breath = .5 - .5 * Math.cos(2 * Math.PI * t / 3.6);
-  const x = -7 * rise(u, 0, .18) + 25 * rise(u, .19, .49) + 20 * rise(u, .49, .93);
-  const bend = 1.3 * breath + 4.4 * transfer + 2.5 * ask + 3.8 * bow;
-  const tilt = .9 * Math.sin(t * 1.22) - 1.8 * transfer + 3 * present - 6.2 * ask + 3.2 * bow;
+  // Une fenêtre plus courte donne un pas plus petit, pas une accélération des semelles.
+  const size = plan.pas ? .52 + .48 * clamp((plan.pas[1] - plan.pas[0] - PAS_MIN) / (1050 - PAS_MIN)) : 0;
+  const stride = R.stride * size;
+  const transfer = pulse(u, .03, .30, .72, .99) * size, breath = .5 - .5 * Math.cos(2 * Math.PI * t / 3.6);
+  const x = stride * (-.18 * rise(u, 0, .18) + .67 * rise(u, .19, .52) + .51 * rise(u, .52, .94));
+  const bend = .65 * breath + 1.8 * transfer + 2.5 * ask + 3.8 * bow;
+  const tilt = .9 * Math.sin(t * 1.22) - 1.6 * transfer + 3 * present - 6.2 * ask + 3.2 * bow;
   const rad = tilt * Math.PI / 180, up = R.knee - R.hip, low = R.ankle - R.knee;
   const feet = R.x.map((base, i) => {
-    const a = i ? .18 : .59, b = i ? .51 : .93, f = clamp((u - a) / (b - a));
-    const lift = f > 0 && f < 1 ? (i ? 19 : 15) * Math.sin(Math.PI * f) ** 2 : 0;
+    const a = i ? .17 : .57, b = i ? .51 : .94, f = clamp((u - a) / (b - a));
+    const lift = f > 0 && f < 1 ? size * (i ? 9 : 7) * Math.sin(Math.PI * f) ** 2 : 0;
+    const footTilt = lift ? .55 * lift * Math.sin(2 * Math.PI * f) : 0; // nul pendant l'appui ; pas de pointe sous le sol.
     const hx = 120 + x + (base - 120) * Math.cos(rad), hy = R.hip + (base - 120) * Math.sin(rad);
-    const fx = base + R.stride * ease(f), fy = R.ankle - lift;
-    return { hx, hy, fx, fy, lift, reach: fy - hy - Math.sqrt((up + low) ** 2 - (fx - hx) ** 2) };
+    const fx = base + stride * ease(f), fy = R.ankle - lift;
+    return { hx, hy, fx, fy, lift, footTilt, reach: fy - hy - Math.sqrt((up + low) ** 2 - (fx - hx) ** 2) };
   });
   const y = Math.max(bend, ...feet.map((f) => f.reach)) + .05 * transfer;
   const deg = 180 / Math.PI;
-  const legs = feet.map(({ hx, hy, fx, fy, lift }, i) => {
+  const legs = feet.map(({ hx, hy, fx, fy, lift, footTilt }, i) => {
     hy += y;
     const dx = fx - hx, dy = fy - hy, d = Math.hypot(dx, dy);
     const along = (up ** 2 - low ** 2 + d ** 2) / (2 * d), perp = (i ? 1 : -1) * Math.sqrt(Math.max(0, up ** 2 - along ** 2));
     const kx = hx + (along * dx + perp * dy) / d, ky = hy + (along * dy - perp * dx) / d;
-    return { hx, hy, kx, ky, fx, fy, lift, thigh: Math.atan2(hx - kx, ky - hy) * deg, shin: Math.atan2(kx - fx, fy - ky) * deg };
+    return { hx, hy, kx, ky, fx, fy, lift, footTilt, thigh: Math.atan2(hx - kx, ky - hy) * deg, shin: Math.atan2(kx - fx, fy - ky) * deg };
   });
-  const swing = (feet[0].lift - feet[1].lift) / 19;
+  const swing = (feet[0].lift - feet[1].lift) / 9;
   return { x, y, tilt, legs, blend: accents ? Math.max(pulse(u, 0, .18, .86, 1), present, back, look, ask, salute, bow) : 0,
     head: 1.15 * Math.sin(t * 1.70) + 4.5 * look - 5.1 * ask - 3.6 * bow,
     nod: 1 - .058 * ask - .110 * bow, drop: -.9 * breath + 2.4 * ask + 3.3 * bow,

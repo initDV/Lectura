@@ -12,14 +12,13 @@ export function rigRobot(svg) {
   if (!trunk) return null;
   const shadow = get('shadow'), clock = get('clock'), digits = get('clock-digits'), antenna = get('antenna');
   const each = ['l', 'r'].map((side) => ['thigh', 'knee', 'shin', 'foot'].map((piece) => get(`${piece}-${side}`)));
-  const rest = svg.getAttribute('viewBox');
   let plan = null, painted = false, label = '';
   clock.setAttribute('aria-hidden', 'true');
   return {
     plan(next) {
       if (next === plan) return;
       plan = next;
-      svg.setAttribute('viewBox', plan ? (plan.label ? R.clockBox : R.box).join(' ') : rest);
+      // Le champ du cadran est réservé dans le SVG, même au repos : pas de zoom au premier appui.
       if (plan?.label && plan.label !== label) {
         label = plan.label;
         digits.replaceChildren(...cadran(label).map(({ x, d }) => {
@@ -47,7 +46,7 @@ export function rigRobot(svg) {
         thigh.setAttribute('transform', `${offset(l.hx - x, l.hy - R.hip)} ${rotate(l.thigh, x, R.hip)}`);
         knee.setAttribute('transform', k);
         shin.setAttribute('transform', `${k} ${rotate(l.shin, x, R.knee)}`);
-        foot.setAttribute('transform', offset(l.fx - x, -l.lift));
+        foot.setAttribute('transform', `${offset(l.fx - x, -l.lift)} ${rotate(l.footTilt, x, R.ankle)}`);
       });
       clock.setAttribute('display', p.clock > .01 ? 'inline' : 'none');
       clock.setAttribute('opacity', f(p.clock));

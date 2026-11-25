@@ -5,8 +5,10 @@ ou une voix HD permettent d'essayer la même mise en scène. Exemple :
 
 > Demain, on part à 8 h 30. Tu seras là ? Oui ! D’où est-ce qu’on part ? De la gare. Parfait !
 
-1. Au début de la première plage parlée en pose Auto, le robot fait un pas de côté. Les deux pieds se déplacent
-   successivement et les genoux s’articulent sans allonger les jambes.
+1. Au début de la parole en pose Auto, le robot fait un pas de côté. Les pieds se déplacent l’un après l’autre :
+   semelle à plat sur le pied d’appui, légère inclinaison de l’autre en l’air, jambes de longueur constante.
+   Le pas peut traverser une virgule découpée par le moteur, sans empiéter sur un autre geste ni sur une pose imposée.
+   Si la place manque, son amplitude est réduite ou il est omis plutôt que précipité.
 2. Au premier horaire reconnu, il regarde et désigne le cadran. L'horaire peut être écrit `8 h 30`, `08:30`,
    « huit heures trente » ou « une heure et quart ». Avec les sources sans alignement par mot, le moment du
    geste est estimé **à l’intérieur de la phrase**, pas à partir d’une seconde fixe.
@@ -20,7 +22,8 @@ scène et sa marge finale. Pause, reprise, recherche et ralenti agissent sur la 
 
 ## Implémentation et contrôle
 
-- `characters/robot_lectura_scene.svg` contient les pièces communes aux deux rendus. Le SVG de vignette reste intact.
+- `characters/robot_lectura_scene.svg` contient les pièces communes aux deux rendus. Son cadre réserve la place du
+  cadran dès le repos, sans zoom qui repositionnerait les appuis au lancement de la lecture. Le SVG de vignette reste intact.
 - `src/modules/robot-motion.js` et `RobotChoreo.java` donnent la pose à un instant de la source, avec des fixtures de
   parité. Le cadran vectoriel ne dépend ni d'une police distante ni d'un fichier vidéo de démonstration.
 - La PWA sérialise le SVG vivant, Android utilise les mêmes matrices dans le rendu de la scène, la capture et la vidéo.

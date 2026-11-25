@@ -417,20 +417,17 @@ public final class DeviceChecks extends Instrumentation {
         for(int i=0;i<at.length;i++)require(Math.abs(before[i]-after[i])<.001,"Saut à la coupure d’une pose");
     }
     private static void near(double a,double b,String name){require(Math.abs(a-b)<.000001,name+" : "+a+" / "+b);}
-    private String robotChoreo(Context ctx,Refs refs)throws Exception{
-        JSONObject fixture=fixtures().getJSONObject("robot");JSONArray rows=fixture.getJSONArray("segments");
-        List<Script.Segment> parts=new ArrayList<>();int start=0;
+    private static RobotChoreo robotPlan(JSONObject fixture)throws Exception{
+        JSONArray rows=fixture.getJSONArray("segments");List<Script.Segment> parts=new ArrayList<>();int start=0;
         for(int i=0;i<rows.length();i++){
             JSONObject span=rows.getJSONObject(i);String line=span.getString("texte");
             Script.Segment p=new Script.Segment(line,start,start+line.length(),Script.type(line));start=p.end+1;
-            p.from=span.getLong("debutMs");p.speechEnd=span.getLong("speechEndMs");p.to=span.getLong("finMs");parts.add(p);
+            p.from=span.getLong("debutMs");p.speechEnd=span.getLong("speechEndMs");p.to=span.getLong("finMs");p.expression=span.optString("expression","auto");parts.add(p);
         }
-        RobotChoreo direction=RobotChoreo.plan(parts,fixture.getDouble("duration"));
-        JSONObject expected=fixture.getJSONObject("direction");require(direction.label.equals(expected.getString("label")),"Horloge réellement prononcée");
-        double[][] actual={direction.step,direction.hour,direction.question,direction.salute};String[] cues={"pas","h","q","salut"};
-        for(int i=0;i<cues.length;i++)for(int j=0;j<2;j++)near(actual[i][j],expected.getJSONArray(cues[i]).getDouble(j),cues[i]);
-        near(direction.end,expected.getDouble("end"),"Fin avec salut");
-        JSONArray poses=fixture.getJSONArray("poses");RobotChoreo.Pose out=new RobotChoreo.Pose();
+        return RobotChoreo.plan(parts,fixture.getDouble("duration"));
+    }
+    private static int robotPoses(RobotChoreo direction,JSONArray poses)throws Exception{
+        RobotChoreo.Pose out=new RobotChoreo.Pose();
         for(int i=poses.length()-1;i>=0;i--){
             JSONArray row=poses.getJSONArray(i);direction.sample(row.getDouble(0),true,out);JSONObject p=row.getJSONObject(1);
             String[] names={"x","y","tilt","blend","head","nod","drop","armL","foreL","armR","foreR","gazeX","gazeY","brow","antenna","clock"};
@@ -441,16 +438,36 @@ public final class DeviceChecks extends Instrumentation {
                 RobotChoreo.Leg l=out.legs[leg];JSONObject m=p.getJSONArray("legs").getJSONObject(leg);
                 // At full extension hypot/atan2 can differ by a few millionths of a degree between VMs.
                 require(Math.abs(l.thigh-m.getDouble("thigh"))<.00002&&Math.abs(l.shin-m.getDouble("shin"))<.00002,"Articulation Java/JS");
+                near(l.fx,m.getDouble("fx"),"position du pied sur X");near(l.fy,m.getDouble("fy"),"position du pied sur Y");
+                near(l.footTilt,m.getDouble("footTilt"),"inclinaison de semelle");
+                if(l.lift==0){near(l.fy,528,"pied posé au sol");near(l.footTilt,0,"semelle à plat pendant l’appui");}
                 near(Math.hypot(l.hx-l.kx,l.hy-l.ky),70,"cuisse de longueur constante");near(Math.hypot(l.kx-l.fx,l.ky-l.fy),104,"tibia de longueur constante");
             }
+        }
+        return poses.length();
+    }
+    private String robotChoreo(Context ctx,Refs refs)throws Exception{
+        JSONObject fixture=fixtures().getJSONObject("robot");RobotChoreo direction=robotPlan(fixture);
+        JSONObject expected=fixture.getJSONObject("direction");require(direction.label.equals(expected.getString("label")),"Horloge réellement prononcée");
+        double[][] actual={direction.step,direction.hour,direction.question,direction.salute};String[] cues={"pas","h","q","salut"};
+        for(int i=0;i<cues.length;i++)for(int j=0;j<2;j++)near(actual[i][j],expected.getJSONArray(cues[i]).getDouble(j),cues[i]);
+        near(direction.end,expected.getDouble("end"),"Fin avec salut");
+        int checked=robotPoses(direction,fixture.getJSONArray("poses"));JSONArray steps=fixture.getJSONArray("steps");
+        for(int i=0;i<steps.length();i++){
+            JSONObject row=steps.getJSONObject(i);RobotChoreo entry=robotPlan(row);JSONArray step=row.optJSONArray("step");
+            require((entry.step==null)==(step==null),row.getString("name"));
+            if(step!=null)for(int j=0;j<2;j++)near(entry.step[j],step.getDouble(j),row.getString("name"));
+            checked+=robotPoses(entry,row.getJSONArray("poses"));
         }
         MainActivity a=open(ctx);File input=tone(ctx,5),dir=ctx.getExternalFilesDir("verification");
         String text="Demain, on part à 8 h 30. Tu seras là ? Parfait !", name="robot-salut-"+System.currentTimeMillis();
         String format=a.db.settings.optString("formatVideo","9:16");
+        float[] framing=new float[4];
         try{
             main(()->{
                 Project p=new Project(a.db.settings);p.text=text;p.title=name;p.character="robot_lectura";p.speed=1;p.emotions=true;
                 a.open(p);a.stage.sprite.reduced=false; // CI has animator_duration_scale=0; exercise the non-reduced path explicitly.
+                System.arraycopy(a.stage.sprite.svg.box,0,framing,0,4);
                 a.importAudio(Uri.fromFile(input),"horloge.wav");
             });
             waitFor("Import de la piste du robot",()->a.project.fileAudio,10000);
@@ -458,8 +475,18 @@ public final class DeviceChecks extends Instrumentation {
             waitFor("Lecture avec mise en scène",()->a.reading!=null&&a.reading.playing,12000);
             main(()->{
                 Reading r=a.reading;RobotChoreo c=r.choreography;
-                require(c!=null&&c.label.equals("08:30")&&c.end>r.mediaDuration,"Plan lié à la lecture native");
-                r.pause();r.seek((c.hour[0]+c.hour[1])*.5);a.stage.updatePose(100);
+                require(c!=null&&c.label.equals("08:30")&&c.step!=null&&c.end>r.mediaDuration,"Plan lié à la lecture native");
+                require(Arrays.equals(framing,a.stage.sprite.svg.box),"Le cadrage change au démarrage du pas");
+                r.pause();r.seek(c.step[0]+.34*(c.step[1]-c.step[0]));a.stage.updatePose(100);
+                RobotChoreo.Pose posePas=a.stage.sprite.robotStage.pose;
+                require(posePas.legs[0].lift==0&&posePas.legs[1].lift>3,"Un pied reste au sol pendant la foulée");
+                for(int i=0;i<2;i++){
+                    float[] ankle={(float)RobotChoreo.X[i],RobotChoreo.ANKLE};
+                    Svg.Node boot=a.stage.sprite.svg.get(i==0?"robot-foot-l":"robot-foot-r");
+                    boot.transform.mapPoints(ankle);
+                    require(Math.abs(ankle[0]-posePas.legs[i].fx)<.011&&Math.abs(ankle[1]-posePas.legs[i].fy)<.011,"Semelle désolidarisée du pivot");
+                }
+                r.seek((c.hour[0]+c.hour[1])*.5);a.stage.updatePose(100);
                 Svg.Node clock=a.stage.sprite.svg.get("robot-clock");require(!clock.hidden&&clock.alpha>.97,"Horloge visible au pointage");
                 require(a.stage.sprite.svg.get("robot-clock-digits").children.size()==24,"Chiffres de 08:30");
                 Bitmap image=Bitmap.createBitmap(720,1280,Bitmap.Config.ARGB_8888);
@@ -469,7 +496,7 @@ public final class DeviceChecks extends Instrumentation {
                 try(var file=Files.newOutputStream(new File(dir,"android-robot-heure.png").toPath())){image.compress(Bitmap.CompressFormat.PNG,100,file);}finally{image.recycle();}
                 double pose=a.stage.sprite.robotStage.pose.foreR;
                 a.stage.updatePose(1000);near(a.stage.sprite.robotStage.pose.foreR,pose,"Image figée pendant la pause");
-                a.stage.sprite.reduced=true;a.stage.updatePose(1100);require(clock.hidden,"Horloge en mouvement réduit");
+                a.stage.sprite.reduced=true;a.stage.updatePose(1100);require(clock.hidden&&Arrays.equals(framing,a.stage.sprite.svg.box),"Horloge ou changement de cadrage en mouvement réduit");
                 a.stage.sprite.reduced=false;r.seek(r.mediaDuration+730);r.speed(.5f);a.stage.updatePose(1200);
                 require(a.stage.sprite.robotStage.pose.nod<.92&&a.stage.sprite.viseme==0&&r.chars(r.time())==text.length(),"Salut après l’audio");
                 a.startPlaying();
@@ -507,7 +534,7 @@ public final class DeviceChecks extends Instrumentation {
                 }
                 Files.copy(kept.file.toPath(),new File(dir,"android-robot-salut.mp4").toPath(),StandardCopyOption.REPLACE_EXISTING);
             }finally{library.delete(kept);}
-            return "17 poses Java/JS, appuis et longueurs ; pause, saut dans le salut, ralenti, mouvement réduit, chiffres PNG et salut MP4 avec fin muette";
+            return checked+" poses Java/JS : pas fluide sur fragments, semelles et cadrage fixes en appui ; pause, saut, ralenti, mouvement réduit, chiffres PNG, salut MP4 muet";
         }finally{
             input.delete();main(()->{a.db.set("formatVideo",format);a.db.audio(a.project).delete();a.finish();});
             var catalog=android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY);
@@ -1253,6 +1280,9 @@ public final class DeviceChecks extends Instrumentation {
             try(Pcm wav=dialogueAudio.pcm){
                 var spans=dialogueAudio.segments;
                 require(spans.size()==7&&spans.get(1).text.equals("on part à 8 h 30.")&&spans.get(4).text.startsWith("D’où est-ce"),"Segments originaux du dialogue Siwis");
+                RobotChoreo dance=RobotChoreo.plan(spans,wav.duration());
+                require(dance!=null&&dance.step!=null&&dance.hour!=null&&dance.step[1]-dance.step[0]>=520&&dance.step[1]<=dance.hour[0],
+                    "Pas précipité sur la virgule du dialogue Siwis");
                 int[] pauses={105,300,360,320,360,300,320};
                 for(int i=0;i<spans.size();i++){
                     var p=spans.get(i);

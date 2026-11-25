@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { planRobot, poseRobot, cadran, ROBOT_RIG } from '../src/modules/robot-motion.js';
 import { premierHoraire, heuresEnMots } from '../src/modules/horaire.js';
 import { WithOutro } from '../src/modules/player.js';
-import { robotSegments, robotDuration } from './fixtures/robot-motion.mjs';
+import { robotSegments, robotDuration, robotStepCases } from './fixtures/robot-motion.mjs';
 
 const plan = planRobot(robotSegments, robotDuration);
 const at = (p, x) => p[0] + (p[1] - p[0]) * x;
@@ -44,7 +44,7 @@ describe('mise en scène sur les dates de la source', () => {
     expect(poseRobot(plan, at(plan.h, .45))).toMatchObject({ clock: 1, armR: -56, foreR: -54 });
     expect(poseRobot(plan, at(plan.q, .48)).tilt).toBeLessThan(-5);
     expect(poseRobot(plan, at(plan.salut, .52))).toMatchObject({ armR: 34, foreR: 73, nod: .89 });
-    expect(poseRobot(plan, plan.end)).toMatchObject({ x: 38, clock: 0, blend: 0, nod: 1 });
+    expect(poseRobot(plan, plan.end)).toMatchObject({ x: ROBOT_RIG.stride, clock: 0, blend: 0, nod: 1 });
   });
   it('conserve les appuis, les longueurs et la pose quand on re-saute au même temps', () => {
     const t = at(plan.pas, .34), ref = poseRobot(plan, t);
@@ -55,12 +55,50 @@ describe('mise en scène sur les dates de la source', () => {
       p.legs.forEach((l, index) => {
         expect(Math.hypot(l.hx - l.kx, l.hy - l.ky)).toBeCloseTo(70, 7);
         expect(Math.hypot(l.kx - l.fx, l.ky - l.fy)).toBeCloseTo(104, 7);
+        // Les extrémités de la semelle restent au-dessus du sol, même avec le pied incliné.
+        const rad = l.footTilt * Math.PI / 180;
+        const sole = l.fy + 20 * Math.cos(rad) + 23 * Math.abs(Math.sin(rad));
+        expect(sole).toBeLessThanOrEqual(548 + 1e-8);
+        expect(Math.abs(l.thigh - l.shin)).toBeLessThan(46);
+        expect(l.lift).toBeLessThanOrEqual(9);
         if (l.lift > 0) firstLift[index] = true;
-        else expect([ROBOT_RIG.x[index], ROBOT_RIG.x[index] + 38]).toContain(l.fx);
+        else {
+          expect(l.fy).toBe(ROBOT_RIG.ankle);
+          expect(l.footTilt).toBe(0);
+          expect([ROBOT_RIG.x[index], ROBOT_RIG.x[index] + ROBOT_RIG.stride]).toContain(l.fx);
+        }
       });
     }
     expect(firstLift).toEqual([true, true]);
     expect(poseRobot(plan, t)).toEqual(ref);
+  });
+  it('termine le pas avant le cadran sans le comprimer dans la première demi-phrase', () => {
+    const { segments, duration } = robotStepCases[0];
+    const direction = planRobot(segments, duration);
+    expect(direction.pas[1] - direction.pas[0]).toBeGreaterThan(900);
+    expect(direction.pas[1]).toBeGreaterThan(segments[0].finMs);
+    expect(direction.pas[1]).toBeLessThanOrEqual(direction.h[0]);
+    const demiPas = at(direction.pas, .35), first = poseRobot(direction, demiPas);
+    expect(first.legs[0].fx).toBe(ROBOT_RIG.x[0]);
+    expect(first.legs[1].lift).toBeGreaterThan(4);
+    expect(first.legs[1].footTilt).not.toBe(0);
+    poseRobot(direction, direction.end);
+    expect(poseRobot(direction, demiPas)).toEqual(first);
+  });
+  it('raccourcit l’amplitude si la plage est juste assez longue', () => {
+    const { segments, duration } = robotStepCases[1];
+    const short = planRobot(segments, duration), last = poseRobot(short, short.pas[1]);
+    expect(short.pas[1] - short.pas[0]).toBeGreaterThanOrEqual(520);
+    expect(last.x).toBeGreaterThan(10);
+    expect(last.x).toBeLessThan(ROBOT_RIG.stride * .6);
+    expect(last.legs[0].fx - ROBOT_RIG.x[0]).toBeCloseTo(last.x);
+    expect(last.legs[1].fx - ROBOT_RIG.x[1]).toBeCloseTo(last.x);
+  });
+  it('renonce au pas précipité plutôt que de traverser une pose, une commande ou une coupure', () => {
+    const { segments, duration } = robotStepCases[2];
+    expect(planRobot(segments, duration).pas).toBeNull();
+    expect(planRobot([segments[0], { ...segments[1], texte: '$ écho' }], duration).pas).toBeNull();
+    expect(planRobot([segments[0], { ...segments[1], expression: 'auto', debutMs: 787 }], duration).pas).toBeNull();
   });
   it('respecte les plages manuelles, sans inventer une fin parlée pour un média importé', () => {
     const auto = robotSegments.map(({ speechEndMs: _ignore, ...s }) => s);

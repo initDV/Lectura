@@ -8,3 +8,15 @@ export const robotSegments = [
 ];
 export const robotDuration = 7450;
 export const robotText = robotSegments.map((s) => s.texte).join('\n');
+
+const spoken = (texte, debutMs, speechEndMs, finMs, expression = 'auto') => ({ texte, debutMs, speechEndMs, finMs, type: 'parle', expression });
+export const robotStepCases = [
+  { name: 'virgule du moteur HD', duration: 4240, segments: [
+    spoken('Demain,', 0, 282, 387), spoken('on part à 8 h 30.', 387, 2320, 2620),
+    spoken('Tu seras là ?', 2620, 3260, 3620), spoken('Parfait !', 3620, 3920, 4240),
+  ] },
+  { name: 'pas de faible amplitude', duration: 580, segments: [spoken('Bonjour.', 0, 485, 580)] },
+  { name: 'pose imposée juste après une entrée trop brève', duration: 2200, segments: [
+    spoken('Demain,', 0, 282, 387), spoken('on part à 8 h 30.', 387, 1900, 2200, 'pensif'),
+  ] },
+];

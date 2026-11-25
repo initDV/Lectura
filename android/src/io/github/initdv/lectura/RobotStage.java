@@ -10,7 +10,6 @@ final class RobotStage {
     private final Svg svg;
     private final Svg.Node trunk,shadow,antenna,clock,digits;
     private final Svg.Node[][] pieces=new Svg.Node[2][];
-    private final float[] rest,plain,wide;
     private final JSONArray numbers,positions;
     private final float digitY;
     private final JSONObject strokes;
@@ -22,15 +21,13 @@ final class RobotStage {
     RobotStage(Svg svg,JSONObject data){
         this.svg=svg;trunk=node("trunk");shadow=node("shadow");antenna=node("antenna");clock=node("clock");digits=node("clock-digits");
         for(int i=0;i<2;i++){String side=i==0?"-l":"-r";pieces[i]=new Svg.Node[]{node("thigh"+side),node("knee"+side),node("shin"+side),node("foot"+side)};}
-        rest=svg.box.clone();JSONObject rig=object(data,"rig");plain=box(array(rig,"box"));wide=box(array(rig,"clockBox"));
         numbers=array(data,"digits");strokes=object(data,"segments");positions=array(data,"digitX");digitY=(float)data.optDouble("digitY");
         clock.a.remove("display");clock.hidden=true;
     }
-    private static float[] box(JSONArray a){float[] out=new float[4];for(int i=0;i<4;i++)out[i]=(float)a.optDouble(i);return out;}
     private Svg.Node node(String name){return svg.get("robot-"+name);}
     RobotChoreo.Pose sample(RobotChoreo plan,double ms,boolean accents){
         if(plan!=track){
-            track=plan;System.arraycopy(plan==null?rest:plan.label.isEmpty()?plain:wide,0,svg.box,0,4);
+            track=plan; // Le cadrage du SVG ne change pas entre repos, lecture et export.
             if(plan!=null&&!plan.label.isEmpty()&&!label.equals(plan.label)){
                 label=plan.label;digits.children.clear();
                 String values=label.replace(":","");
@@ -59,7 +56,7 @@ final class RobotStage {
             translate(leg[0],l.hx-x,l.hy-RobotChoreo.HIP).preRotate(f(l.thigh),x,RobotChoreo.HIP);
             translate(leg[1],l.kx-x,l.ky-RobotChoreo.KNEE);
             translate(leg[2],l.kx-x,l.ky-RobotChoreo.KNEE).preRotate(f(l.shin),x,RobotChoreo.KNEE);
-            translate(leg[3],l.fx-x,-l.lift);
+            translate(leg[3],l.fx-x,-l.lift).preRotate(f(l.footTilt),x,RobotChoreo.ANKLE);
         }
         clock.hidden=pose.clock<=.01;clock.alpha=f(pose.clock);
         return pose;

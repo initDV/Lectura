@@ -7,7 +7,7 @@ import { phonemiser } from '../../src/modules/voice/g2p_fr.js';
 import { autoTiming, estimateDurationMs, Timeline } from '../../src/modules/timeline.js';
 import { nettoyer } from '../../src/modules/text-clean.js';
 import { words, groups, questions, corrections, siwis } from '../../tests/fixtures/voice-fr.mjs';
-import { robotSegments, robotDuration, robotText } from '../../tests/fixtures/robot-motion.mjs';
+import { robotSegments, robotDuration, robotText, robotStepCases } from '../../tests/fixtures/robot-motion.mjs';
 import { planRobot, poseRobot } from '../../src/modules/robot-motion.js';
 const texts = [
   'Bonjour, je suis Lectura !',
@@ -33,6 +33,11 @@ fixtures.lips = data;
 fixtures.voice = { words: [...words, ...corrections], groups, questions, siwis };
 const direction = planRobot(robotSegments, robotDuration);
 const keys = [0, ...Object.values(direction).filter(Array.isArray).flatMap(([a, b]) => [a, a + (b-a)*.32, a + (b-a)*.53, b])];
-fixtures.robot = { text: robotText, duration: robotDuration, segments: robotSegments, direction, poses: keys.map(ms => [ms, poseRobot(direction, ms)]) };
+const steps = robotStepCases.map((entry) => {
+  const track = planRobot(entry.segments, entry.duration), step = track.pas;
+  const sample = step ? [0, .17, .32, .51, .57, .74, .94, 1].map((u) => step[0] + u * (step[1] - step[0])) : [0, 250, entry.duration];
+  return { ...entry, step, poses: sample.map((ms) => [ms, poseRobot(track, ms)]) };
+});
+fixtures.robot = { text: robotText, duration: robotDuration, segments: robotSegments, direction, poses: keys.map(ms => [ms, poseRobot(direction, ms)]), steps };
 await writeFile(process.argv[2], JSON.stringify(fixtures));
 await writeFile(join(dirname(process.argv[2]), 'lips-reference.wav'), wav);

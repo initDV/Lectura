@@ -1,4 +1,4 @@
-<svg id="lectura-char" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 600" role="img" aria-label="Robot Lectura">
+<svg id="lectura-char" xmlns="http://www.w3.org/2000/svg" viewBox="-24 -6 409 588" role="img" aria-label="Robot Lectura">
 <ellipse id="robot-shadow" cx="120" cy="551" rx="102" ry="10" fill="#16141f"/>
 <g id="legs" fill="#1c1830" stroke="#9b45e0" stroke-width="3">
 <rect id="robot-thigh-l" x="70" y="354" width="33" height="72" rx="16"/><rect id="robot-thigh-r" x="136" y="354" width="33" height="72" rx="16"/>

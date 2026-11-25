@@ -5,7 +5,7 @@ import fr from '../src/i18n/fr.js';
 import en from '../src/i18n/en.js';
 import { DEFAUTS } from '../src/modules/storage.js';
 import { EXPRESSIONS, NEUTRE } from '../src/modules/expressions.js';
-import { ROBOT_RIG, DIGITS, SEGMENTS, DIGIT_X, DIGIT_Y } from '../src/modules/robot-motion.js';
+import { DIGITS, SEGMENTS, DIGIT_X, DIGIT_Y } from '../src/modules/robot-motion.js';
 import { THEMES } from '../src/modules/themes.js';
 import * as phonemes from '../src/modules/voice/g2p_lexique.js';
 
@@ -81,7 +81,7 @@ await Promise.all([
     'android.voice.noAudio': 'Download Estelle or choose an already installed voice.',
     'voix.hd.err.tropLong': 'Text too long for synthesis ({n} characters; maximum {max}). Split it into projects or import audio.',
   })),
-  put('robot-stage.json', { rig: ROBOT_RIG, digits: DIGITS, segments: SEGMENTS, digitX: DIGIT_X, digitY: DIGIT_Y }),
+  put('robot-stage.json', { digits: DIGITS, segments: SEGMENTS, digitX: DIGIT_X, digitY: DIGIT_Y }),
   put('defaults.json', defaults),
   put('themes.json', { app: themes, terminal: THEMES }), put('expressions.json', { neutral: NEUTRE, expressions: EXPRESSIONS }),
   put('g2p.json', { ...phonemes, CLITIQUES: [...phonemes.CLITIQUES], TIRET: [...phonemes.TIRET] }),
