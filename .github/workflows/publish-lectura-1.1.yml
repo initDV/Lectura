@@ -1,6 +1,10 @@
 name: Publier Lectura Android 1.1.0
 
 on:
+  # Enregistre le workflow de la branche et vérifie la syntaxe, sans publier.
+  push:
+    branches: ['arena/d2229c4f-lectura']
+    paths: ['.github/workflows/publish-lectura-1.1.yml', 'tools/release-android-1.1.sh']
   workflow_dispatch:
 
 permissions:
@@ -11,8 +15,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: bash -n tools/release-android-1.1.sh
   release:
-    if: github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura'
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura'
     runs-on: ubuntu-24.04
     timeout-minutes: 14
     permissions:
