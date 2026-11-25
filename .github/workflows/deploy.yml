@@ -19,6 +19,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      public_sha256: ${{ steps.fichiers.outputs.sha256 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,6 +44,28 @@ jobs:
         run: npm run voice
       - name: Construire dist/
         run: npm run build
+      - name: Vérifier que les liens Android pointent vers une Release publique
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag=$(sed -nE "s@.*https://github.com/${GITHUB_REPOSITORY}/releases/download/(v[0-9]+\.[0-9]+\.[0-9]+)/Lectura\.apk\".*@\1@p" dist/app/index.html | sort -u)
+          [[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" | jq -e --arg tag "$tag" '
+            .tag_name==$tag and .draft==false and .prerelease==false
+            and any(.assets[]; .name=="Lectura.apk" and .state=="uploaded")
+            and any(.assets[]; .name==("Lectura-"+$tag+"-android.zip") and .state=="uploaded")
+          '
+      - name: Relever les empreintes des points d’entrée publics
+        id: fichiers
+        working-directory: dist
+        run: |
+          {
+            echo 'sha256<<LECTURA_SHA256'
+            sha256sum index.html sw.js manifest.webmanifest src/version.js models/index.json \
+              app/index.html app/styles.css app/reveal.js privacy/index.html robots.txt sitemap.xml google121a4ae782cb28f.html
+            echo LECTURA_SHA256
+          } >> "$GITHUB_OUTPUT"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -56,3 +80,34 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+      - name: Confirmer la version effectivement servie par Pages
+        env:
+          SITE: ${{ steps.deployment.outputs.page_url }}
+          EXPECTED: ${{ needs.build.outputs.public_sha256 }}
+        shell: bash
+        run: |
+          [[ $SITE == https://initdv.github.io/Lectura/ && -n $EXPECTED ]]
+          verifier() {
+            local empreinte chemin fichier recu
+            while read -r empreinte fichier; do
+              chemin=$fichier
+              case "$fichier" in
+                index.html) chemin='' ;;
+                */index.html) chemin=${fichier%index.html} ;;
+              esac
+              recu=$(curl -fsSL --max-time 25 -H 'Cache-Control: no-cache' \
+                "${SITE}${chemin}?verification=${GITHUB_SHA}" | sha256sum | cut -d' ' -f1) || return 1
+              if [[ $recu != "$empreinte" ]]; then
+                echo "Réponse Pages différente pour $fichier" >&2
+                return 1
+              fi
+            done <<< "$EXPECTED"
+          }
+          for tentative in {1..12}; do
+            if verifier; then
+              echo '::notice title=Pages vérifié::PWA, téléchargements, confidentialité et référencement correspondent au build déployé.'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1

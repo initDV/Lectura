@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 const racine = join(dirname(fileURLToPath(import.meta.url)), '..'), dist = join(racine, 'dist');
 const A_COPIER = ['index.html', 'offline.html', 'manifest.webmanifest', 'sw.js', 'LICENSE', 'THIRD_PARTY_LICENSES.md', 'src', 'characters', 'data', 'icons', 'fonts'];
+const PAGES_PUBLIQUES = ['app', 'privacy', 'robots.txt', 'sitemap.xml', 'google121a4ae782cb28f.html'];
+const RELEASE_ANDROID = 'v1.1.0';
 const PIECES = ['#body', '#arm-l', '#arm-r', '#mouth', '#eye-l', '#eye-r', '#brow-l', '#brow-r'];
 
 /** Vérifie chaque personnage (JSON + SVG) et réécrit characters/index.json : aucun code à modifier pour en ajouter un. */
@@ -55,13 +57,16 @@ function construire() {
     writeFileSync(join(dist, 'models', 'index.json'), `${JSON.stringify({ moteur: null, voix: [] })}\n`);
   }
 
-  // Page juridique autonome : publique, mais hors du précache et de la version de l’application.
-  cpSync(join(racine, 'privacy'), join(dist, 'privacy'), { recursive: true });
+  // Pages de téléchargement, confidentialité et référencement : publiques, hors du précache.
+  for (const f of PAGES_PUBLIQUES) cpSync(join(racine, f), join(dist, f), { recursive: true });
+  // Le dossier source /app/ reste aussi le gabarit de la distribution historique 1.0.0.
+  const telechargements = join(dist, 'app', 'index.html');
+  writeFileSync(telechargements, readFileSync(telechargements, 'utf8').replaceAll('v1.0.0', RELEASE_ANDROID));
 
   // Fichiers gardés hors ligne dès la première visite : tout sauf models/ (à la demande) et les fichiers de service.
   const fichiers = lister(dist).map((p) => relative(dist, p).split(sep).join('/'))
     .filter((p) => (!p.startsWith('models/') || p === 'models/index.json') && !['sw.js', '.nojekyll', 'LICENSE', 'THIRD_PARTY_LICENSES.md'].includes(p))
-    .filter((p) => !p.startsWith('src/vendor/aac/') && !p.startsWith('privacy/')).sort();
+    .filter((p) => !p.startsWith('src/vendor/aac/') && !PAGES_PUBLIQUES.some((f) => p === f || p.startsWith(`${f}/`))).sort();
   // models/index.json (catalogue des voix, quelques Ko) est gardé hors ligne ; les fichiers de voix restent à la demande.
   const empreinte = createHash('sha256');
   for (const f of fichiers) empreinte.update(f).update(readFileSync(join(dist, f)));

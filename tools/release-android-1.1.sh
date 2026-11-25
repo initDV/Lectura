@@ -63,7 +63,7 @@ verify_apk() {
   [[ $fingerprint == "$cert" ]]
   "$bt/aapt2" dump badging "$file" > "$work/badging.txt"
   grep -Eq "^package: name='io\.github\.initdv\.lectura' versionCode='38' versionName='1\.1\.0'" "$work/badging.txt"
-  grep -Fx "sdkVersion:'31'" "$work/badging.txt"
+  grep -E "^(minSdkVersion|sdkVersion):'31'$" "$work/badging.txt"
   unzip -p "$file" assets/version.json | jq -e --arg native "${sha:0:8}" '.native==$native and .version=="1.1.0"' >/dev/null
 }
 verify_apk "$apk"
