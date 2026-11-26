@@ -2,6 +2,7 @@
 #include "siwis.hpp"
 #include "stage.hpp"
 #include "transport.hpp"
+#include "video.hpp"
 #include "window.hpp"
 
 #include <QAudioDevice>
@@ -21,6 +22,7 @@
 #include <QTextEdit>
 #include <QXmlStreamReader>
 #include <QtEndian>
+#include <QtConcurrentRun>
 #include <cmath>
 #include <stdexcept>
 
@@ -53,6 +55,24 @@ QString pathAttr(const QByteArray &svg, const QString &id, const QString &attr) 
     }
     return {};
 }
+QByteArray mediaTool(const QString &executable, const QStringList &args) {
+    QProcess p;
+    p.start(executable, args);
+    if (!p.waitForStarted(5000) || !p.waitForFinished(18000) || p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0)
+        fail(executable + " : " + QString::fromUtf8(p.readAllStandardError()).left(400));
+    return p.readAllStandardOutput();
+}
+QJsonObject checkVideo(const QString &path) {
+    return QJsonDocument::fromJson(mediaTool("ffprobe", {"-v","error","-show_streams","-show_format","-of","json",path})).object();
+}
+QString exportFromWorker(const Art &art, const Track &t, const QJsonObject &p, const QString &dest, VideoOptions opts = {},
+    const std::atomic_bool *cancel = nullptr, const std::function<void(int)> &progress = {}) {
+    return QtConcurrent::run([&] {
+        try { exportMp4(assets, art, t, p, dest, opts, cancel, progress); return QString(); }
+        catch (const std::exception &e) { return QString::fromUtf8(e.what()); }
+    }).result();
+}
+
 }
 
 class DesktopChecks : public QObject {
@@ -64,6 +84,7 @@ private Q_SLOTS:
     void importedAudio();
     void offlineVoice();
     void siwisVoice();
+    void videoExports();
     void audioControls();
     void windowControls();
 };
@@ -206,8 +227,77 @@ void DesktopChecks::siwisVoice() {
     corrupt.close();
     QVERIFY_EXCEPTION_THROWN(installSiwis(digestBad, model), std::runtime_error);
     QVERIFY_EXCEPTION_THROWN(prepare({project, Source::Siwis, {}, assets, digestBad}), std::runtime_error);
-    if (qEnvironmentVariableIsSet("LECTURA_TEST_OUTPUT"))
-        saveFile(QDir(qEnvironmentVariable("LECTURA_TEST_OUTPUT")).filePath("Siwis-Linux.wav"), t.wav());
+    const auto output = qEnvironmentVariable("LECTURA_TEST_OUTPUT", tmp.path());
+    saveFile(QDir(output).filePath("Siwis-Linux.wav"), t.wav());
+    const auto arts = catalogue(QDir(assets).filePath("characters"));
+    const auto video = QDir(output).filePath("Lectura-Linux-Siwis.mp4");
+    const auto error = exportFromWorker(arts.at(4), t, project, video);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    const auto media = checkVideo(video);
+    const auto streams = media.value("streams").toArray();
+    QCOMPARE(streams.size(), 2);
+    const auto formats = media.value("format").toObject().value("tags").toObject();
+    QVERIFY(formats.value("comment").toString().contains("CC BY 4.0"));
+    const double v = streams.at(0).toObject().value("duration").toString().toDouble();
+    const double a = streams.at(1).toObject().value("duration").toString().toDouble();
+    QVERIFY(std::abs(v-a) <= .040);
+}
+
+void DesktopChecks::videoExports() {
+    QTemporaryDir tmp;
+    const auto path = tmp.filePath("Audio original.wav");
+    saveFile(path, tone().wav());
+    const auto project = newProject("Bonjour ! Marche vers moi.\n# Exemple de terminal");
+    const auto t = prepare({project, Source::File, path});
+    const auto art = catalogue(QDir(assets).filePath("characters")).at(0);
+    const auto landscape = tmp.filePath("Export paysage.mp4");
+    int progress = -1;
+    bool monotonic = true;
+    const auto error = exportFromWorker(art, t, project, landscape, {}, nullptr, [&](int p) { monotonic &= p >= progress; progress = p; });
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QVERIFY(monotonic);
+    QCOMPARE(progress, 100);
+    const auto s = checkVideo(landscape).value("streams").toArray();
+    QCOMPARE(s.size(), 2);
+    const auto v = s.at(0).toObject(), a = s.at(1).toObject();
+    QCOMPARE(v.value("codec_name").toString(), QString("h264"));
+    QCOMPARE(v.value("pix_fmt").toString(), QString("yuv420p"));
+    QCOMPARE(v.value("width").toInt(), 1280);
+    QCOMPARE(v.value("height").toInt(), 720);
+    QCOMPARE(v.value("r_frame_rate").toString(), QString("30/1"));
+    QCOMPARE(v.value("nb_frames").toString().toInt(), 90);
+    QCOMPARE(a.value("codec_name").toString(), QString("aac"));
+    QCOMPARE(a.value("sample_rate").toString().toInt(), 48000);
+    QVERIFY(std::abs(a.value("duration").toString().toDouble() - v.value("duration").toString().toDouble()) <= .034);
+    const auto imageAt = [&](const QString &ms) {
+        return QImage::fromData(mediaTool("ffmpeg", {"-nostdin","-v","error","-ss",ms,"-i",landscape,
+            "-frames:v","1","-threads","1","-c:v","png","-f","image2pipe","pipe:1"}), "PNG");
+    };
+    const auto first = imageAt("0"), later = imageAt("1.4");
+    QVERIFY(!first.isNull() && !later.isNull());
+    QVERIFY(first.copy(240,100,250,510) != later.copy(240,100,250,510));
+    QVERIFY(first.copy(760,145,450,438) != later.copy(760,145,450,438));
+    const auto audio = prepare({project, Source::File, landscape});
+    QVERIFY(audio.level(900) > .8);
+    QCOMPARE(audio.level(120), 0.);
+    QCOMPARE(audio.level(2820), 0.);
+
+    const auto silentProject = newProject("Oui.");
+    const auto silent = prepare({silentProject, Source::Silent, {}});
+    const auto portrait = tmp.filePath("portrait.mp4");
+    const auto portraitError = exportFromWorker(art, silent, silentProject, portrait, {VideoFormat::Portrait, true});
+    QVERIFY2(portraitError.isEmpty(), qPrintable(portraitError));
+    const auto p = checkVideo(portrait).value("streams").toArray();
+    QCOMPARE(p.size(), 1);
+    QCOMPARE(p.at(0).toObject().value("width").toInt(), 720);
+    QCOMPARE(p.at(0).toObject().value("height").toInt(), 1280);
+
+    const auto saved = readFile(landscape, 8000000);
+    std::atomic_bool cancel(false);
+    const auto cancelled = exportFromWorker(art, t, project, landscape, {}, &cancel, [&](int n) { if (n >= 4) cancel.store(true); });
+    QVERIFY(cancelled.contains("annulé"));
+    QCOMPARE(readFile(landscape, 8000000), saved);
+    QVERIFY(QDir(tmp.path()).entryList({".lectura-video-*"}, QDir::Dirs | QDir::Hidden).isEmpty());
 }
 
 void DesktopChecks::audioControls() {

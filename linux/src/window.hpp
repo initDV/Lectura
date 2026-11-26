@@ -12,6 +12,7 @@ class QComboBox;
 class QLabel;
 class QLineEdit;
 class QPlainTextEdit;
+class QProgressDialog;
 class QPushButton;
 class QSlider;
 class QTextEdit;
@@ -26,6 +27,7 @@ protected:
     void closeEvent(QCloseEvent *event) override;
 private:
     struct Prepared { std::shared_ptr<const Track> track; QString error; };
+    struct Exported { bool wrote = false; QString error; };
     void ui(const QString &assets);
     void readProject(QJsonObject data, const QString &path);
     void syncProject();
@@ -48,6 +50,9 @@ private:
     Request request() const;
     void exportPng();
     void exportWav();
+    void exportVideo();
+    void videoProgress();
+    void videoFinished();
     Source source() const;
     int characterRow(const QString &id) const;
 
@@ -63,6 +68,11 @@ private:
     Transport player;
     QFutureWatcher<Prepared> job;
     std::shared_ptr<std::atomic_bool> cancel;
+    QFutureWatcher<Exported> encoder;
+    std::shared_ptr<std::atomic_bool> cancelVideo;
+    std::shared_ptr<std::atomic_int> percent;
+    QProgressDialog *exportDialog = nullptr;
+    QString videoPath;
 
     Stage *stage = nullptr;
     QWidget *content = nullptr;

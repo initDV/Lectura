@@ -1,5 +1,7 @@
 #include "window.hpp"
 #include "siwis.hpp"
+#include "transcript.hpp"
+#include "video.hpp"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -15,11 +17,13 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QProgressDialog>
 #include <QPushButton>
 #include <QSettings>
 #include <QShortcut>
@@ -80,12 +84,15 @@ Window::Window(const QString &assets) : assetPath(assets), characters(catalogue(
     connect(&job, &QFutureWatcher<Prepared>::finished, this, &Window::prepared);
     connect(&player, &Transport::changed, this, [this] { controls(); refresh(); });
     connect(&player, &Transport::audioError, this, [this](const QString &error) { notify(error, true); });
-    connect(&timer, &QTimer::timeout, this, [this] { player.poll(); refresh(); });
+    connect(&encoder, &QFutureWatcher<Exported>::finished, this, &Window::videoFinished);
+    connect(&timer, &QTimer::timeout, this, [this] { player.poll(); refresh(); videoProgress(); });
     timer.start(40);
 }
 Window::~Window() {
     if (cancel) cancel->store(true);
+    if (cancelVideo) cancelVideo->store(true);
     job.waitForFinished();
+    encoder.waitForFinished();
 }
 
 void Window::ui(const QString &assets) {
@@ -197,11 +204,16 @@ void Window::ui(const QString &assets) {
     menu->addSeparator();
     auto *png = menu->addAction("Capturer la scène en PNG…");
     auto *wav = menu->addAction("Exporter la piste en WAV…");
+    auto *movie = menu->addAction("Exporter la vidéo MP4…");
     menu->addSeparator();
     auto *siwis = menu->addAction("Gérer la voix Siwis HD…");
     auto *info = menu->addAction("À propos de Lectura");
     more->setMenu(menu);
-    connect(menu, &QMenu::aboutToShow, this, [this, wav] { wav->setEnabled(player.track() && !player.track()->pcm.isEmpty()); });
+    connect(menu, &QMenu::aboutToShow, this, [this, wav, movie] {
+        wav->setEnabled(player.track() && !player.track()->pcm.isEmpty());
+        const auto text = script->toPlainText();
+        movie->setEnabled(!cancelVideo && !preparing && !text.trimmed().isEmpty() && text.size() <= maxText);
+    });
     connect(make, &QPushButton::clicked, this, [this] { if (confirmDiscard()) readProject(newProject(), {}); });
     connect(open, &QPushButton::clicked, this, [this] {
         const auto path = QFileDialog::getOpenFileName(this, "Ouvrir un projet", documentPath(), "Projet Lectura (*.lectura);;Texte brut (*.txt)");
@@ -211,6 +223,7 @@ void Window::ui(const QString &assets) {
     connect(saveAs, &QAction::triggered, this, [this] { save(true); });
     connect(png, &QAction::triggered, this, &Window::exportPng);
     connect(wav, &QAction::triggered, this, &Window::exportWav);
+    connect(movie, &QAction::triggered, this, &Window::exportVideo);
     connect(siwis, &QAction::triggered, this, &Window::manageSiwis);
     connect(info, &QAction::triggered, this, [this] { about(this); });
     connect(cast, &QComboBox::currentIndexChanged, this, [this] {
@@ -329,7 +342,7 @@ void Window::setScene() {
 }
 
 void Window::playPause() {
-    if (preparing) return;
+    if (preparing || cancelVideo) return;
     if (player.state() == Transport::State::Playing) { player.pause(); return; }
     if (player.track()) { notify({}); player.play(); }
     else begin();
@@ -377,7 +390,7 @@ void Window::refresh() {
 void Window::controls() {
     using State = Transport::State;
     const auto s = player.state(); const auto track = player.track();
-    read->setEnabled(!preparing && !script->toPlainText().trimmed().isEmpty() && script->toPlainText().size() <= maxText);
+    read->setEnabled(!preparing && !cancelVideo && !script->toPlainText().trimmed().isEmpty() && script->toPlainText().size() <= maxText);
     read->setText(preparing ? "Préparation…" : s == State::Playing ? "Ⅱ  Pause" : s == State::Paused ? "▶  Reprendre" : s == State::Finished ? "↻  Relire" : "▶  Lire");
     stop->setEnabled(preparing || s == State::Playing || s == State::Paused || s == State::Finished);
     stop->setText(preparing ? "Annuler" : "Arrêter");
@@ -395,20 +408,11 @@ void Window::controls() {
 }
 
 void Window::transcript(const QString &text, int chars) {
-    int end = std::clamp(chars, 0, int(text.size()));
-    if (end > 0 && end < text.size() && text.at(end-1).isHighSurrogate()) --end;
+    const int end = visiblePrefix(text, chars);
     if (text == terminalText && end == visibleChars) return;
     if (text != terminalText || end < visibleChars) { terminal->clear(); terminalText = text; visibleChars = 0; }
     auto cursor = terminal->textCursor(); cursor.movePosition(QTextCursor::End);
-    for (int at = visibleChars; at < end;) {
-        int lineStart = at == 0 ? 0 : int(text.lastIndexOf('\n', at-1))+1;
-        const int nl = int(text.indexOf('\n', at));
-        const int after = nl < 0 ? end : std::min(end, nl+1);
-        const auto prefix = QStringView(text).mid(lineStart, std::min(2, int(text.size())-lineStart));
-        QTextCharFormat style;
-        style.setForeground(QColor(prefix == u"$ " ? "#c6a6ff" : prefix == u"# " ? "#96a2bc" : "#daf0e9"));
-        cursor.insertText(text.mid(at, after-at), style); at = after;
-    }
+    appendTranscript(cursor, text, visibleChars, end);
     visibleChars = end;
     terminal->setTextCursor(cursor); terminal->ensureCursorVisible();
 }
@@ -432,7 +436,7 @@ bool Window::ensureSource() {
 }
 
 void Window::manageSiwis() {
-    if (preparing) { notify("Attends la fin de la préparation ou clique sur Annuler."); return; }
+    if (preparing || cancelVideo) { notify("Attends la fin de la préparation ou clique sur Annuler."); return; }
     QMessageBox box(QMessageBox::Information, "Voix Siwis HD", QString(
         "Siwis est une voix française plus naturelle. Le modèle n’est pas inclus dans le .deb : télécharge le fichier .onnx (60 Mio) une fois, "
         "puis importe-le. La synthèse se fait uniquement sur cet ordinateur.\n\n"
@@ -505,10 +509,77 @@ void Window::exportWav() {
     try { saveFile(ensureExtension(path, ".wav"), track->wav()); notify("Piste WAV enregistrée."); }
     catch (const std::exception &e) { notify(QString::fromUtf8(e.what()), true); }
 }
+void Window::exportVideo() {
+    if (preparing || cancelVideo || script->toPlainText().trimmed().isEmpty()) return;
+    if (!ensureSource()) return;
+    const QStringList formats{"Paysage · 1280 × 720", "Portrait · 720 × 1280"};
+    bool ok = false;
+    const auto layout = QInputDialog::getItem(this, "Exporter en MP4", "Format vidéo · 30 images/s", formats,
+        QSettings().value("export/portrait", false).toBool() ? 1 : 0, false, &ok);
+    if (!ok) return;
+    const bool portrait = layout == formats.at(1);
+    QFileDialog file(this, "Enregistrer la vidéo", documentPath(), "Vidéo MP4 (*.mp4)");
+    file.setAcceptMode(QFileDialog::AcceptSave);
+    file.setDefaultSuffix("mp4");
+    file.selectFile(suggestedName(project, ".mp4"));
+    if (!file.exec() || file.selectedFiles().isEmpty()) return;
+    videoPath = file.selectedFiles().constFirst();
+    if (!videoPath.endsWith(".mp4", Qt::CaseInsensitive)) { notify("Choisis un nom de fichier terminé par .mp4.", true); return; }
+    QSettings().setValue("export/portrait", portrait);
+    player.pause(); syncProject();
+    const auto options = VideoOptions{portrait ? VideoFormat::Portrait : VideoFormat::Landscape, reduced->isChecked()};
+    cancelVideo = std::make_shared<std::atomic_bool>(false);
+    percent = std::make_shared<std::atomic_int>(-1);
+    exportDialog = new QProgressDialog("Préparation de la piste sonore…", "Annuler", 0, 0, this);
+    exportDialog->setWindowTitle("Export vidéo local");
+    exportDialog->setMinimumDuration(0);
+    exportDialog->setAutoClose(false);
+    exportDialog->setAutoReset(false);
+    exportDialog->setMinimumWidth(360);
+    connect(exportDialog, &QProgressDialog::canceled, this, [this] {
+        if (cancelVideo) cancelVideo->store(true);
+        notify("Annulation de l’export vidéo…");
+    });
+    exportDialog->show();
+    controls();
+    notify("Export vidéo en cours. Le fichier est enregistré seulement à la fin.");
+    encoder.setFuture(QtConcurrent::run([data = request(), audio = player.track(), options, destination = videoPath,
+        art = characters.at(cast->currentIndex()), token = cancelVideo, counter = percent] () mutable {
+        try {
+            if (!audio) audio = std::make_shared<Track>(prepare(data, token.get()));
+            counter->store(0);
+            exportMp4(data.assets, art, *audio, data.project, destination, options, token.get(),
+                [&](int value) { counter->store(value, std::memory_order_relaxed); });
+            return Exported{true, {}};
+        } catch (const std::exception &e) { return Exported{false, QString::fromUtf8(e.what())}; }
+    }));
+}
+void Window::videoProgress() {
+    if (!exportDialog || !exportDialog->isVisible() || !percent) return;
+    const int p = percent->load(std::memory_order_relaxed);
+    if (p < 0) return;
+    if (exportDialog->maximum() == 0) {
+        exportDialog->setRange(0, 100);
+        exportDialog->setLabelText("Encodage de la scène et de l’audio…");
+    }
+    if (p != exportDialog->value()) exportDialog->setValue(p);
+}
+void Window::videoFinished() {
+    const auto result = encoder.result();
+    const bool cancelled = cancelVideo && cancelVideo->load();
+    cancelVideo.reset(); percent.reset();
+    if (exportDialog) { exportDialog->hide(); exportDialog->deleteLater(); exportDialog = nullptr; }
+    controls();
+    if (result.wrote) notify("Vidéo MP4 enregistrée · " + QFileInfo(videoPath).fileName());
+    else if (cancelled) notify("Export vidéo annulé. Aucun fichier partiel n’a été conservé.");
+    else notify(result.error, true);
+}
+
 void Window::closeEvent(QCloseEvent *event) {
     if (!confirmDiscard()) { event->ignore(); return; }
     QSettings().setValue("window/geometry", saveGeometry());
     if (cancel) cancel->store(true);
+    if (cancelVideo) cancelVideo->store(true);
     QMainWindow::closeEvent(event);
 }
 }

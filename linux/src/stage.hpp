@@ -39,16 +39,17 @@ private:
     std::unique_ptr<Script> engine;
 };
 
-class Stage final : public QWidget {
+// Pixel painter shared by the live QWidget and the video encoder. No widgets or wall clock.
+class SceneCanvas {
 public:
-    explicit Stage(const QString &assets, QWidget *parent = nullptr);
+    explicit SceneCanvas(const QString &assets) : motion(assets) {}
     void configure(const Art &art, const QJsonObject &track);
-    int frame(double ms, double level, bool reduced, double idle);
-protected:
-    void paintEvent(QPaintEvent *) override;
+    bool frame(double ms, double level, bool reduced, double idle = 0);
+    int visibleChars() const { return current.chars; }
+    void paint(QPainter &painter, const QSizeF &surface, qreal dpr = 1);
 private:
-    QRectF viewport() const;
-    void decor(QPainter &p, const QRectF &target);
+    QRectF viewport(const QSizeF &surface) const;
+    void decor(QPainter &p, const QSizeF &surface, const QRectF &target);
     Motion motion;
     QImage portrait;
     QRectF view;
@@ -57,5 +58,16 @@ private:
     QSize pixels;
     double projectedBottom = 0, projectedAdvance = 0;
     QJsonObject tiles;
+};
+
+class Stage final : public QWidget {
+public:
+    explicit Stage(const QString &assets, QWidget *parent = nullptr);
+    void configure(const Art &art, const QJsonObject &track);
+    int frame(double ms, double level, bool reduced, double idle);
+protected:
+    void paintEvent(QPaintEvent *) override;
+private:
+    SceneCanvas canvas;
 };
 }

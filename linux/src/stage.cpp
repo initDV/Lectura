@@ -99,71 +99,65 @@ Frame Motion::frame(double ms, double level, bool reduced, double idle) {
 }
 QJsonObject Motion::corridor(double bottom, double advance) { return object(engine->call("corridor", bottom, advance)); }
 
-Stage::Stage(const QString &assets, QWidget *parent) : QWidget(parent), motion(assets) {
-    setObjectName("characterStage");
-    setAccessibleName("Scène du personnage");
-    setMinimumSize(214, 210);
-    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    setAttribute(Qt::WA_OpaquePaintEvent);
-}
-void Stage::configure(const Art &art, const QJsonObject &track) {
+void SceneCanvas::configure(const Art &art, const QJsonObject &track) {
     motion.configure(art, track);
     view = art.view; human = art.human();
     current = {}; pixels = {}; tiles = {};
-    setAccessibleName("Scène : " + art.name);
 }
-int Stage::frame(double ms, double level, bool reduced, double idle) {
+bool SceneCanvas::frame(double ms, double level, bool reduced, double idle) {
     auto next = motion.frame(ms, level, reduced, idle);
     if (next.svg != current.svg) pixels = {};
-    if (pixels.isEmpty() || next.advance != current.advance) update();
+    const bool redraw = pixels.isEmpty() || next.advance != current.advance;
     current = std::move(next);
-    return current.chars;
+    return redraw;
 }
-QRectF Stage::viewport() const {
+QRectF SceneCanvas::viewport(const QSizeF &surface) const {
     if (view.isEmpty()) return {};
-    const qreal k = std::min((width()-14.) / view.width(), (height()-18.) / view.height());
+    const qreal k = std::min((surface.width()-14.) / view.width(), (surface.height()-18.) / view.height());
     const QSizeF size = view.size() * k;
-    return {QPointF((width()-size.width())/2, (height()-size.height())/2), size};
+    return {QPointF((surface.width()-size.width())/2, (surface.height()-size.height())/2), size};
 }
 
-void Stage::decor(QPainter &p, const QRectF &target) {
-    QLinearGradient sky(0, 0, 0, height());
+void SceneCanvas::decor(QPainter &p, const QSizeF &surface, const QRectF &target) {
+    const auto w = surface.width(), h = surface.height();
+    const QRectF area(QPointF(0,0), surface);
+    QLinearGradient sky(0, 0, 0, h);
     sky.setColorAt(0, "#15182d"); sky.setColorAt(.48, "#333450"); sky.setColorAt(1, "#14121e");
-    p.fillRect(rect(), sky);
+    p.fillRect(area, sky);
     const qreal k = target.width() / view.width();
     const QPointF origin = target.topLeft() - view.topLeft() * k;
-    const qreal bottom = (height() - origin.y()) / k;
+    const qreal bottom = (h - origin.y()) / k;
     if (tiles.isEmpty() || bottom != projectedBottom || current.advance != projectedAdvance) {
         tiles = motion.corridor(bottom, current.advance);
         projectedBottom = bottom; projectedAdvance = current.advance;
     }
     const double horizon = tiles.value("horizon").toDouble(), floor = tiles.value("floor").toDouble();
     const double hz = origin.y() + horizon*k;
-    const double center = human ? origin.x() : width()/2.0;
-    QRadialGradient glow(QPointF(center, hz), width()*.57);
+    const double center = human ? origin.x() : w/2.0;
+    QRadialGradient glow(QPointF(center, hz), w*.57);
     glow.setColorAt(0, QColor(151, 130, 235, 61)); glow.setColorAt(1, QColor(151, 130, 235, 0));
-    p.fillRect(rect(), glow);
-    QLinearGradient ground(0, hz, 0, height());
+    p.fillRect(area, glow);
+    QLinearGradient ground(0, hz, 0, h);
     ground.setColorAt(0, "#2f253d"); ground.setColorAt(1, "#161020");
-    p.fillRect(QRectF(0, hz, width(), height()-hz), ground);
+    p.fillRect(QRectF(0, hz, w, h-hz), ground);
     auto line = [&p](double x1, double y1, double x2, double y2, QColor c, double w, double a) {
         c.setAlphaF(std::clamp(a, 0., 1.));
         p.setPen(QPen(c, std::max(.55, w), Qt::SolidLine, Qt::RoundCap));
         p.drawLine(QPointF(x1,y1), QPointF(x2,y2));
     };
     const QColor blue("#73b3d0"), rose("#dd9bc8");
-    line(0,hz,width(),hz,blue,1,.26);
+    line(0,hz,w,hz,blue,1,.26);
     if (!human) {
-        for (int i = -5; i <= 5; ++i) line(center,hz,center+i*width()/5.,height(),blue,.7,.14);
+        for (int i = -5; i <= 5; ++i) line(center,hz,center+i*w/5.,h,blue,.7,.14);
         for (int i = 1; i <= 7; ++i) {
-            const double y = hz+(height()-hz)*i*i/49.;
-            line(0,y,width(),y,blue,.75,.13);
+            const double y = hz+(h-hz)*i*i/49.;
+            line(0,y,w,y,blue,.75,.13);
         }
         return;
     }
     const double e = (bottom-horizon)/(floor-horizon);
     for (const auto x : {-146, -94, -59, -30, 30, 59, 94, 146})
-        line(center,hz,center+x*k*e,height(),blue,.8*k,std::abs(x)==59 ? .38 : .22);
+        line(center,hz,center+x*k*e,h,blue,.8*k,std::abs(x)==59 ? .38 : .22);
     for (const auto &value : tiles.value("tiles").toArray()) {
         const auto t = value.toArray();
         const int n = t.at(0).toInt();
@@ -181,18 +175,38 @@ void Stage::decor(QPainter &p, const QRectF &target) {
     }
 }
 
+void SceneCanvas::paint(QPainter &p, const QSizeF &surface, qreal dpr) {
+    const auto vp = viewport(surface);
+    if (vp.isEmpty() || current.svg.isEmpty()) {
+        p.fillRect(QRectF(QPointF(0,0), surface), "#14121e"); return;
+    }
+    decor(p, surface, vp);
+    auto size = (vp.size()*std::min(dpr, 2.)).toSize();
+    size.scale(size.boundedTo({2048, 2048}), Qt::KeepAspectRatio);
+    if (pixels != size) { portrait = rasterize(current.svg, size); pixels = size; }
+    p.drawImage(vp, portrait);
+}
+
+Stage::Stage(const QString &assets, QWidget *parent) : QWidget(parent), canvas(assets) {
+    setObjectName("characterStage");
+    setAccessibleName("Scène du personnage");
+    setMinimumSize(214, 210);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    setAttribute(Qt::WA_OpaquePaintEvent);
+}
+void Stage::configure(const Art &art, const QJsonObject &track) {
+    canvas.configure(art, track);
+    setAccessibleName("Scène : " + art.name);
+}
+int Stage::frame(double ms, double level, bool reduced, double idle) {
+    if (canvas.frame(ms, level, reduced, idle)) update();
+    return canvas.visibleChars();
+}
 void Stage::paintEvent(QPaintEvent *) {
     QPainter p(this);
     p.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
-    const auto vp = viewport();
-    if (vp.isEmpty() || current.svg.isEmpty()) { p.fillRect(rect(), "#14121e"); return; }
-    try {
-        decor(p, vp);
-        auto size = (vp.size()*std::min(devicePixelRatioF(), 2.)).toSize();
-        size.scale(size.boundedTo({2048, 2048}), Qt::KeepAspectRatio);
-        if (pixels != size) { portrait = rasterize(current.svg, size); pixels = size; }
-        p.drawImage(vp, portrait);
-    } catch (const std::exception &error) {
+    try { canvas.paint(p, size(), devicePixelRatioF()); }
+    catch (const std::exception &error) {
         p.fillRect(rect(), "#14121e");
         p.setPen(QColor("#ecb5bc"));
         p.drawText(rect().adjusted(12,12,-12,-12), Qt::AlignCenter | Qt::TextWordWrap, QString::fromUtf8(error.what()));

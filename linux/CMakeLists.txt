@@ -37,7 +37,7 @@ add_custom_target(lectura-assets ALL
   COMMENT "Préparer le catalogue partagé et les animations"
   VERBATIM)
 
-add_library(lectura-core STATIC src/model.cpp src/siwis.cpp src/stage.cpp src/transport.cpp src/window.cpp)
+add_library(lectura-core STATIC src/model.cpp src/siwis.cpp src/stage.cpp src/transport.cpp src/video.cpp src/window.cpp)
 set_target_properties(lectura-core PROPERTIES AUTOMOC ON POSITION_INDEPENDENT_CODE YES)
 target_compile_features(lectura-core PUBLIC cxx_std_17)
 target_compile_options(lectura-core PRIVATE -Wall -Wextra -Wformat=2)

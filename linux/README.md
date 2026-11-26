@@ -22,13 +22,21 @@ Ouvrir **Lectura** dans le menu des applications, ou lancer `lectura`. Un projet
 2. Choisir **Aïcha, Charlotte, Doriane, Monique, Prisca (dessin original), Robot Lectura ou Robot rouge**. Les sept dessins sont ceux de la PWA et d’Android.
 3. Choisir **Voix française locale** (eSpeak NG), **Siwis HD**, **Sans son**, ou **Importer un audio…** (p. ex. WAV, MP3, Ogg, FLAC, M4A). Cliquer sur **Lire**, ou `Ctrl+Entrée`. Les lignes `$ ` et `# ` s’affichent mais ne sont pas prononcées. La barre de lecture et `Alt+←` / `Alt+→` permettent de revenir en arrière ou d’avancer, y compris pendant une pause.
 4. **Enregistrer** crée un `.lectura`. Il ne contient ni l’enregistrement audio ni un chemin absolu : réimporter le fichier sonore à la réouverture. Les anciens personnages retirés sont affichés via Robot Lectura sans écraser leur identifiant. Les minutages déjà présents dans un projet `.lectura` sont utilisés avec l’audio importé s’ils correspondent au texte et à la durée ; sinon la synchronisation des phrases est estimée.
-5. Dans **Plus**, capturer la scène en PNG ou exporter le son préparé en WAV. Limites de cette première version : 12 000 caractères, 5 minutes et 150 Mio à l’import. Les fichiers de projet `.lectura` gardent leur format.
+5. Dans **Plus**, capturer la scène en PNG exporter le son préparé en WAV ou créer une vidéo MP4. Limites de cette première version : 12 000 caractères, 5 minutes et 150 Mio à l’import. Les fichiers de projet `.lectura` gardent leur format.
 
 ## Voix Siwis HD (facultative)
 
 Dans **Son**, choisis **Siwis HD · hors ligne**, puis **Installer Siwis…**. Télécharge une fois le [modèle Siwis (60 Mio)](https://initdv.github.io/Lectura/models/siwis.onnx), puis choisis **Importer le fichier…**. Le même fichier peut être transféré par clé USB et importé sans réseau. Le modèle exact est vérifié par SHA-256 à l’installation et avant la synthèse. Le paquet comprend le moteur CPU ONNX Runtime, pas le modèle. Aucun compte, service vocal ni interpréteur Python n’est requis.
 
 Les mêmes règles de prononciation et d’intonation des questions que sur le Web sont appliquées localement. **Plus → Gérer la voix Siwis HD…** permet de supprimer la copie locale ; eSpeak NG reste disponible. [Attribution du modèle et du corpus CC BY 4.0](voice/Siwis-LICENCE.md).
+
+## Exporter une vidéo MP4
+
+**Plus → Exporter la vidéo MP4…** génère toute la scène depuis le début, même si la lecture n’a pas été lancée.
+Choisir **Paysage** (1280 × 720) ou **Portrait** (720 × 1280), tous deux à 30 im/s. L’animation, le terminal et
+la piste sélectionnée suivent la même horloge. L’export local utilise H.264 et AAC ; une scène **Sans son** donne
+une vidéo sans piste audio. Le fichier n’est créé ou remplacé qu’à la fin : une annulation ne laisse pas de MP4 incomplet.
+Siwis HD ajoute l’attribution du corpus au générique de pied et aux métadonnées du MP4.
 
 ## Compiler et empaqueter
 
@@ -49,4 +57,4 @@ bash linux/package.sh
 
 ### Recette
 
-`ctest --test-dir linux/build -V` vérifie les sept rigs et leur rendu SVG, le repli des projets, la lecture muette et son terminal, le décodage WAV/MP3, le minutage des sous-titres d’un projet, la synthèse française et les commandes audio. Avec `LECTURA_TEST_SIWIS=/chemin/vers/siwis.onnx`, il vérifie aussi le vrai moteur HD et le rejet d’un fichier corrompu. Pour tester y compris le périphérique audio sur une machine de CI, utiliser `linux/tests/with-desktop.sh ctest --test-dir linux/build -V` comme utilisateur non root avec Xvfb, xauth et PulseAudio installés. Le pipeline installe ensuite le paquet dans des conteneurs propres, valide le lanceur et ouvre une fenêtre X11 qui lit un projet vers une sortie PulseAudio virtuelle.
+`ctest --test-dir linux/build -V` vérifie les sept rigs et leur rendu SVG, le repli des projets, la lecture muette et son terminal, le décodage WAV/MP3, le minutage des sous-titres d’un projet, la synthèse française et les commandes audio. Avec `LECTURA_TEST_SIWIS=/chemin/vers/siwis.onnx`, il vérifie aussi le vrai moteur HD et le rejet d’un fichier corrompu. La recette contrôle également les flux H.264/AAC, la durée audio/vidéo, le terminal, les deux formats et l’annulation sans perte du fichier précédent. Pour tester y compris le périphérique audio sur une machine de CI, utiliser `linux/tests/with-desktop.sh ctest --test-dir linux/build -V` comme utilisateur non root avec Xvfb, xauth et PulseAudio installés. Le pipeline installe ensuite le paquet dans des conteneurs propres, valide le lanceur et ouvre une fenêtre X11 qui lit un projet Siwis vers une sortie PulseAudio virtuelle. L’artefact de recette `Recette-Linux-Medias` contient un exemple WAV et un MP4 produits par le moteur natif.
