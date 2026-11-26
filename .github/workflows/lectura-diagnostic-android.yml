@@ -34,7 +34,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           checks = Path('android/tests/java/io/github/initdv/lectura/DeviceChecks.java')
-          src = checks.read_text(); marker = '        switch(mode){'
+          src = checks.read_text(); marker = '        switch(args.getString("mode","clean")){'
           assert src.count(marker) == 1
           checks.write_text(src.replace(marker, marker + '''
               case "mobile":
