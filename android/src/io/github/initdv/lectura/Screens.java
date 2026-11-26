@@ -232,7 +232,10 @@ final class Screens {
     void refresh(){int y=scroll.getScrollY();a.render(a.route);if(a.screens!=null)a.screens.scroll.post(()->a.screens.scroll.scrollTo(0,y));}
     private void settings(){
         small(body,t("reglages.projetOuvert","titre",p.title.isEmpty()?t("editeur.sansTitre"):p.title),0);
-        LinearLayout c=card(t("reglages.langue"),14);
+        LinearLayout c=card(t("android.cadrage.titre"),14);
+        small(c,t("android.cadrage.aide"),0);
+        addButton(c,t("android.cadrage.ajuster"),"settings",false,()->{a.go("scene");a.framing();},8);
+        c=card(t("reglages.langue"),14);
         select(c,t("reglages.langue.choix"),List.of("Français","English"),a.db.locale().equals("en")?1:0,true,i->{a.db.set("langue",i==0?"fr":"en");refresh();});
         c=card(t("reglages.voix"),14);voicePanel(c);
         c=card(t("voix.hd.titre"),14);small(c,t("voix.hd.aide"),0);a.hdPanel(c);

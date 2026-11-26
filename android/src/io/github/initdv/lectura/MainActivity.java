@@ -137,6 +137,12 @@ public final class MainActivity extends Activity {
     void changedText(){if(preparing)stop();scheduleWarm(true);}
     private void preloadVoice(){scheduleWarm(false);}
     void presentation(boolean yes){if(scene==null)return;hideKeyboard();scene.present(yes);if(yes)note(t("scene.presentationAide"),"info",3500);}
+    void framing(){
+        if(scene==null)return;
+        if(stage.presenting)presentation(false);
+        scene.scroll.scrollTo(0,0);
+        new FramingPanel(this);
+    }
     void fullscreen(){WindowInsetsController i=getWindow().getInsetsController();if(i==null)return;fullscreen=!fullscreen;
         if(fullscreen)i.hide(WindowInsets.Type.systemBars());else i.show(WindowInsets.Type.systemBars());}
     void open(Project p){project=p;render("scene");}
@@ -152,15 +158,23 @@ public final class MainActivity extends Activity {
         backModal=()->db.set("tutorielVu",true);
     }
     Svg svg(String path){try(InputStream in=refs.open("characters/"+path)){return new Svg(in);}catch(IOException e){throw new IllegalArgumentException(e);}}
+    FrameLayout showModal(int shade,boolean dismissOutside){
+        dismiss();hideKeyboard();modal=new FrameLayout(this);modal.setBackgroundColor(shade);ui.pad(modal,16,16);modal.setElevation(ui.f(12));
+        modal.setOnClickListener(v->{if(dismissOutside)dismiss();});content.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        root.addView(modal,ui.fp(Ui.MATCH,Ui.MATCH,Gravity.TOP));return modal;
+    }
+    void sheetHeader(LinearLayout parent,String title){
+        LinearLayout h=ui.row();ui.grow(h,ui.heading(title,2));ui.gap(h,8);
+        h.addView(ui.iconButton("x",t("commun.fermer"),ui.mutedText,20,this::dismiss),ui.lp(44,44));ui.add(parent,h,0);parent.setAccessibilityPaneTitle(title);
+    }
     LinearLayout sheet(String title){return sheet(title,16,true);}
     LinearLayout sheet(String title,int padding,boolean dismissOutside){
-        dismiss();hideKeyboard();modal=new FrameLayout(this);modal.setBackgroundColor(0xd106060a);ui.pad(modal,16,16);modal.setElevation(ui.f(12));
-        modal.setOnClickListener(v->{if(dismissOutside)dismiss();});content.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        FrameLayout overlay=showModal(0xd106060a,dismissOutside);
         LinearLayout r=ui.col();ui.pad(r,padding+1,padding+1);r.setFocusableInTouchMode(true);r.setClickable(true);
         ScrollView s=ui.scroll();s.setBackground(ui.shape(ui.surface,title==null?18:ui.radiusLg,ui.border,1));s.setClipToOutline(true);s.addView(r,new ScrollView.LayoutParams(-1,-2));
-        if(title!=null){LinearLayout h=ui.row();ui.grow(h,ui.heading(title,2));ui.gap(h,8);h.addView(ui.iconButton("x",t("commun.fermer"),ui.mutedText,20,this::dismiss),ui.lp(44,44));ui.add(r,h,0);r.setAccessibilityPaneTitle(title);}
+        if(title!=null)sheetHeader(r,title);
         FrameLayout.LayoutParams lp=ui.fp(Math.min(460,Math.max(180,root.getWidth()>0?(root.getWidth()-root.getPaddingLeft()-root.getPaddingRight())/ui.density-32:getResources().getDisplayMetrics().widthPixels/ui.density-32)),Ui.WRAP,Gravity.CENTER);
-        modal.addView(s,lp);root.addView(modal,ui.fp(Ui.MATCH,Ui.MATCH,Gravity.TOP));r.requestFocus();return r;
+        overlay.addView(s,lp);r.requestFocus();return r;
     }
     void dismiss(){backModal=null;if(modalCleanup!=null){Runnable clean=modalCleanup;modalCleanup=null;clean.run();}if(modal!=null){root.removeView(modal);modal=null;content.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);}
         if(isForeground&&exports!=null)handler.post(exports::foreground);

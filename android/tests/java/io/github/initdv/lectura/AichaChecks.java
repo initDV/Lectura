@@ -78,6 +78,10 @@ final class AichaChecks {
             }
         }finally{b.recycle();}
     }
+    private static void drawActor(Stage stage,Bitmap b,double wall){
+        stage.updatePose(wall);b.eraseColor(0);
+        stage.artwork.fit(new Canvas(b),0,0,b.getWidth(),b.getHeight(),false);
+    }
     static void stage(DeviceChecks device,Context ctx)throws Exception{
         MainActivity a=device.open(ctx);Project[] previous=new Project[1];
         Bitmap first=Bitmap.createBitmap(240,420,Bitmap.Config.ARGB_8888),other=Bitmap.createBitmap(240,420,Bitmap.Config.ARGB_8888);
@@ -93,10 +97,10 @@ final class AichaChecks {
                 device.main(()->{
                     Reading r=a.reading;require(r.silent&&r.pcm==null&&r.aicha.plan.duration>1,"Piste d’aperçu "+id);
                     a.launch(false);require(!r.playing&&!a.stopped,"Pause "+id);
-                    r.seek(530);a.stage.updatePose(1000);a.stage.aicha.paint(new Canvas(first),240,420,true);
-                    a.stage.updatePose(20000);a.stage.aicha.paint(new Canvas(other),240,420,true);require(first.sameAs(other),"Image bougée en pause "+id);
-                    r.seek(1340);a.stage.updatePose(20810);a.stage.aicha.paint(new Canvas(other),240,420,true);require(!first.sameAs(other),"Image immobile en aperçu "+id);
-                    r.seek(530);a.stage.updatePose(20880);a.stage.aicha.paint(new Canvas(other),240,420,true);require(first.sameAs(other),"Pose non retrouvée "+id);
+                    r.seek(530);drawActor(a.stage,first,1000);
+                    drawActor(a.stage,other,20000);require(first.sameAs(other),"Image bougée en pause "+id);
+                    r.seek(1340);drawActor(a.stage,other,20810);require(!first.sameAs(other),"Image immobile en aperçu "+id);
+                    r.seek(530);drawActor(a.stage,other,20880);require(first.sameAs(other),"Pose non retrouvée "+id);
                     require(a.stage.artwork.get("bouche").alpha>=0&&a.stage.artwork.get("limite-l").current!=null,"Bouche ou masque immobile");
                     a.stop();
                 });

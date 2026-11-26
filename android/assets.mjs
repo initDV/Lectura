@@ -33,7 +33,8 @@ const voices = [
   ...piper.filter((v) => ['siwis', 'tom'].includes(v.id)),
   ...piper.filter((v) => !['siwis', 'tom'].includes(v.id)),
 ];
-const versions = JSON.parse(await read('package.json'));
+const version = (await read('android/AndroidManifest.xml')).match(/\bandroid:versionName="(\d+\.\d+\.\d+)"/)?.[1];
+if (!version) throw Error('Version Android absente du manifeste.');
 const defaults = { ...DEFAUTS, moteurVoix: 'auto', voixId: '' };
 const androidStrings = (labels, overrides) => ({ ...labels, ...overrides });
 await mkdir(output, { recursive: true });
@@ -52,6 +53,16 @@ await Promise.all([
     'apropos.confidentialite.texte': 'Tes textes, projets et lectures restent sur cet appareil. Lectura utilise Internet seulement pour télécharger les voix HD à ta demande. Aucun compte ni traceur.',
     'voix.err.aucune': 'Aucune voix locale disponible. Installe une voix dans les réglages du téléphone ou télécharge une voix Lectura HD.',
     'android.terminal.fontSystem': 'Système',
+    'android.cadrage.titre': 'Cadrage de la scène',
+    'android.cadrage.aide': 'Règle la fenêtre du terminal et le personnage indépendamment, avec un aperçu en direct.',
+    'android.cadrage.ajuster': 'Ajuster sur la scène',
+    'android.cadrage.exports': 'Ce réglage ne change pas le cadrage des exports PNG et vidéo.',
+    'android.cadrage.largeur': 'Largeur du terminal',
+    'android.cadrage.hauteur': 'Hauteur du terminal',
+    'android.cadrage.taille': 'Taille du personnage',
+    'android.cadrage.horizontal': 'Position horizontale',
+    'android.cadrage.vertical': 'Position verticale',
+    'android.cadrage.reset': 'Réinitialiser le cadrage',
     'android.voice.auto': 'Automatique · Estelle en priorité',
     'android.voice.autoHelp': 'Sans Estelle : Siwis, Tom ou une voix système locale déjà installée.',
     'android.voice.main': 'Voix principale',
@@ -69,6 +80,16 @@ await Promise.all([
     'apropos.confidentialite.texte': 'Your text, projects and playback stay on this device. Lectura only uses the Internet to download HD voices on request. No accounts or trackers.',
     'voix.err.aucune': 'No local voice available. Install one in your phone settings or download a Lectura HD voice.',
     'android.terminal.fontSystem': 'System',
+    'android.cadrage.titre': 'Scene layout',
+    'android.cadrage.aide': 'Adjust the terminal window and character independently, with a live preview.',
+    'android.cadrage.ajuster': 'Adjust on stage',
+    'android.cadrage.exports': 'These settings do not change the PNG and video export layout.',
+    'android.cadrage.largeur': 'Terminal width',
+    'android.cadrage.hauteur': 'Terminal height',
+    'android.cadrage.taille': 'Character size',
+    'android.cadrage.horizontal': 'Horizontal position',
+    'android.cadrage.vertical': 'Vertical position',
+    'android.cadrage.reset': 'Reset scene layout',
     'android.voice.auto': 'Automatic · Estelle first',
     'android.voice.autoHelp': 'Without Estelle: Siwis, Tom or an already installed local system voice.',
     'android.voice.main': 'Primary voice',
@@ -87,5 +108,5 @@ await Promise.all([
   put('themes.json', { app: themes, terminal: THEMES }), put('expressions.json', { neutral: NEUTRE, expressions: EXPRESSIONS }),
   put('g2p.json', { ...phonemes, CLITIQUES: [...phonemes.CLITIQUES], TIRET: [...phonemes.TIRET] }),
   put('hd-voices.json', { voices }), put('icons.json', await table('src/ui/icons.js', 'TRACES')),
-  put('version.json', { version: versions.version, native: process.env.LECTURA_BUILD || 'android', base: '39e429522cc715aeda6ce0db9d3eb5690ba1f2fd' }),
+  put('version.json', { version, native: process.env.LECTURA_BUILD || 'android', base: '39e429522cc715aeda6ce0db9d3eb5690ba1f2fd' }),
 ]);

@@ -1,46 +1,70 @@
 package io.github.initdv.lectura;
 
-/** Bounds in dp for the live scene. Image and video exports use their own composition. */
+import org.json.JSONObject;
+
+/** Independent terminal and actor bounds in dp. Only the outer stage clips the actor. */
 final class SceneLayout {
-    static final float SIDE_PADDING=12, GAP=8;
-    private static final float CHARACTER_SHARE=.38f;
+    static final float SIDE_PADDING=12, TERMINAL_HEADER=54;
+    static final String PREFERENCE="cadrageScene";
+    private static final float LEGACY_SHARE=.38f;
 
-    final boolean stacked;
-    final float artWidth,artHeight,termX,termY,termWidth,termHeight;
+    enum Control {
+        WIDTH("largeur",30,78,48,62), HEIGHT("hauteur",28,100,78,100),
+        SIZE("taille",55,150,100,100), X("horizontal",-35,35,0,0), Y("vertical",-35,35,0,0);
 
-    static boolean stacked(float viewportWidth,float windowHeight,boolean portrait){
-        // A tall phone can report 600 dp or more when its display size is set small.
-        return portrait&&(viewportWidth<=480||(viewportWidth<=720&&viewportWidth*5<=windowHeight*3));
-    }
-
-    private static float mobileTerminal(float viewportWidth){
-        return Math.min(184,Math.max(144,viewportWidth*.4f));
-    }
-
-    static float height(float viewportWidth,float viewportHeight,boolean presenting,boolean stacked){
-        if(presenting)return Math.max(80,viewportHeight-20);
-        // Match scene.css: a nearly square stage makes even the tallest sprite fit on a phone.
-        float regular=Math.max(280,Math.min(.7f*viewportHeight,viewportHeight-306));
-        if(!stacked)return regular;
-        float minimum=Math.max(0,viewportWidth-2*SIDE_PADDING)*.95f+GAP+mobileTerminal(viewportWidth);
-        return Math.max(regular,minimum);
-    }
-
-    SceneLayout(float width,float height,boolean stacked){
-        this.stacked=stacked;
-        if(stacked){
-            termX=0;termWidth=artWidth=width;
-            termHeight=Math.min(height/2,mobileTerminal(width+2*SIDE_PADDING));
-            termY=height-termHeight;
-            artHeight=Math.max(0,termY-GAP);
-        }else{
-            termX=artWidth=width*CHARACTER_SHARE;
-            termWidth=width-termX;
-            termY=0;termHeight=artHeight=height;
+        final String key;
+        final int min,max,phoneDefault,wideDefault;
+        Control(String key,int min,int max,int phoneDefault,int wideDefault){
+            this.key=key;this.min=min;this.max=max;this.phoneDefault=phoneDefault;this.wideDefault=wideDefault;
+        }
+        int value(JSONObject preferences,boolean phone){
+            int fallback=phone?phoneDefault:wideDefault;
+            int v=preferences==null?fallback:preferences.optInt(key,fallback);
+            return Math.max(min,Math.min(max,v));
         }
     }
 
+    final boolean closePortrait;
+    final float width,height,termX,termWidth,termHeight;
+    final float backdropWidth,baseX,baseY,baseScale;
+    final float actorX,actorY,actorScale;
+
+    static boolean closePortrait(float viewportWidth,float windowHeight,boolean portrait){
+        // Small display scaling can report 600 dp or more on a tall phone.
+        return portrait&&(viewportWidth<=480||(viewportWidth<=720&&viewportWidth*5<=windowHeight*3));
+    }
+
+    static float height(float viewportWidth,float viewportHeight,boolean presenting,boolean closePortrait){
+        if(presenting)return Math.max(80,viewportHeight-20);
+        float regular=Math.max(280,Math.min(.7f*viewportHeight,viewportHeight-306));
+        return closePortrait?Math.max(regular,(viewportWidth-2*SIDE_PADDING)*1.08f):regular;
+    }
+
+    SceneLayout(float width,float height,boolean closePortrait,JSONObject options,float[] box,boolean centered){
+        this.width=width;this.height=height;this.closePortrait=closePortrait;
+        termWidth=Math.min(width,Math.max(132,width*(Control.WIDTH.value(options,closePortrait)/100f)));
+        termHeight=Math.min(height,Math.max(112,height*(Control.HEIGHT.value(options,closePortrait)/100f)));
+        termX=width-termWidth;
+        // Reserve a large sprite area on phones, independently of the width of the terminal.
+        float fitWidth=width*(closePortrait?.80f:LEGACY_SHARE);
+        backdropWidth=closePortrait?width:fitWidth;
+        baseScale=Math.max(0,Math.min((fitWidth-4)/box[2],height*(closePortrait?.94f:1)/box[3]));
+        actorScale=baseScale*Control.SIZE.value(options,closePortrait)/100;
+        float centerX=fitWidth/2,centerY=centered||closePortrait?height/2:height-box[3]*baseScale/2;
+        baseX=centerX-box[2]*baseScale/2;
+        baseY=centerY-box[3]*baseScale/2;
+        centerX=position(centerX,width,Control.X.value(options,closePortrait));
+        centerY=position(centerY,height,Control.Y.value(options,closePortrait));
+        actorX=centerX-box[2]*actorScale/2;
+        actorY=centerY-box[3]*actorScale/2;
+    }
+
+    private static float position(float center,float extent,int offset){
+        if(offset==0)return center;
+        return Math.max(.08f*extent,Math.min(.92f*extent,center+extent*offset/100));
+    }
+
     boolean terminalBodyAt(float x,float y){
-        return x>=termX&&x<termX+termWidth&&y>termY+54&&y<termY+termHeight;
+        return x>=termX&&x<width&&y>TERMINAL_HEADER&&y<termHeight;
     }
 }

@@ -86,6 +86,23 @@ cette variable, le script télécharge la révision LAME épinglée. Le build es
 des sources, sans dépendance à une clé privée de l’auteur pour relier le cœur.
 Voir [les notices Android](licenses/COMPOSANTS.md) et [l’audit](../docs/ANDROID_PARITE.md).
 
+## Cadrer la scène
+
+En portrait, Aïcha et les autres personnages restent grands. La fenêtre du
+terminal est ancrée en haut à droite, derrière le personnage, y compris lors des
+gestes qui passent devant le texte.
+
+Ouvre le bouton **Cadrage de la scène** (icône de curseurs en bas à gauche de la
+scène), ou **Réglages → Cadrage de la scène → Ajuster sur la scène**. Tu peux
+régler la largeur et la hauteur du terminal, puis la taille et les positions
+horizontale et verticale du personnage, sans interrompre la lecture. Le cadrage
+est conservé sur l’appareil, indépendamment du projet. **Réinitialiser le cadrage**
+rétablit les valeurs adaptées à l’écran courant. En mode capture, un double
+appui sur la scène réaffiche les commandes.
+
+Ces réglages concernent l’écran Android. Les exports PNG et vidéo gardent leur
+composition fixe, avec le personnage devant la fenêtre du terminal.
+
 ## Vérifier
 
 Le workflow produit, séparément de l’APK distribué, un APK d’instrumentation signé

@@ -77,7 +77,10 @@ public final class DeviceChecks extends Instrumentation {
                 check("kokoro-en-avion",()->offlineNewVoice(ctx,"kokoro-siwis"));
                 break;
             case "portrait-allonge":
-                check("portrait-allonge",()->tallPortrait(ctx));
+                check("portrait-allonge",()->FramingChecks.run(this,ctx));
+                break;
+            case "portrait-court":
+                check("portrait-court",()->FramingChecks.shortPortrait(this,ctx));
                 break;
             default:
                 check("avion",()->airplane(ctx));
@@ -159,7 +162,7 @@ public final class DeviceChecks extends Instrumentation {
     private void screen(MainActivity a,File dir,String name)throws Exception{
         screen(a,dir,name,390,780,true);
     }
-    private void screen(MainActivity a,File dir,String name,int width,int height,boolean fullscreen)throws Exception{
+    void screen(MainActivity a,File dir,String name,int width,int height,boolean fullscreen)throws Exception{
         Thread.sleep(250);
         CountDownLatch done=new CountDownLatch(1);AtomicReference<Integer> status=new AtomicReference<>();
         Bitmap b=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);
@@ -180,7 +183,10 @@ public final class DeviceChecks extends Instrumentation {
             File dir=ctx.getExternalFilesDir("verification");require(dir!=null,"Stockage de test");
             waitFor("La fenêtre de test doit être prête",()->a.isForeground&&a.hasWindowFocus(),15000);
             main(()->{require(a.modal!=null,"Tutoriel au premier démarrage");a.fullscreen();});screen(a,dir,"tuto");
-            click(a,"Passer");screen(a,dir,"scene");main(()->mobileFraming(a));
+            click(a,"Passer");screen(a,dir,"scene");main(()->{
+                FramingChecks.defaults(a);
+                require(FramingChecks.onScreen(a.scene.launch),"Commande Lancer visible à 390 dp");
+            });
             click(a,"Menu");screen(a,dir,"menu");
             main(()->{
                 JSONObject boxes=new JSONObject();ViewGroup sheet=(ViewGroup)((ViewGroup)a.modal).getChildAt(0);
@@ -211,6 +217,7 @@ public final class DeviceChecks extends Instrumentation {
             main(()->require(!a.reading.playing&&!a.reading.ended&&!a.stopped,"La commande Pause doit suspendre l’aperçu"));
             screen(a,dir,"lecture");click(a,"Reprendre");
             main(()->require(a.reading.playing,"L’aperçu n’a pas repris"));
+            FramingChecks.duringPlayback(this,a);
             click(a,"Arrêter");click(a,"Accélérer");
             main(()->{require(a.stopped&&a.reading!=null&&!a.reading.playing&&a.reading.terminal.shown>0,"Arrêt de lecture");
                 require(a.project.speed==1.25f,"Vitesse 1.25x");});
@@ -220,52 +227,8 @@ public final class DeviceChecks extends Instrumentation {
                 click(a,"Menu");click(a,route[0]);main(()->require(a.route.equals(route[1]),route[0]));
                 click(a,"Retour à la scène");
             }
-            return "API 31 : scène portrait, sept dessins agrandis, terminal et œil en dessous ; tutoriel, menu, aperçu, pause/reprise/arrêt, vitesse et quatre destinations";
+            return "API 31 à 390 dp : cadrage en direct sans interrompre la lecture, sept dessins agrandis, terminal à droite, œil et Lancer accessibles ; tutoriel, menu, transport et quatre destinations";
         }finally{main(a::finish);}
-    }
-    private String tallPortrait(Context ctx)throws Exception {
-        MainActivity a=open(ctx);
-        try{
-            waitFor("Fenêtre du portrait allongé",()->a.isForeground&&a.hasWindowFocus(),10000);
-            main(()->{
-                Project p=new Project(a.db.settings);p.character="aicha";p.text="Bonjour, découvrons le nouveau cadrage.";a.open(p);
-            });
-            waitFor("Montage de la scène",()->a.stage.getWidth()>0&&a.stage.screenLayout().artWidth>0,6000);
-            main(()->{
-                float width=a.scene.scroll.getWidth()/a.ui.density;
-                require(Math.abs(width-600)<2&&a.stage.aicha!=null,"Portrait de 600 dp et Aïcha attendus : "+width+" dp");
-                mobileFraming(a);
-                android.graphics.Rect visible=new android.graphics.Rect();
-                require(a.scene.launch.getGlobalVisibleRect(visible)&&visible.height()==a.scene.launch.getHeight(),"Lancer doit rester à l’écran");
-            });
-            click(a,"Masquer le texte du terminal");main(()->require(a.stage.masked,"Œil du terminal en portrait allongé"));
-            click(a,"Afficher le texte du terminal");
-            screen(a,ctx.getExternalFilesDir("verification"),"portrait-allonge",1080,2400,false);
-            return "1080×2400 à 288 dpi (600 dp) : Aïcha en grand, terminal dessous, œil et Lancer accessibles";
-        }finally{main(a::finish);}
-    }
-    private static void mobileFraming(MainActivity a){
-        SceneLayout layout=a.stage.screenLayout();
-        float width=a.stage.getWidth()/a.ui.density;
-        require(layout.stacked&&layout.artWidth==width&&layout.artHeight>=width*.95f-1,"Cadre du téléphone en portrait");
-        require(layout.termX==0&&layout.termWidth==width&&layout.termY>=layout.artHeight+SceneLayout.GAP,"Terminal pleine largeur sous le dessin");
-        require(layout.terminalBodyAt(width/2,layout.termY+80)&&!layout.terminalBodyAt(width/2,layout.artHeight/2),"Défilement limité au terminal");
-        View eye=named(a.stage,a.t("scene.oeil.masquer")),settings=named(a.stage,a.t("reglages.themeApp"));
-        require(eye!=null&&eye.getY()>=a.ui.f(layout.termY)&&eye.getY()+eye.getHeight()<a.ui.f(layout.termY+54),"Œil dans la barre du terminal");
-        require(settings!=null&&settings.getY()+settings.getHeight()<a.ui.f(layout.artHeight),"Réglages hors du texte");
-        require(SceneLayout.stacked(480,720,true)&&SceneLayout.stacked(600,1000,true)&&SceneLayout.stacked(720,1200,true),"Portrait étroit ou allongé");
-        require(!SceneLayout.stacked(600,1243,false)&&!SceneLayout.stacked(600,999,true)&&!SceneLayout.stacked(721,1500,true),"Paysage, tablette et limites du cadrage");
-        for(JSONObject def:a.refs.characters){
-            float[] box=a.svg(def.optString("svgScene",def.optString("svg"))).box;
-            for(int[] viewport:new int[][]{{320,568},{390,780},{430,932},{600,1243},{720,1200}}){
-                float w=viewport[0]-2*SceneLayout.SIDE_PADDING;
-                float before=SceneLayout.height(viewport[0],viewport[1],false,false);
-                SceneLayout portrait=new SceneLayout(w,SceneLayout.height(viewport[0],viewport[1],false,true),true);
-                float oldScale=Math.min((w*.38f-4)/box[2],before/box[3]);
-                float newScale=Math.min((portrait.artWidth-4)/box[2],portrait.artHeight/box[3]);
-                require(newScale>oldScale,def.optString("id")+" trop loin à "+viewport[0]+" dp");
-            }
-        }
     }
     void waitFor(String message,java.util.function.BooleanSupplier condition,long millis)throws Exception {
         long deadline=android.os.SystemClock.uptimeMillis()+millis;AtomicReference<Boolean> ready=new AtomicReference<>();

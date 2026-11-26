@@ -15,7 +15,7 @@ it('livre exactement le même catalogue en PWA et dans les assets natifs, même 
   const node = (...args) => execFileSync(process.execPath, args, { cwd: dossier, encoding: 'utf8' });
   try {
     for (const fichier of ['tools/build.mjs', 'tools/character-catalogue.mjs', 'tools/fetch_voice.mjs', 'android/assets.mjs', 'android/data',
-      'package.json', 'index.html', 'offline.html', 'manifest.webmanifest', 'sw.js', 'LICENSE', 'THIRD_PARTY_LICENSES.md', 'src', 'characters',
+      'android/AndroidManifest.xml', 'package.json', 'index.html', 'offline.html', 'manifest.webmanifest', 'sw.js', 'LICENSE', 'THIRD_PARTY_LICENSES.md', 'src', 'characters',
       'data', 'icons', 'fonts', 'app', 'privacy', 'robots.txt', 'sitemap.xml', 'google121a4ae782cb28f.html']) {
       const dest = join(dossier, fichier);
       mkdirSync(dirname(dest), { recursive: true });
@@ -32,6 +32,8 @@ it('livre exactement le même catalogue en PWA et dans les assets natifs, même 
     const sortie = node('tools/build.mjs');
     expect(Number(sortie.match(/polices : (\d+) o gzip/)[1])).toBeLessThan(307200);
     node('android/assets.mjs', 'assets', 'res');
+    const nativeVersion = bytes('android/AndroidManifest.xml').toString().match(/android:versionName="([^"]+)"/)[1];
+    expect(lire('assets/version.json').version).toBe(nativeVersion);
     expect(bytes('characters/index.json').equals(index)).toBe(true);
     const attendus = ['index.json'];
     for (const id of liste) {

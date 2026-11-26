@@ -110,8 +110,9 @@ final class Ui {
             @Override public void onTextChanged(CharSequence s,int start,int before,int count){update.accept(s.toString());}@Override public void afterTextChanged(Editable s){}});
         return e;
     }
-    SeekBar range(int max,int progress,int color,IntConsumer change){
-        SeekBar bar=new SeekBar(context);pad(bar,7,0);bar.setMax(max);bar.setProgress(progress);
+    SeekBar range(int max,int progress,int color,IntConsumer change){return range(0,max,progress,color,change);}
+    SeekBar range(int min,int max,int progress,int color,IntConsumer change){
+        SeekBar bar=new SeekBar(context);pad(bar,7,0);bar.setMax(max);bar.setMin(min);bar.setProgress(progress);
         bar.setProgressTintList(ColorStateList.valueOf(color));bar.setThumbTintList(ColorStateList.valueOf(color));
         bar.setProgressBackgroundTintList(ColorStateList.valueOf(muted));
         bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){@Override public void onProgressChanged(SeekBar b,int p,boolean user){if(user)change.accept(p);}

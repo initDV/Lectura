@@ -63,9 +63,9 @@ final class ScenePage {
         float height=a.viewportHeight(),width=scroll.getWidth()/u.density;
         Configuration frame=a.getResources().getConfiguration();
         // The screen configuration, unlike content height, does not shrink above the keyboard.
-        boolean stacked=SceneLayout.stacked(width,frame.screenHeightDp,frame.orientation==Configuration.ORIENTATION_PORTRAIT);
-        int h=u.d(SceneLayout.height(width,height,stage.presenting,stacked));
-        stage.stackOnPhone(stacked);
+        boolean portrait=SceneLayout.closePortrait(width,frame.screenHeightDp,frame.orientation==Configuration.ORIENTATION_PORTRAIT);
+        int h=u.d(SceneLayout.height(Math.min(width,1100),height,stage.presenting,portrait));
+        stage.closePortrait(portrait);
         if(stage.getLayoutParams().height!=h){stage.getLayoutParams().height=h;stage.requestLayout();}
         boolean small=width<=420;float pad=small?14:20;
         float nameW=(launch.getPaint().measureText(launch.getText().toString())+stop.getPaint().measureText(stop.getText().toString()))/u.density;

@@ -127,6 +127,10 @@ for ((i=0;i<150;i++)); do
         adb shell wm size 1080x2400
         adb shell wm density 288
         instrument portrait-allonge DeviceChecks -e mode portrait-allonge || failures=1
+        # At a shorter phone height, the touch controls must still be reachable by scrolling.
+        adb shell wm density 160
+        adb shell wm size 320x568
+        instrument portrait-court DeviceChecks -e mode portrait-court || failures=1
         adb shell wm size 390x780
         adb shell wm density 160
         adb shell cmd connectivity airplane-mode disable

@@ -39,13 +39,10 @@ final class AichaStage {
         rig.draw(pose,reduced?0:(ms+wait)/1000);advance=pose.avance;
         last=plan;lastMs=ms;lastWait=wait;lastLevel=level;lastReduced=reduced;lastExpression=expression;
     }
-    void paint(Canvas c,float w,float h,boolean export){
+    void paintBackdrop(Canvas c,float w,float h,float actorX,float actorY,float scale){
+        if(scale<=0)return;
         float[] b=rig.svg.box;
-        float scale=min((export?w*.92f:w-4)/b[2],h*(export?.94f:1)/b[3]);if(!(scale>0))return;
-        float x=(w-b[2]*scale)/2,y=(h-b[3]*scale)/2;
-        c.save();c.clipRect(0,0,w,h);
-        decor(c,w,h,x-b[0]*scale,y-b[1]*scale,scale);
-        rig.svg.draw(c,x,y,scale);c.restore();
+        decor(c,w,h,actorX-b[0]*scale,actorY-b[1]*scale,scale);
     }
     private void fill(Canvas c,float x,float y,float r,float b,int color){paint.setColor(color);c.drawRect(x,y,r,b,paint);}
     private void line(Canvas c,double x,double y,double r,double b,int color,double width,double opacity){

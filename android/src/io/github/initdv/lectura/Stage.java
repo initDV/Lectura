@@ -45,8 +45,8 @@ final class Stage extends FrameLayout {
     final ScreenText screenText;
     private final int radius;
     private Reading lastReading;
-    private SceneLayout screen=new SceneLayout(0,0,false);
-    private boolean stacked;
+    private SceneLayout screen;
+    private boolean closePortrait;
 
     Stage(MainActivity a,JSONObject def){
         super(a);this.a=a;ui=a.ui;project=a.project;reduced=a.reduced();
@@ -63,23 +63,24 @@ final class Stage extends FrameLayout {
         }
         face=new Face();screenText=new ScreenText();addView(face,ui.fp(Ui.MATCH,Ui.MATCH,Gravity.TOP));
         menu=ui.iconButton("menu",a.t("scene.menu"),ui.mutedText,20,a::menu);addView(menu,ui.fp(44,44,Gravity.TOP|Gravity.LEFT));
-        settings=ui.iconButton("settings",a.t("reglages.themeApp"),ui.bg,22,()->a.go("reglages"));settings.setBackground(ui.touch(ui.accent,99,0,0));settings.setElevation(ui.f(4));
-        FrameLayout.LayoutParams fab=ui.fp(48,48,Gravity.RIGHT|Gravity.BOTTOM);fab.rightMargin=fab.bottomMargin=ui.d(12);addView(settings,fab);
+        settings=ui.iconButton("settings",a.t("android.cadrage.titre"),ui.bg,22,a::framing);settings.setBackground(ui.touch(ui.accent,99,0,0));settings.setElevation(ui.f(4));
+        FrameLayout.LayoutParams fab=ui.fp(48,48,Gravity.LEFT|Gravity.BOTTOM);fab.leftMargin=fab.bottomMargin=ui.d(12);addView(settings,fab);
         eye=ui.iconButton("eye",a.t("scene.oeil.masquer"),ui.violet,20,()->mask(!masked));FrameLayout.LayoutParams ep=ui.fp(44,44,Gravity.RIGHT|Gravity.TOP);ep.topMargin=ui.d(5);ep.rightMargin=ui.d(7);addView(eye,ep);
+        updateFraming();
     }
-    void stackOnPhone(boolean yes){
-        if(stacked==yes)return;
-        stacked=yes;
-        FrameLayout.LayoutParams fab=(FrameLayout.LayoutParams)settings.getLayoutParams();
-        fab.gravity=Gravity.RIGHT|(yes?Gravity.TOP:Gravity.BOTTOM);
-        fab.topMargin=yes?ui.d(12):0;fab.bottomMargin=yes?0:ui.d(12);
-        settings.setLayoutParams(fab);
+    void closePortrait(boolean yes){
+        if(closePortrait==yes)return;
+        closePortrait=yes;updateFraming();
+    }
+    void updateFraming(){
+        screen=new SceneLayout(getWidth()/ui.density,getHeight()/ui.density,closePortrait,
+            a.db.settings.optJSONObject(SceneLayout.PREFERENCE),artwork.box,aicha!=null);
+        face.invalidate();
     }
     SceneLayout screenLayout(){return screen;}
     @Override protected void onLayout(boolean changed,int left,int top,int right,int bottom){
         super.onLayout(changed,left,top,right,bottom);
-        screen=new SceneLayout(getWidth()/ui.density,getHeight()/ui.density,stacked);
-        eye.setTranslationY(ui.f(screen.termY));face.invalidate();
+        updateFraming();
     }
     void mask(boolean yes){masked=yes;eye.setSelected(yes);eye.setContentDescription(a.t(yes?"scene.oeil.afficher":"scene.oeil.masquer"));
         ((android.widget.ImageView)eye).setImageDrawable(ui.iconDrawable(yes?"eye-off":"eye",20,ui.violet));face.invalidate();}
@@ -117,19 +118,8 @@ final class Stage extends FrameLayout {
             Reading r=a.reading;if(r!=null&&!masked)info.setText(r.text.substring(Math.max(0,r.terminal.shown-700),r.terminal.shown));}
         @Override protected void onDraw(Canvas c){
             double now=SystemClock.uptimeMillis()-initial;Stage.this.updatePose(now);
-            SceneLayout frame=screen;
             c.save();c.scale(ui.density,ui.density);
-            if(frame.stacked){
-                c.save();clip.rewind();clip.addRoundRect(0,0,frame.artWidth,frame.artHeight,radius,radius,Path.Direction.CW);
-                c.clipPath(clip);c.drawColor(background);
-            }else round(c,0,0,frame.artWidth+frame.termWidth,frame.artHeight,radius,background);
-            if(aicha!=null)aicha.paint(c,frame.artWidth,frame.artHeight,false);
-            else{
-                decor.screen(c,frame.artWidth,frame.artHeight,frame.stacked);c.save();c.clipRect(0,0,frame.artWidth,frame.artHeight);
-                sprite.svg.fit(c,2,0,frame.artWidth-4,frame.artHeight,true);c.restore();
-            }
-            if(frame.stacked)c.restore();
-            drawWindow(c,frame.termX,frame.termY,frame.termWidth,frame.termHeight,now);
+            drawScreen(c,now);
             if(recording){round(c,50,10,111,36,99,0xcc0d0d12);paint.setColor(ui.danger);c.drawCircle(65,23,5,paint);
                 style(ui.font(700),12.8f,0xffff8a8a);c.drawText("REC",76,baseline(paint,23),paint);}
             c.restore();
@@ -155,30 +145,50 @@ final class Stage extends FrameLayout {
         }
     }
     void refresh(){face.invalidate();}
+    void drawScreen(Canvas c,double now){
+        SceneLayout frame=screen;
+        if(frame.width<=0||frame.height<=0)return;
+        c.save();clip.rewind();clip.addRoundRect(0,0,frame.width,frame.height,radius,radius,Path.Direction.CW);
+        c.clipPath(clip);c.drawColor(background);
+        if(aicha!=null)aicha.paintBackdrop(c,frame.width,frame.height,frame.baseX,frame.baseY,frame.baseScale);
+        else decor.screen(c,frame.backdropWidth,frame.height,frame.closePortrait);
+        drawWindow(c,frame.termX,0,frame.termWidth,frame.termHeight,now);
+        // Compose the entire animated figure last, without a clip at the terminal's left edge.
+        if(frame.actorScale>0)artwork.draw(c,frame.actorX,frame.actorY,frame.actorScale);
+        c.restore();
+    }
     private void drawWindow(Canvas c,float x,float y,float w,float h,double now){
-        float l=x+1,t=y+1,r=x+w-1,b=y+h-1;
+        float l=x+1,t=y+1,r=x+w-1,b=y+h-1,bodyTop=y+SceneLayout.TERMINAL_HEADER;
+        boolean compact=w<180;
+        float titleX=l+(compact?50:74);
         round(c,x,y,x+w,y+h,radius,color(term,"bord"));
         clip.rewind();clip.addRoundRect(l,t,r,b,radius-1,radius-1,Path.Direction.CW);c.save();c.clipPath(clip);
-        rect(c,l,t,r,b,color(term,"bg"));rect(c,l,t,r,t+52,color(term,"bar"));rect(c,l,t+52,r,t+53,color(term,"bord"));
-        dots(c,l+19.5f,t+26.5f,18,5.5f);
+        rect(c,l,t,r,b,color(term,"bg"));rect(c,l,t,r,bodyTop-1,color(term,"bar"));rect(c,l,bodyTop-1,r,bodyTop,color(term,"bord"));
+        dots(c,l+(compact?12:19.5f),t+26.5f,compact?12:18,compact?4:5.5f);
         TextPaint tp=new TextPaint(Paint.ANTI_ALIAS_FLAG|Paint.SUBPIXEL_TEXT_FLAG);tp.setTypeface(ui.mono(500));tp.setTextSize(clamp((w-2)*.034f,10.56f,12.8f));tp.setColor(color(term,"com"));
-        float titleWidth=Math.max(0,(w-2)-74-57);CharSequence s=TextUtils.ellipsize(title,tp,titleWidth,TextUtils.TruncateAt.END);
-        c.drawText(s,0,s.length(),l+74,baseline(tp,t+26.5f),tp);
+        float titleWidth=Math.max(0,r-titleX-57);CharSequence s=TextUtils.ellipsize(title,tp,titleWidth,TextUtils.TruncateAt.END);
+        c.drawText(s,0,s.length(),titleX,baseline(tp,t+26.5f),tp);
         Reading aReading=a.reading;
-        if(aReading!=null&&!masked)screenText.draw(c,aReading.terminal,l+14,t+53,r-14,b,Math.min(project.fontSize,(w-2)*.052f),now);
+        if(aReading!=null&&!masked)screenText.draw(c,aReading.terminal,l+14,bodyTop,r-14,b,clamp((w-2)*.052f,11,project.fontSize),now);
         c.restore();
     }
     void exportDraw(Canvas c,int w,int h,boolean frozen,double now){
+        // Export a stable 38/62 composition regardless of the device's screen preferences.
         float s=Math.min(w,h)/720f,left=w*.38f;
+        float[] box=artwork.box;
+        float factor=Math.min(left*.92f/box[2],h*.94f/box[3]);
+        float x=(left-box[2]*factor)/2,y=h-box[3]*factor;
         c.drawColor(background);
-        if(aicha!=null)aicha.paint(c,left,h,true);
-        else{
-            decor.export(c,w,h);float factor=Math.min(left*.92f/sprite.svg.box[2],h*.94f/sprite.svg.box[3]);
-            c.save();c.clipRect(0,0,left,h);
-            sprite.svg.draw(c,(left-sprite.svg.box[2]*factor)/2+6*s,h-sprite.svg.box[3]*factor-10*s,factor);c.restore();
+        if(aicha!=null){
+            y/=2;
+            c.save();c.clipRect(0,0,left,h);aicha.paintBackdrop(c,left,h,x,y,factor);c.restore();
+        }else{
+            x+=6*s;y-=10*s;
+            decor.export(c,w,h);
         }
         Reading r=a.reading;
         if(r!=null)exportTerminal(c,r.terminal,left,0,w-left,h,s,frozen,now);
+        artwork.draw(c,x,y,factor);
     }
     private void exportTerminal(Canvas c,Script.Terminal text,float bx,float by,float bw,float bh,float s,boolean frozen,double now){
         float pad=14*s,r=20*s,bar=38*s,x=bx+pad*.4f,y=by+pad,w=bw-pad*1.4f,h=bh-2*pad;

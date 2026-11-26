@@ -6,7 +6,7 @@ Référence de départ : le déploiement de `initDV/Lectura` à [`39e4295`](http
 
 | Référence web | Équivalent Android |
 |---|---|
-| Scène 38/62 sur écran large ou paysage ; dessin au-dessus du terminal en portrait étroit ou allongé | Canvas et vues Android, décor en perspective et réglages adaptés au cadre courant |
+| Scène 38/62 sur écran large ou paysage ; dessin au-dessus du terminal en portrait étroit ou allongé dans le candidat Web | Terminal en haut à droite, même en portrait. Personnage agrandi en portrait et dessiné au premier plan, sans découpe à la limite du terminal. Cinq réglages d’écran indépendants avec aperçu direct. |
 | Cinq lectrices et deux robots ; poses, gestes, lèvres et clignements | Le même catalogue de SVG ; rendu et animations Canvas natifs, sans WebView |
 | 38 expressions, détection FR/EN et réglage par phrase | Tables de poses et lexiques partagés ; sélections, mélanges et réactions en lecture |
 | Terminal `rhak_override@sentinel: ~/cours`, œil, 40 lignes, curseur, mots-clés, Markdown, `$ ` et `# ` silencieux | Dessin natif, coloration et horloges de lecture |
@@ -26,7 +26,9 @@ L’inventaire des ressources et les dimensions de référence se trouvent dans 
 
 Les tests installent un APK de test signé et un APK d’instrumentation séparé. Le rapport `Lectura-comparaison` rassemble les captures non retouchées, les écarts RVB et le journal des contrôles. Les trois surfaces de départ sont comparées à 390 × 780, DPR 1, FR. La présence des paires est contrôlée, pas l’égalité des pixels. Si Pages et le candidat ne partagent pas encore le même cadrage, l’écart de composition est attendu. Les polices rasterisées, les animations et les surfaces système peuvent différer.
 
-Le contrôle `portrait-allonge` utilise 1080 × 2400 px à 288 dpi (600 dp de large). Il vérifie la scène pleine largeur, le terminal dessous, l’œil et la commande Lancer. Le cadrage s’empile en portrait jusqu’à 480 dp, ou jusqu’à 720 dp si la largeur ne dépasse pas 3/5 de la hauteur. Les tests couvrent aussi la limite du rapport, les deux colonnes en paysage et le cadrage des sept dessins.
+Le cadrage rapproché Android s’applique en portrait jusqu’à 480 dp de large, ou jusqu’à 720 dp si la largeur ne dépasse pas 3/5 de la hauteur. Le terminal reste à droite dans les deux cadres. À 390 × 780 dp, `surfaces` vérifie entre autres que le cadrage ne relance pas la lecture. À 1080 × 2400 px et 288 dpi (600 dp), `portrait-allonge` vérifie les cinq curseurs, le geste de défilement, l’œil, la persistance, le retour aux valeurs par défaut et la rotation. Il compare les pixels de la main animée d’Aïcha là où elle recouvre le terminal. À 320 × 568 dp, `portrait-court` vérifie l’accès aux commandes par défilement et le retour depuis la présentation.
+
+Le PNG et la vidéo conservent leur composition 38/62, indépendante de ces préférences d’écran. Le terminal est composé avant le personnage, et le dessin n’est pas rogné à la frontière du terminal.
 
 Campagne sur l’APK [`1aec807`](https://github.com/initDV/Lectura/commit/1aec807) : [exécution `44295570195`](https://github.com/initDV/Lectura/actions/runs/44295570195) réussie. Résultats API 31 :
 
@@ -48,4 +50,4 @@ Mesures de cette campagne : scène **82,99 % / 1,60**, menu **92,27 % / 3,39**, 
 - Sur un téléphone réel, comparer le même projet à Pages en portrait et paysage, avec clavier et barres système. Tester également un appareil plus récent qu’Android 12.
 - Installer une voix Android locale FR et tester une lecture complète. Essayer les autres modèles HD, ainsi que plusieurs fichiers audio (MP3, WAV, Ogg, M4A/AAC, WebM) : le décodage dépend de l’appareil. Vérifier l’attribution de chaque modèle/corpus avant de publier de l’audio dérivé.
 - Enregistrer en 16:9 et en 9:16, modifier la vitesse, couper le son d’écoute, puis rouvrir le MP4 et contrôler image, piste audio et synchronisation. Tester « Mes vidéos », la galerie du téléphone et le partage vers un compte WhatsApp de test. WebM est une alternative de fichiers, sans garantie d’ouverture par le destinataire. Le repli de l’encodage essaie d’autres codecs à l’initialisation ; une défaillance plus tard n’est pas une conversion automatique du même enregistrement.
-- Le circuit signé vérifie le certificat de distribution permanent et teste la mise à jour depuis l’APK public de référence (1.1.3 pour le candidat portrait allongé). Valider les [composants et leurs licences](../android/licenses/COMPOSANTS.md), notamment le cœur MP3 LGPL ; les notices et sources correspondantes ne modifient pas la liste de licences autorisées du projet. Voir [installation et recompilation](../android/README.md).
+- Le circuit signé vérifie le certificat de distribution permanent et teste la mise à jour depuis l’APK public de référence (1.1.4 pour le candidat de cadrage réglable). Valider les [composants et leurs licences](../android/licenses/COMPOSANTS.md), notamment le cœur MP3 LGPL ; les notices et sources correspondantes ne modifient pas la liste de licences autorisées du projet. Voir [installation et recompilation](../android/README.md).

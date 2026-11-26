@@ -27,9 +27,9 @@ final class Decor {
     private static int channel(int n,double f){return (int)Math.round(f<0?n*(1+f):n+(255-n)*f);}
     static int alpha(int color,double a){return (color&0xffffff)|((int)Math.round(255*a)<<24);}
     private static LinearGradient grad(float y,float end,int[] c,float[] stops){return new LinearGradient(0,y,0,end,c,stops,Shader.TileMode.CLAMP);}
-    void screen(Canvas c,float w,float h,boolean stacked){
+    void screen(Canvas c,float w,float h,boolean closePortrait){
         c.save();c.clipRect(0,0,w,h);
-        if(stacked)c.scale(w/240,h/600); // Keep the wall and horizon in the wider portrait stage.
+        if(closePortrait)c.scale(w/240,h/600); // Only the backdrop stretches to fill the portrait stage.
         else{float s=Math.max(w/240,h/600);c.translate((w-240*s)/2,h-600*s);c.scale(s,s);}
         draw(c);c.restore();
     }
