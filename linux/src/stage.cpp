@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <type_traits>
 
 namespace lectura {
 namespace {
@@ -107,7 +106,7 @@ struct Motion::Engine {
         if (!runtime) fail("Moteur d’animation indisponible.");
         JS_SetMemoryLimit(runtime.get(), 32 * 1024 * 1024);
         JS_SetMaxStackSize(runtime.get(), 1024 * 1024);
-        JS_SetInterruptHandler(runtime.get(), [](JSRuntime *, void *p) { return int(static_cast<Engine *>(p)->deadline.hasExpired()); }, this);
+        JS_SetInterruptHandler(runtime.get(), [](JSContext *, void *p) { return int(static_cast<Engine *>(p)->deadline.hasExpired()); }, this);
         ctx.reset(JS_NewContext(runtime.get()));
         if (!ctx) fail("Contexte d’animation indisponible.");
         deadline.setRemainingTime(1500);

@@ -117,7 +117,7 @@ jobs:
         run: |
           cd linux/out
           sha256sum -c ./*.sha256
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ./*.deb
+          DEBIAN_FRONTEND=noninteractive bash ../tests/ci-step.sh apt-get install -y --no-install-recommends ./*.deb
           cd ../..
           useradd -m lectura-test
           snapshots=$(mktemp -d)
