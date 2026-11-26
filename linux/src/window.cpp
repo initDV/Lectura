@@ -1,12 +1,15 @@
 #include "window.hpp"
+#include "siwis.hpp"
 
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
+#include <QFile>
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QFrame>
@@ -25,6 +28,7 @@
 #include <QSplitter>
 #include <QStandardPaths>
 #include <QTextEdit>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QtConcurrentRun>
 #include <algorithm>
@@ -68,7 +72,7 @@ void about(QWidget *owner) {
 }
 }
 
-Window::Window(const QString &assets) : characters(catalogue(QDir(assets).filePath("characters"))) {
+Window::Window(const QString &assets) : assetPath(assets), characters(catalogue(QDir(assets).filePath("characters"))) {
     ui(assets);
     readProject(newProject(example), {});
     const QSettings settings;
@@ -157,7 +161,9 @@ void Window::ui(const QString &assets) {
     auto *sourceLine = new QHBoxLayout; sourceLine->setSpacing(7);
     sourceLine->addWidget(label("Son", "caption"));
     audio = new QComboBox; audio->setObjectName("audio"); audio->setAccessibleName("Source sonore");
-    audio->addItem("Voix française locale", int(Source::LocalVoice)); audio->addItem("Fichier audio", int(Source::File)); audio->addItem("Sans son", int(Source::Silent));
+    audio->addItem("Voix française locale", int(Source::LocalVoice));
+    audio->addItem("Siwis HD · hors ligne", int(Source::Siwis));
+    audio->addItem("Fichier audio", int(Source::File)); audio->addItem("Sans son", int(Source::Silent));
     sourceLine->addWidget(audio);
     pick = button("Importer un audio…", "importAudio"); sourceLine->addWidget(pick);
     receipt = label({}, "hint"); receipt->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
@@ -192,6 +198,7 @@ void Window::ui(const QString &assets) {
     auto *png = menu->addAction("Capturer la scène en PNG…");
     auto *wav = menu->addAction("Exporter la piste en WAV…");
     menu->addSeparator();
+    auto *siwis = menu->addAction("Gérer la voix Siwis HD…");
     auto *info = menu->addAction("À propos de Lectura");
     more->setMenu(menu);
     connect(menu, &QMenu::aboutToShow, this, [this, wav] { wav->setEnabled(player.track() && !player.track()->pcm.isEmpty()); });
@@ -204,6 +211,7 @@ void Window::ui(const QString &assets) {
     connect(saveAs, &QAction::triggered, this, [this] { save(true); });
     connect(png, &QAction::triggered, this, &Window::exportPng);
     connect(wav, &QAction::triggered, this, &Window::exportWav);
+    connect(siwis, &QAction::triggered, this, &Window::manageSiwis);
     connect(info, &QAction::triggered, this, [this] { about(this); });
     connect(cast, &QComboBox::currentIndexChanged, this, [this] {
         if (loading) return;
@@ -220,7 +228,7 @@ void Window::ui(const QString &assets) {
     connect(motion, &QComboBox::currentIndexChanged, this, [this] { if (!loading) { changed(false); setScene(); } });
     connect(emotions, &QCheckBox::toggled, this, [this] { if (!loading) { changed(false); setScene(); } });
     connect(reduced, &QCheckBox::toggled, this, [this](bool yes) { QSettings().setValue("stage/reduced", yes); refresh(); });
-    connect(pick, &QPushButton::clicked, this, &Window::chooseAudio);
+    connect(pick, &QPushButton::clicked, this, [this] { if (source() == Source::Siwis) manageSiwis(); else chooseAudio(); });
     connect(read, &QPushButton::clicked, this, &Window::playPause);
     connect(stop, &QPushButton::clicked, this, [this] {
         if (preparing && cancel) { cancel->store(true); notify("Annulation de la préparation…"); }
@@ -264,8 +272,10 @@ void Window::readProject(QJsonObject data, const QString &path) {
     const auto settings = project.value("reglages").toObject(), input = project.value("audio").toObject();
     motion->setCurrentIndex(std::max(0, motion->findData(settings.value("mouvements").toString())));
     emotions->setChecked(settings.value("emotions").toBool(true));
-    const auto inputSource = input.value("source").toString() == "fichier" ? Source::File
-        : input.value("modeLinux").toString() == "muet" ? Source::Silent : Source::LocalVoice;
+    const auto voice = input.value("voix").toObject();
+    const auto mode = input.value("modeLinux").toString();
+    const auto inputSource = input.value("source").toString() == "fichier" ? Source::File : mode == "muet" ? Source::Silent
+        : mode != "espeak" && voice.value("moteur").toString() == "piper" && voice.value("id").toString() == "siwis" ? Source::Siwis : Source::LocalVoice;
     audio->setCurrentIndex(audio->findData(int(inputSource)));
     loading = false; dirty = false; updateTitle(); resetReading();
     if (inputSource == Source::File) notify("Projet ouvert. Réimporte le fichier sonore pour le lire.");
@@ -284,7 +294,13 @@ void Window::syncProject() {
     a["source"] = file ? "fichier" : "voix";
     if (file && !audioPath.isEmpty()) a["nomFichier"] = QFileInfo(audioPath).fileName();
     if (auto track = player.track()) a["dureeMs"] = track->duration;
-    if (source() == Source::Silent) a["modeLinux"] = "muet"; else a.remove("modeLinux");
+    if (source() == Source::Silent) a["modeLinux"] = "muet";
+    else if (source() == Source::LocalVoice) a["modeLinux"] = "espeak";
+    else a.remove("modeLinux");
+    if (source() == Source::Siwis) {
+        auto voice = a.value("voix").toObject();
+        voice["moteur"] = "piper"; voice["id"] = "siwis"; a["voix"] = voice;
+    }
     project["audio"] = a;
     auto r = project.value("reglages").toObject();
     r["mouvements"] = motion->currentData().toString(); r["emotions"] = emotions->isChecked(); project["reglages"] = r;
@@ -319,13 +335,12 @@ void Window::playPause() {
     else begin();
 }
 void Window::begin() {
+    if (!ensureSource()) return;
     syncProject();
-    if (source() == Source::File && audioPath.isEmpty()) chooseAudio();
-    if (source() == Source::File && audioPath.isEmpty()) return;
     cancel = std::make_shared<std::atomic_bool>(false);
     preparing = true; controls(); notify("Préparation locale de la lecture…");
-    job.setFuture(QtConcurrent::run([request = Request{project, source(), audioPath}, token = cancel] {
-        try { return Prepared{std::make_shared<Track>(prepare(request, token.get())), {}}; }
+    job.setFuture(QtConcurrent::run([input = request(), token = cancel] {
+        try { return Prepared{std::make_shared<Track>(prepare(input, token.get())), {}}; }
         catch (const std::exception &e) { return Prepared{nullptr, QString::fromUtf8(e.what())}; }
     }));
 }
@@ -371,7 +386,9 @@ void Window::controls() {
     seek->setEnabled(bool(track));
     const QString filename = audioPath.isEmpty() ? project.value("audio").toObject().value("nomFichier").toString() : QFileInfo(audioPath).fileName();
     const QString sound = source() == Source::File ? (audioPath.isEmpty() ? filename.isEmpty() ? "Aucun fichier" : "À réimporter : " + filename : filename)
-        : source() == Source::Silent ? "Répétition muette" : "Via eSpeak NG";
+        : source() == Source::Silent ? "Répétition muette"
+        : source() == Source::Siwis ? siwisInstalled() ? "Modèle Siwis installé" : "Modèle non installé" : "Via eSpeak NG";
+    pick->setText(source() == Source::Siwis ? siwisInstalled() ? "Gérer Siwis…" : "Installer Siwis…" : "Importer un audio…");
     receipt->setText(sound); receipt->setToolTip(sound);
     phase->setText(preparing ? "●  PRÉPARATION" : s == State::Playing ? "●  EN LECTURE" : s == State::Paused ? "●  EN PAUSE"
         : s == State::Finished ? "●  TERMINÉ" : "●  EN ATTENTE");
@@ -404,6 +421,46 @@ void Window::chooseAudio() {
     { const QSignalBlocker block(audio); audio->setCurrentIndex(audio->findData(int(Source::File))); }
     changed(true);
     notify("Audio associé. Appuie sur Lire pour le préparer.");
+}
+
+Request Window::request() const { return {project, source(), audioPath, assetPath, siwisModelPath()}; }
+
+bool Window::ensureSource() {
+    if (source() == Source::File && audioPath.isEmpty()) chooseAudio();
+    if (source() == Source::Siwis && !siwisInstalled()) manageSiwis();
+    return (source() != Source::File || !audioPath.isEmpty()) && (source() != Source::Siwis || siwisInstalled());
+}
+
+void Window::manageSiwis() {
+    if (preparing) { notify("Attends la fin de la préparation ou clique sur Annuler."); return; }
+    QMessageBox box(QMessageBox::Information, "Voix Siwis HD", QString(
+        "Siwis est une voix française plus naturelle. Le modèle n’est pas inclus dans le .deb : télécharge le fichier .onnx (60 Mio) une fois, "
+        "puis importe-le. La synthèse se fait uniquement sur cet ordinateur.\n\n"
+        "Voix Piper fr_FR-siwis-medium · SIWIS French Speech Synthesis Database, Université d’Édimbourg, CC BY 4.0."), QMessageBox::Close, this);
+    box.setTextFormat(Qt::PlainText);
+    auto *download = box.addButton("Télécharger le modèle", QMessageBox::ActionRole);
+    auto *install = box.addButton("Importer le fichier…", QMessageBox::AcceptRole);
+    auto *remove = QFileInfo::exists(siwisModelPath()) ? box.addButton("Supprimer la voix", QMessageBox::DestructiveRole) : nullptr;
+    box.exec();
+    if (box.clickedButton() == download) {
+        if (QDesktopServices::openUrl(QUrl(QString::fromLatin1(siwisModelUrl)))) notify("Quand le téléchargement est terminé, importe le fichier siwis.onnx.");
+        else notify(QString("Télécharge le modèle ici : %1").arg(QString::fromLatin1(siwisModelUrl)), true);
+    } else if (box.clickedButton() == install) {
+        const auto file = QFileDialog::getOpenFileName(this, "Importer le modèle Siwis", QStandardPaths::writableLocation(QStandardPaths::DownloadLocation), "Modèle Siwis (*.onnx)");
+        if (file.isEmpty()) return;
+        try {
+            installSiwis(file, siwisModelPath());
+            if (source() == Source::Siwis) resetReading();
+            notify("Voix Siwis installée et vérifiée. Choisis-la dans « Son ».");
+        } catch (const std::exception &e) { notify(QString::fromUtf8(e.what()), true); }
+        controls();
+    } else if (remove && box.clickedButton() == remove && QMessageBox::question(this, "Supprimer Siwis ?", "Supprimer la copie locale du modèle ?") == QMessageBox::Yes) {
+        if (QFile::remove(siwisModelPath())) {
+            if (source() == Source::Siwis) resetReading();
+            notify("Modèle Siwis supprimé. La voix eSpeak NG reste disponible.");
+        } else notify("Impossible de supprimer le modèle Siwis.", true);
+        controls();
+    }
 }
 
 void Window::notify(const QString &text, bool error) {

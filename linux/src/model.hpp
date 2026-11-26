@@ -29,6 +29,7 @@ struct Track {
     QVector<Cue> cues;
     QByteArray pcm;
     int duration = 0;
+    bool siwis = false;
     QVector<float> rms;
     double threshold = .002, crest = .03;
     int audioDuration() const;
@@ -38,11 +39,12 @@ struct Track {
     QJsonObject animation(const QJsonObject &project) const;
 };
 
-enum class Source { Silent, File, LocalVoice };
+enum class Source { Silent, File, LocalVoice, Siwis };
 struct Request {
     QJsonObject project;
     Source source = Source::Silent;
     QString audioFile;
+    QString assets = {}, siwisModel = {};
 };
 Track prepare(const Request &request, const std::atomic_bool *cancel = nullptr);
 }

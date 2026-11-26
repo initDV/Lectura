@@ -44,7 +44,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates git build-essential cmake pkg-config dpkg-dev \
+            ca-certificates curl git build-essential cmake pkg-config dpkg-dev \
             qt6-base-dev qt6-multimedia-dev qt6-qpa-plugins librsvg2-dev libcairo2-dev \
             ffmpeg espeak-ng xvfb xauth fonts-dejavu-core pulseaudio pulseaudio-utils
       - uses: actions/checkout@v5
@@ -61,11 +61,16 @@ jobs:
             cmake -S linux -B linux/build -DCMAKE_BUILD_TYPE=Release
             cmake --build linux/build --parallel 2
           '
+      - name: Vérifier le modèle Siwis de la recette
+        run: bash linux/tests/ci-step.sh bash linux/tests/siwis-fixture.sh linux/build/test-model/siwis.onnx
       - name: Recette intégrée de la scène, du son et des projets
         run: |
           useradd -m lectura-test
+          mkdir -p linux/build/verification
           chown -R lectura-test linux/build
-          bash linux/tests/ci-step.sh runuser -u lectura-test -- bash linux/tests/with-desktop.sh ctest --test-dir linux/build -V
+          bash linux/tests/ci-step.sh runuser -u lectura-test -- env \
+            LECTURA_TEST_SIWIS="$PWD/linux/build/test-model/siwis.onnx" LECTURA_TEST_OUTPUT="$PWD/linux/build/verification" \
+            bash linux/tests/with-desktop.sh ctest --test-dir linux/build -V
       - name: Générer le .deb et les empreintes
         run: |
           bash linux/tests/ci-step.sh bash linux/package.sh
@@ -75,6 +80,12 @@ jobs:
         with:
           name: Lectura-Linux-amd64-deb
           path: linux/out/*
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Recette-Linux-Medias
+          path: linux/build/verification/*
           if-no-files-found: error
 
   install:
@@ -104,7 +115,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates git desktop-file-utils shared-mime-info fonts-dejavu-core \
+            ca-certificates curl git desktop-file-utils shared-mime-info fonts-dejavu-core \
             xvfb xauth xdotool pulseaudio pulseaudio-utils imagemagick
       - uses: actions/checkout@v5
         with:
@@ -121,9 +132,10 @@ jobs:
           cd ../..
           useradd -m lectura-test
           snapshots=$(mktemp -d)
-          chown lectura-test "$snapshots"
+          bash linux/tests/ci-step.sh bash linux/tests/siwis-fixture.sh "$snapshots/siwis.onnx"
+          chown -R lectura-test "$snapshots"
           bash linux/tests/ci-step.sh runuser -u lectura-test -- env LECTURA_SCREENSHOT="$snapshots/Lectura.png" \
-            bash linux/tests/with-desktop.sh bash linux/tests/installed.sh
+            LECTURA_TEST_SIWIS="$snapshots/siwis.onnx" bash linux/tests/with-desktop.sh bash linux/tests/installed.sh
           mkdir -p linux/out/capture
           mv "$snapshots/Lectura.png" linux/out/capture/
       - uses: actions/upload-artifact@v4

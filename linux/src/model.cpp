@@ -1,4 +1,5 @@
 #include "model.hpp"
+#include "siwis.hpp"
 
 #include <QDataStream>
 #include <QDateTime>
@@ -142,7 +143,7 @@ QJsonObject Track::animation(const QJsonObject &project) const {
         {"debutMs",s.start}, {"finMs",s.end}, {"speechEndMs",s.speechEnd}});
     const auto settings = project.value("reglages").toObject();
     const auto move = settings.value("mouvements").toString();
-    return {{"text",text}, {"segments",parts}, {"duration",duration}, {"siwis",false},
+    return {{"text",text}, {"segments",parts}, {"duration",duration}, {"siwis",siwis},
         {"lang", project.value("langue").toString("fr")}, {"gain", move=="calme" ? .6 : move=="vif" ? 1.3 : 1.},
         {"emotions",settings.value("emotions").toBool(true)}};
 }
@@ -243,23 +244,35 @@ Track prepare(const Request &r, const std::atomic_bool *cancel) {
         if (!subtitleTimes(track, r.project)) spread(track.cues, track.duration, false);
     } else {
         if (track.cues.size() > 160) fail("Trop de phrases pour une synthèse. Divise le texte en plusieurs projets.");
-        const auto silence = [&](int ms) {
-            track.pcm.append(QByteArray(ms * (Track::rate/1000) * Track::frameBytes, '\0'));
-        };
-        for (auto &s : track.cues) {
-            s.start = track.audioDuration();
-            if (s.spoken) {
-                const auto wav = tmp.filePath("voix.wav");
-                QFile::remove(wav);
-                exec("espeak-ng", {"-v", "fr-fr", "-s", "152", "-w", wav, "--stdin"}, cancel, s.text.toUtf8());
-                track.pcm.append(decode(wav, out, cancel));
-                s.speechEnd = track.audioDuration();
-                silence(s.text.endsWith('?') ? 230 : 150);
-            } else { s.speechEnd = s.start; silence(std::clamp(int(s.text.size()) * 34, 180, 6000)); }
-            s.end = track.audioDuration();
-            if (s.end > Track::maxMs) fail("La durée préparée dépasse cinq minutes.");
+        if (r.source == Source::Siwis) {
+            const auto mono = synthesizeSiwis(track, r, cancel);
+            const auto raw = tmp.filePath("siwis.f32");
+            saveFile(raw, QByteArray::fromRawData(reinterpret_cast<const char *>(mono.constData()), mono.size()*qsizetype(sizeof(float))));
+            exec("ffmpeg", {"-nostdin", "-v", "error", "-y", "-f", "f32le", "-ar", QString::number(siwisRate), "-ac", "1", "-i", raw,
+                "-ac", "2", "-ar", QString::number(Track::rate), "-f", "s16le", out}, cancel);
+            track.pcm = readFile(out, qint64(Track::maxMs) * Track::rate * Track::frameBytes / 1000);
+            track.duration = track.audioDuration();
+            track.cues.last().end = track.duration;
+            track.siwis = true;
+        } else {
+            const auto silence = [&](int ms) {
+                track.pcm.append(QByteArray(ms * (Track::rate/1000) * Track::frameBytes, '\0'));
+            };
+            for (auto &s : track.cues) {
+                s.start = track.audioDuration();
+                if (s.spoken) {
+                    const auto wav = tmp.filePath("voix.wav");
+                    QFile::remove(wav);
+                    exec("espeak-ng", {"-v", "fr-fr", "-s", "152", "-w", wav, "--stdin"}, cancel, s.text.toUtf8());
+                    track.pcm.append(decode(wav, out, cancel));
+                    s.speechEnd = track.audioDuration();
+                    silence(s.text.endsWith('?') ? 230 : 150);
+                } else { s.speechEnd = s.start; silence(std::clamp(int(s.text.size()) * 34, 180, 6000)); }
+                s.end = track.audioDuration();
+                if (s.end > Track::maxMs) fail("La durée préparée dépasse cinq minutes.");
+            }
+            track.duration = track.audioDuration();
         }
-        track.duration = track.audioDuration();
     }
     if (track.duration <= 0 || track.duration > Track::maxMs) fail("Durée audio non prise en charge (maximum cinq minutes).");
     checkCancel(cancel);

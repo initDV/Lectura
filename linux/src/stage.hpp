@@ -25,6 +25,7 @@ struct Frame {
     int chars = 0;
 };
 
+class Script;
 class Motion {
 public:
     explicit Motion(const QString &assets);
@@ -35,8 +36,7 @@ public:
     Frame frame(double ms, double level = 0, bool reduced = false, double idle = 0);
     QJsonObject corridor(double bottom, double advance);
 private:
-    struct Engine;
-    std::unique_ptr<Engine> engine;
+    std::unique_ptr<Script> engine;
 };
 
 class Stage final : public QWidget {

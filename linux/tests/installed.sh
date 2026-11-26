@@ -12,8 +12,15 @@ lectura --version
 app=io.github.initdv.Lectura
 [[ -s /usr/share/icons/hicolor/192x192/apps/$app.png && -s /usr/share/mime/packages/$app.xml ]]
 desktop-file-validate "/usr/share/applications/$app.desktop"
-cat > "$work/Test.lectura" <<'JSON'
-{"version":1,"id":"verification-linux","titre":"Candidat Linux","personnageId":"aicha","texte":"Bonjour et bienvenue dans Lectura, un logiciel de bureau. Approche un peu et écoute cette lecture de test. Merci et à bientôt !","audio":{"source":"voix"}}
+export XDG_DATA_HOME="$work/data"
+voice='{"source":"voix"}'
+if [[ -n ${LECTURA_TEST_SIWIS:-} ]]; then
+  mkdir -p "$XDG_DATA_HOME/Lectura/Lectura/voices"
+  cp "$LECTURA_TEST_SIWIS" "$XDG_DATA_HOME/Lectura/Lectura/voices/siwis.onnx"
+  voice='{"source":"voix","voix":{"moteur":"piper","id":"siwis"}}'
+fi
+cat > "$work/Test.lectura" <<JSON
+{"version":1,"id":"verification-linux","titre":"Candidat Linux","personnageId":"aicha","texte":"Bonjour et bienvenue dans Lectura, un logiciel de bureau. Approche un peu et écoute cette lecture de test. Merci et à bientôt !","audio":$voice}
 JSON
 lectura "$work/Test.lectura" >"$work/app.log" 2>&1 & pid=$!
 if ! wid=$(timeout 12s xdotool search --sync --onlyvisible --all --limit 1 --pid "$pid" --name 'Lectura .* Candidat Linux'); then
@@ -44,4 +51,6 @@ for _ in {1..40}; do
 done
 [[ -z $streams ]]
 kill -0 "$pid"
-echo '::notice title=Lectura installé::Lanceur, ouverture .lectura, lecture audio locale et pause vérifiés avec Xvfb/PulseAudio.'
+profil=eSpeak
+if [[ -n ${LECTURA_TEST_SIWIS:-} ]]; then profil='Siwis HD'; fi
+printf '::notice title=Lectura installé::Lanceur, projet, lecture %s hors ligne et pause vérifiés avec Xvfb/PulseAudio.\n' "$profil"

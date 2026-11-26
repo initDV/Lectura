@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(LecturaLinux VERSION 1.1.2 LANGUAGES C CXX)
+project(LecturaLinux VERSION 1.2.0 LANGUAGES C CXX)
 
 include(CTest)
 include(FetchContent)
@@ -25,19 +25,24 @@ target_include_directories(lectura-qjs SYSTEM PUBLIC "${quickjs_SOURCE_DIR}")
 target_link_libraries(lectura-qjs PUBLIC Threads::Threads m)
 set_target_properties(lectura-qjs PROPERTIES C_STANDARD 11 POSITION_INDEPENDENT_CODE YES)
 
+include(voice/onnx-runtime.cmake)
 set(ASSETS "${CMAKE_CURRENT_BINARY_DIR}/assets")
+get_filename_component(ORT_NAME "${ORT_LIBRARY}" NAME)
 add_custom_target(lectura-assets ALL
   COMMAND "${NODE_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/assets.mjs" "${ASSETS}"
   COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/desktop/theme.qss" "${ASSETS}/theme.qss"
-  BYPRODUCTS "${ASSETS}/motion.js" "${ASSETS}/theme.qss"
+  COMMAND "${CMAKE_COMMAND}" -E make_directory "${ASSETS}/native"
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${ORT_CACHE}/${ORT_LIBRARY}" "${ASSETS}/native/${ORT_NAME}"
+  BYPRODUCTS "${ASSETS}/motion.js" "${ASSETS}/siwis.js" "${ASSETS}/theme.qss" "${ASSETS}/native/${ORT_NAME}"
   COMMENT "Préparer le catalogue partagé et les animations"
   VERBATIM)
 
-add_library(lectura-core STATIC src/model.cpp src/stage.cpp src/transport.cpp src/window.cpp)
+add_library(lectura-core STATIC src/model.cpp src/siwis.cpp src/stage.cpp src/transport.cpp src/window.cpp)
 set_target_properties(lectura-core PROPERTIES AUTOMOC ON POSITION_INDEPENDENT_CODE YES)
 target_compile_features(lectura-core PUBLIC cxx_std_17)
 target_compile_options(lectura-core PRIVATE -Wall -Wextra -Wformat=2)
-target_compile_definitions(lectura-core PUBLIC QT_NO_KEYWORDS)
+target_compile_definitions(lectura-core PUBLIC QT_NO_KEYWORDS PRIVATE LECTURA_ORT_NAME="${ORT_NAME}" LECTURA_LIBDIR="${CMAKE_INSTALL_LIBDIR}")
+target_include_directories(lectura-core SYSTEM PRIVATE "${ort_headers_SOURCE_DIR}")
 target_include_directories(lectura-core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(lectura-core PUBLIC Qt6::Widgets Qt6::Multimedia Qt6::Concurrent PRIVATE PkgConfig::SVG lectura-qjs)
 
@@ -54,11 +59,15 @@ if(BUILD_TESTING)
   target_link_libraries(lectura-tests PRIVATE lectura-core Qt6::Test)
   add_dependencies(lectura-tests lectura-assets)
   add_test(NAME linux-desktop COMMAND lectura-tests)
-  set_tests_properties(linux-desktop PROPERTIES TIMEOUT 60)
+  set_tests_properties(linux-desktop PROPERTIES TIMEOUT 120)
 endif()
 
 install(TARGETS lectura RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
-install(DIRECTORY "${ASSETS}/" DESTINATION "${CMAKE_INSTALL_DATADIR}/lectura")
+install(DIRECTORY "${ASSETS}/" DESTINATION "${CMAKE_INSTALL_DATADIR}/lectura" PATTERN "native" EXCLUDE)
+install(FILES "${ORT_CACHE}/${ORT_LIBRARY}" DESTINATION "${CMAKE_INSTALL_LIBDIR}/lectura")
+install(FILES "${ORT_CACHE}/onnxruntime/LICENSE" DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/lectura" RENAME ONNX-Runtime-LICENSE.txt)
+install(FILES "${ORT_CACHE}/onnxruntime/ThirdPartyNotices.txt" DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/lectura" RENAME ONNX-Runtime-ThirdPartyNotices.txt)
+install(FILES voice/Siwis-LICENCE.md DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/lectura")
 install(FILES desktop/io.github.initdv.Lectura.desktop DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")
 install(FILES desktop/io.github.initdv.Lectura.xml DESTINATION "${CMAKE_INSTALL_DATADIR}/mime/packages")
 install(FILES ../icons/192.png DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/192x192/apps" RENAME io.github.initdv.Lectura.png)

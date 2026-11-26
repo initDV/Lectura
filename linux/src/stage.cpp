@@ -1,6 +1,6 @@
 #include "stage.hpp"
+#include "script.hpp"
 
-#include <QDeadlineTimer>
 #include <QDir>
 #include <QJsonDocument>
 #include <QPainter>
@@ -8,9 +8,7 @@
 #include <QXmlStreamReader>
 #include <cairo.h>
 #include <librsvg/rsvg.h>
-#include <quickjs.h>
 #include <algorithm>
-#include <array>
 #include <cmath>
 
 namespace lectura {
@@ -92,61 +90,7 @@ QImage rasterize(const QByteArray &svg, const QSize &size) {
     return image;
 }
 
-struct Motion::Engine {
-    // Interpreter of bundled pose functions only: no libc modules or user script evaluation.
-    std::unique_ptr<JSRuntime, decltype(&JS_FreeRuntime)> runtime{JS_NewRuntime(), JS_FreeRuntime};
-    std::unique_ptr<JSContext, decltype(&JS_FreeContext)> ctx{nullptr, JS_FreeContext};
-    QDeadlineTimer deadline;
-    struct Value {
-        JSContext *ctx;
-        JSValue v;
-        ~Value() { JS_FreeValue(ctx, v); }
-    };
-    explicit Engine(const QByteArray &code) {
-        if (!runtime) fail("Moteur d’animation indisponible.");
-        JS_SetMemoryLimit(runtime.get(), 32 * 1024 * 1024);
-        JS_SetMaxStackSize(runtime.get(), 1024 * 1024);
-        JS_SetInterruptHandler(runtime.get(), [](JSContext *, void *p) { return int(static_cast<Engine *>(p)->deadline.hasExpired()); }, this);
-        ctx.reset(JS_NewContext(runtime.get()));
-        if (!ctx) fail("Contexte d’animation indisponible.");
-        deadline.setRemainingTime(1500);
-        const Value result{ctx.get(), JS_Eval(ctx.get(), code.constData(), code.size(), "motion.js", JS_EVAL_TYPE_GLOBAL)};
-        check(result.v);
-    }
-    void check(JSValueConst v) {
-        if (!JS_IsException(v)) return;
-        const Value error{ctx.get(), JS_GetException(ctx.get())};
-        const auto message = JS_ToCString(ctx.get(), error.v);
-        const auto detail = QString::fromUtf8(message ? message : "erreur interne").left(260);
-        if (message) JS_FreeCString(ctx.get(), message);
-        fail("Animation : " + detail);
-    }
-    JSValue arg(const QByteArray &v) { return JS_NewStringLen(ctx.get(), v.constData(), v.size()); }
-    JSValue arg(double v) { return JS_NewFloat64(ctx.get(), v); }
-    JSValue arg(bool v) { return JS_NewBool(ctx.get(), v); }
-    template<class ...Args> QByteArray call(const char *name, Args &&...args) {
-        deadline.setRemainingTime(750);
-        const auto c = ctx.get();
-        const Value global{c, JS_GetGlobalObject(c)}, module{c, JS_GetPropertyStr(c, global.v, "LecturaMotion")};
-        check(module.v);
-        const Value f{c, JS_GetPropertyStr(c, module.v, name)};
-        check(f.v);
-        const std::array<Value, sizeof...(Args)> owned{Value{c, arg(args)}...};
-        std::array<JSValue, sizeof...(Args)> values;
-        for (size_t i = 0; i < owned.size(); ++i) { check(owned[i].v); values[i] = owned[i].v; }
-        const Value out{c, JS_Call(c, f.v, module.v, int(values.size()), values.data())};
-        check(out.v);
-        if (JS_IsUndefined(out.v)) return {};
-        size_t size = 0;
-        const char *text = JS_ToCStringLen(c, &size, out.v);
-        if (!text) fail("Image d’animation indisponible.");
-        const QByteArray result(text, qsizetype(size));
-        JS_FreeCString(c, text);
-        return result;
-    }
-};
-
-Motion::Motion(const QString &assets) : engine(std::make_unique<Engine>(readFile(QDir(assets).filePath("motion.js"), 1048576))) {}
+Motion::Motion(const QString &assets) : engine(std::make_unique<Script>(QDir(assets).filePath("motion.js"), "LecturaMotion")) {}
 Motion::~Motion() = default;
 void Motion::configure(const Art &art, const QJsonObject &track) { engine->call("configure", art.tree, json(art.definition), json(track)); }
 Frame Motion::frame(double ms, double level, bool reduced, double idle) {

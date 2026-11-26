@@ -7,8 +7,8 @@ Application de bureau **native** : interface C++/Qt Widgets, dessin SVG avec lib
 Télécharger l’artefact **Lectura-Linux-amd64-deb** d’une [exécution Linux réussie](https://github.com/initDV/Lectura/actions/workflows/linux.yml). GitHub Actions fournit un ZIP (connexion GitHub requise). Décompresser le ZIP, puis, dans le dossier extrait :
 
 ```bash
-sha256sum -c lectura_1.1.2-1_amd64.deb.sha256
-sudo apt install ./lectura_1.1.2-1_amd64.deb
+sha256sum -c lectura_1.2.0-1_amd64.deb.sha256
+sudo apt install ./lectura_1.2.0-1_amd64.deb
 ```
 
 Ouvrir **Lectura** dans le menu des applications, ou lancer `lectura`. Un projet s’ouvre depuis le menu de l’application, par double-clic sur un `.lectura` ou avec `lectura mon-projet.lectura`. Pour retirer le logiciel : `sudo apt remove lectura` (ne supprime pas les projets).
@@ -20,9 +20,15 @@ Ouvrir **Lectura** dans le menu des applications, ou lancer `lectura`. Un projet
 
 1. Remplacer l’exemple par ton texte, ou ouvrir un fichier `.txt` UTF‑8 ou un projet `.lectura`.
 2. Choisir **Aïcha, Charlotte, Doriane, Monique, Prisca (dessin original), Robot Lectura ou Robot rouge**. Les sept dessins sont ceux de la PWA et d’Android.
-3. Choisir **Voix française locale** (eSpeak NG), **Sans son**, ou **Importer un audio…** (p. ex. WAV, MP3, Ogg, FLAC, M4A). Cliquer sur **Lire**, ou `Ctrl+Entrée`. Les lignes `$ ` et `# ` s’affichent mais ne sont pas prononcées. La barre de lecture et `Alt+←` / `Alt+→` permettent de revenir en arrière ou d’avancer, y compris pendant une pause.
+3. Choisir **Voix française locale** (eSpeak NG), **Siwis HD**, **Sans son**, ou **Importer un audio…** (p. ex. WAV, MP3, Ogg, FLAC, M4A). Cliquer sur **Lire**, ou `Ctrl+Entrée`. Les lignes `$ ` et `# ` s’affichent mais ne sont pas prononcées. La barre de lecture et `Alt+←` / `Alt+→` permettent de revenir en arrière ou d’avancer, y compris pendant une pause.
 4. **Enregistrer** crée un `.lectura`. Il ne contient ni l’enregistrement audio ni un chemin absolu : réimporter le fichier sonore à la réouverture. Les anciens personnages retirés sont affichés via Robot Lectura sans écraser leur identifiant. Les minutages déjà présents dans un projet `.lectura` sont utilisés avec l’audio importé s’ils correspondent au texte et à la durée ; sinon la synchronisation des phrases est estimée.
-5. Dans **Plus**, capturer la scène en PNG ou exporter le son préparé en WAV. Limites de cette première version : 12 000 caractères, 5 minutes et 150 Mio à l’import. Elle n’inclut pas le moteur vocal HD Siwis ni l’export vidéo.
+5. Dans **Plus**, capturer la scène en PNG ou exporter le son préparé en WAV. Limites de cette première version : 12 000 caractères, 5 minutes et 150 Mio à l’import. Les fichiers de projet `.lectura` gardent leur format.
+
+## Voix Siwis HD (facultative)
+
+Dans **Son**, choisis **Siwis HD · hors ligne**, puis **Installer Siwis…**. Télécharge une fois le [modèle Siwis (60 Mio)](https://initdv.github.io/Lectura/models/siwis.onnx), puis choisis **Importer le fichier…**. Le même fichier peut être transféré par clé USB et importé sans réseau. Le modèle exact est vérifié par SHA-256 à l’installation et avant la synthèse. Le paquet comprend le moteur CPU ONNX Runtime, pas le modèle. Aucun compte, service vocal ni interpréteur Python n’est requis.
+
+Les mêmes règles de prononciation et d’intonation des questions que sur le Web sont appliquées localement. **Plus → Gérer la voix Siwis HD…** permet de supprimer la copie locale ; eSpeak NG reste disponible. [Attribution du modèle et du corpus CC BY 4.0](voice/Siwis-LICENCE.md).
 
 ## Compiler et empaqueter
 
@@ -39,8 +45,8 @@ cmake --build linux/build --parallel 2
 bash linux/package.sh
 ```
 
-`linux/out/` reçoit le `.deb` et son SHA-256. CMake télécharge une archive QuickJS-NG épinglée par commit et vérifie son SHA-256 ; pour compiler sans ce téléchargement, passer `-DFETCHCONTENT_SOURCE_DIR_QUICKJS=/chemin/vers/quickjs-ng-0.18.0`. Aucun modèle vocal ni fichier issu de `google_drive/`, `prototypes/` ou de la PWA compilée n’est ajouté au paquet. Les seules ressources partagées à l’exécution sont les dessins/fiches, l’icône et le module d’animation généré à la compilation.
+`linux/out/` reçoit le `.deb` et son SHA-256. CMake télécharge une archive QuickJS-NG épinglée par commit et vérifie son SHA-256 ; pour compiler sans ce téléchargement, passer `-DFETCHCONTENT_SOURCE_DIR_QUICKJS=/chemin/vers/quickjs-ng-0.18.0`. La compilation récupère et vérifie aussi la bibliothèque CPU ONNX Runtime (roue manylinux épinglée et en-têtes C), sans installer Python. Aucun modèle vocal ni fichier issu de `google_drive/`, `prototypes/` ou de la PWA compilée n’est ajouté au paquet. Les seules ressources partagées à l’exécution sont les dessins/fiches, l’icône et le module d’animation généré à la compilation.
 
 ### Recette
 
-`ctest --test-dir linux/build -V` vérifie les sept rigs et leur rendu SVG, le repli des projets, la lecture muette et son terminal, le décodage WAV/MP3, le minutage des sous-titres d’un projet, la synthèse française et les commandes audio. Pour tester y compris le périphérique audio sur une machine de CI, utiliser `linux/tests/with-desktop.sh ctest --test-dir linux/build -V` comme utilisateur non root avec Xvfb, xauth et PulseAudio installés. Le pipeline installe ensuite le paquet dans des conteneurs propres, valide le lanceur et ouvre une fenêtre X11 qui lit un projet vers une sortie PulseAudio virtuelle.
+`ctest --test-dir linux/build -V` vérifie les sept rigs et leur rendu SVG, le repli des projets, la lecture muette et son terminal, le décodage WAV/MP3, le minutage des sous-titres d’un projet, la synthèse française et les commandes audio. Avec `LECTURA_TEST_SIWIS=/chemin/vers/siwis.onnx`, il vérifie aussi le vrai moteur HD et le rejet d’un fichier corrompu. Pour tester y compris le périphérique audio sur une machine de CI, utiliser `linux/tests/with-desktop.sh ctest --test-dir linux/build -V` comme utilisateur non root avec Xvfb, xauth et PulseAudio installés. Le pipeline installe ensuite le paquet dans des conteneurs propres, valide le lanceur et ouvre une fenêtre X11 qui lit un projet vers une sortie PulseAudio virtuelle.

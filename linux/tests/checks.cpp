@@ -1,4 +1,5 @@
 #include "model.hpp"
+#include "siwis.hpp"
 #include "stage.hpp"
 #include "transport.hpp"
 #include "window.hpp"
@@ -6,6 +7,8 @@
 #include <QAudioDevice>
 #include <QComboBox>
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QLabel>
 #include <QMediaDevices>
@@ -60,6 +63,7 @@ private Q_SLOTS:
     void allRigs();
     void importedAudio();
     void offlineVoice();
+    void siwisVoice();
     void audioControls();
     void windowControls();
 };
@@ -169,6 +173,41 @@ void DesktopChecks::offlineVoice() {
     bool voiced = false;
     for (int at = 0; at < t.cues.at(0).speechEnd; at += 16) voiced |= t.level(at) > .9;
     QVERIFY(voiced);
+}
+
+void DesktopChecks::siwisVoice() {
+    const auto fixture = qEnvironmentVariable("LECTURA_TEST_SIWIS");
+    if (fixture.isEmpty()) QSKIP("Fournir LECTURA_TEST_SIWIS pour la synthèse HD.");
+    QTemporaryDir tmp;
+    const auto model = tmp.filePath("voices/siwis.onnx");
+    installSiwis(fixture, model);
+    QCOMPARE(QFileInfo(model).size(), siwisModelBytes);
+    const auto project = newProject("Bonjour, il est huit heures trente !\n# Pause locale\nTu viens ce soir ?");
+    const std::atomic_bool active(false);
+    const auto t = prepare({project, Source::Siwis, {}, assets, model}, &active);
+    QVERIFY(t.siwis);
+    QVERIFY(t.animation(project).value("siwis").toBool());
+    QVERIFY(t.duration > 2200 && t.duration < 12000);
+    QCOMPARE(t.duration, t.audioDuration());
+    QCOMPARE(t.cues.size(), 3);
+    QCOMPARE(t.cues.last().end, t.duration);
+    for (const auto &c : t.cues) {
+        QVERIFY(c.end > c.speechEnd);
+        if (!c.spoken) { QCOMPARE(t.level((c.start+c.end)*.5), 0.); continue; }
+        QVERIFY(c.speechEnd > c.start + 240);
+        bool audible = false;
+        for (int pos = c.start; pos < c.speechEnd; pos += 16) audible |= t.level(pos) > .88;
+        QVERIFY(audible);
+    }
+    const auto digestBad = tmp.filePath("mauvaise.onnx");
+    QFile corrupt(digestBad);
+    QVERIFY(corrupt.open(QIODevice::WriteOnly));
+    QVERIFY(corrupt.resize(siwisModelBytes));
+    corrupt.close();
+    QVERIFY_EXCEPTION_THROWN(installSiwis(digestBad, model), std::runtime_error);
+    QVERIFY_EXCEPTION_THROWN(prepare({project, Source::Siwis, {}, assets, digestBad}), std::runtime_error);
+    if (qEnvironmentVariableIsSet("LECTURA_TEST_OUTPUT"))
+        saveFile(QDir(qEnvironmentVariable("LECTURA_TEST_OUTPUT")).filePath("Siwis-Linux.wav"), t.wav());
 }
 
 void DesktopChecks::audioControls() {

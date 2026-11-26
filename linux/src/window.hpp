@@ -43,11 +43,15 @@ private:
     bool confirmDiscard();
     bool save(bool as = false);
     void chooseAudio();
+    void manageSiwis();
+    bool ensureSource();
+    Request request() const;
     void exportPng();
     void exportWav();
     Source source() const;
     int characterRow(const QString &id) const;
 
+    const QString assetPath;
     QVector<Art> characters;
     QJsonObject project;
     QString projectPath, audioPath;
