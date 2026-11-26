@@ -178,8 +178,8 @@ a { color: inherit; text-decoration: none; }
 .cast-cards { position: absolute; inset: auto 4.2% 7% auto; width: 48%; height: 88%; pointer-events: none; }
 .portrait { position: absolute; bottom: 13%; width: 41%; height: 64%; border-radius: 16px; overflow: hidden; box-shadow: 0 13px 28px #0403088f; border: 1px solid #d8a9ff40; background: linear-gradient(140deg, #301c45, #14111f); }
 .portrait img { width: 100%; height: 145%; object-fit: cover; object-position: 50% 5%; }
-.portrait-amina { left: 4%; transform: translateY(8%) rotate(-12deg); background: linear-gradient(145deg, #4b2446, #1d1426); }
-.portrait-cyborg { right: 4%; transform: translateY(7%) rotate(12deg); background: linear-gradient(145deg, #173447, #181525); }
+.portrait-aicha { left: 4%; transform: translateY(8%) rotate(-12deg); background: linear-gradient(145deg, #4b2446, #1d1426); }
+.portrait-prisca { right: 4%; transform: translateY(7%) rotate(12deg); background: linear-gradient(145deg, #173447, #181525); }
 .portrait-robot { left: 29.5%; width: 43%; height: 76%; bottom: 12%; border-color: #ba83ff9c; z-index: 1; box-shadow: 0 13px 38px #06020da4, 0 0 28px #a368ff33; }
 .feature-voice { grid-column: span 5; min-height: 310px; display: flex; flex-direction: column; align-items: start; justify-content: end; background: radial-gradient(ellipse at 86% -6%, #241a41, transparent 67%), var(--surface); }
 .feature-voice .tile { margin-bottom: auto; }
