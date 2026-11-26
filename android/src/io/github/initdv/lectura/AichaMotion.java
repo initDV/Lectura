@@ -20,8 +20,11 @@ final class AichaMotion {
     private static final Pattern WALK=Pattern.compile("(?:\\b(?:avance|marchons)\\b|marche vers|walk forward|come closer|pas de côté|step aside|sidestep)",CASE);
     private static final Pattern CONTRAST=Pattern.compile("(?:^|[^\\p{L}])(?:non|pourtant|mais|but)(?!\\p{L})",CASE);
     private static final Pattern YES=Pattern.compile("^\\P{L}*(?:oui|exactement|yes|exactly)(?!\\p{L})",CASE);
-    private static final Pattern END=Pattern.compile("([?!])[\\s»”\"')\\]]*$",Pattern.UNICODE_CHARACTER_CLASS);
-    private static final Pattern BREAK=Pattern.compile("([,;:…—–])?\\s+(?=\\S)",Pattern.UNICODE_CHARACTER_CLASS);
+    // Android's Pattern rejects UNICODE_CHARACTER_CLASS. Match the Web's \s explicitly
+    // (including NBSP and BOM, but not NEL) for cue boundaries and final punctuation.
+    private static final String SPACE="\\x09-\\x0d\\p{Z}\\uFEFF";
+    private static final Pattern END=Pattern.compile("([?!])["+SPACE+"»”\"')\\]]*\\z");
+    private static final Pattern BREAK=Pattern.compile("([,;:…—–])?["+SPACE+"]+(?=[^"+SPACE+"])");
 
     static double bound(double v){return bound(v,0,1);}
     static double bound(double v,double lo,double hi){return min(hi,max(lo,v));}

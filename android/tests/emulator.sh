@@ -137,8 +137,12 @@ for ((i=0;i<150;i++)); do
         adb pull /sdcard/Android/data/io.github.initdv.lectura/files/verification "$LECTURA_REPORT/device" || true
         mv "$LECTURA_REPORT"/device/android-*.png "$LECTURA_REPORT/" 2>/dev/null || true
         if ((failures)); then
-            logline=$(head -c 1700 "$LECTURA_REPORT/android-errors.txt" | tr '\r\n' ' ')
-            printf '::error file=docs/ANDROID_PARITE.md,title=Contrôles natifs::%s\n' "${logline//%/%25}"
+            errors="$LECTURA_REPORT/android-errors.txt"
+            logline=$(grep -m 10 -E 'FATAL EXCEPTION|Caused by:| E AndroidRuntime: java\.' "$errors" || true)
+            [[ -n $logline ]] || logline=$(head -c 1700 "$errors")
+            logline=${logline:0:1700}
+            logline=${logline//%/%25}; logline=${logline//$'\r'/%0D}; logline=${logline//$'\n'/%0A}
+            printf '::error file=docs/ANDROID_PARITE.md,title=Contrôles natifs::%s\n' "$logline"
         fi
         exit "$failures"
     fi

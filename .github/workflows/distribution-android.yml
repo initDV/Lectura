@@ -1,12 +1,8 @@
 name: Distribution contrôlée — Lectura Android v1.0.0
 
 on:
-  push:
-    branches: ['arena/d2229c4f-lectura']
-    paths:
-      - '.github/workflows/distribution-android.yml'
-      - 'tools/distribution/**'
-      - 'app/index.html'
+  # Ce circuit est réservé aux artefacts historiques de la v1.0.0,
+  # pas aux changements de la page de téléchargement des versions suivantes.
   workflow_dispatch:
     inputs:
       operation:

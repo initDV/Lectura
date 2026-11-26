@@ -17,6 +17,10 @@ const scenarios = [
     segment('Une phrase à huit heures trente.', 0, 2000, 1450), segment('# Silence', 2000, 2600),
     segment('$ attendre', 2600, 2820), segment('On reprend la nuit.', 2820, 4200, 4120, 'fier'),
   ], ms: [251, 943, 2160, 2450, 2630, 2870, 3940, 4500], siwis: true },
+  { id: 'espaces-unicode', duration: 16000, langue: 'fr', segs: [
+    segment('Oui, nous partons au marché,\uFEFFpuis nous revenons\u00a0avec du jus de bissap\u202f? »\uFEFF', 0, 9800, 9500),
+    segment('Non, ce n’est pas encore fini ?\u0085', 10300, 15500, 15000),
+  ], ms: [150, 2480, 4690, 7230, 9010, 11350, 14900] },
   { id: 'english', duration: 6000, langue: 'en', emotions: false, segs: [
     segment('Hello, look over here. Shall we go?', 0, 5900, 5800),
   ], ms: [0, 210, 550, 2140, 5400, 5975] },
