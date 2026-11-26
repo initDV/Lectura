@@ -90,8 +90,6 @@ for ((i=0;i<150;i++)); do
         tts=()
         if [[ -n ${LECTURA_TEST_TTS_APK:-} ]]; then
             adb install -r "$LECTURA_TEST_TTS_APK"
-            adb shell settings put secure tts_default_synth com.reecedunn.espeak
-            adb shell settings put secure tts_default_locale com.reecedunn.espeak:fra-FRA
             adb shell am start -W -n com.reecedunn.espeak/.DownloadVoiceData
             # am start -W waits for launch, not for the voice data extraction. Inspect the
             # activity records rather than assuming a specific spelling of the resumed field.
@@ -104,6 +102,9 @@ for ((i=0;i<150;i++)); do
                 echo '::error title=Préparation eSpeak NG::Extraction des données vocales non terminée avant l’instrumentation.'
                 exit 1
             fi
+            # Only select eSpeak after extraction; an early service start can cache an empty voice list.
+            adb shell settings put secure tts_default_synth com.reecedunn.espeak
+            adb shell settings put secure tts_default_locale com.reecedunn.espeak:fra-FRA
             tts=(-e espeak true)
         fi
         adb logcat -c

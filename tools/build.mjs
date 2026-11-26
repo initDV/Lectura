@@ -13,7 +13,7 @@ import { empaqueterPersonnages, reindexerPersonnages } from './character-catalog
 const racine = join(dirname(fileURLToPath(import.meta.url)), '..'), dist = join(racine, 'dist');
 const A_COPIER = ['index.html', 'offline.html', 'manifest.webmanifest', 'sw.js', 'LICENSE', 'THIRD_PARTY_LICENSES.md', 'src', 'data', 'icons', 'fonts'];
 const PAGES_PUBLIQUES = ['app', 'privacy', 'robots.txt', 'sitemap.xml', 'google121a4ae782cb28f.html'];
-const RELEASE_ANDROID = 'v1.1.2';
+const RELEASE_ANDROID = 'v1.1.3';
 
 const catalogue = join(racine, 'characters');
 const annoncer = (ids) => console.log(`✔ characters/index.json : ${ids.length} personnages (${ids.join(', ')})`);
