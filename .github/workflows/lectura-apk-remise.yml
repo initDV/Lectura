@@ -1,0 +1,63 @@
+name: Lectura Android — remise ponctuelle à l’espace de travail
+
+on:
+  push:
+    branches: ['arena/d2229c4f-lectura']
+    paths: ['.github/workflows/lectura-apk-remise.yml']
+  workflow_dispatch:
+    inputs:
+      destination:
+        description: 'Point de réception HTTPS éphémère de la session Arena'
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  register:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'La remise exige une demande explicite, sans publication de Release.'
+  transfer:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: Vérifier et remettre exclusivement l’APK signé du run 44
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEST: ${{ inputs.destination }}
+        run: |
+          set -euo pipefail
+          [[ $DEST =~ ^https://18144-[a-z0-9]{8,64}\.e2b\.app/lectura-44/[a-f0-9]{48}$ ]]
+          echo "::add-mask::$DEST"
+          echo "::add-mask::${DEST%/lectura-44/*}"
+          digest=20833513a23d620aedd9a90163e2f05d2bb7e91019929d130a2bc2ad3522df5d
+          source=e57a1d84b6512fda62b7055dce02196d19d61dff
+          api="repos/$GITHUB_REPOSITORY/actions"
+          gh api "$api/runs/45890313853" | jq -e --arg source "$source" --arg branch "$GITHUB_REF_NAME" '
+            .conclusion == "success" and .head_sha == $source and .head_branch == $branch
+            and .path == ".github/workflows/android.yml" and .run_number == 44' >/dev/null
+          gh api "$api/artifacts/15151671922" | jq -e --arg source "$source" --arg digest "sha256:$digest" '
+            .name == "Lectura-Android-API31+" and .digest == $digest and .expired == false and .size_in_bytes == 71320809
+            and .workflow_run.id == 45890313853 and .workflow_run.head_sha == $source' >/dev/null
+          if ! ready=$(curl --proto '=https' -fsS --connect-timeout 8 --max-time 16 "${DEST%/lectura-44/*}/") || [[ $ready != 'Remise du fichier Lectura en cours.' ]]; then
+            echo '::error title=Remise APK::Le point de réception HTTPS ne répond pas.'
+            exit 1
+          fi
+          cd "$RUNNER_TEMP"
+          gh api "$api/artifacts/15151671922/zip" > lectura-44.zip
+          printf '%s  %s\n' "$digest" lectura-44.zip | sha256sum -c -
+          [[ $(unzip -Z1 lectura-44.zip) == Lectura.apk ]]
+          sha=$(unzip -p lectura-44.zip Lectura.apk | sha256sum | cut -d ' ' -f 1)
+          split -b 4194304 -d -a 2 lectura-44.zip lectura-part-
+          printf '%s\0' lectura-part-* | xargs -0 -P 4 -I '{}' bash -euc '
+            part=$1
+            status=$(curl --proto "=https" -fsS --connect-timeout 8 --max-time 50 --retry 2 --retry-delay 1 \
+              --header "Expect:" --output /dev/null --write-out "%{http_code}" --upload-file "$part" "$DEST/${part##*-}")
+            [[ $status == 204 ]]
+          ' upload '{}'
+          echo "::notice title=APK original remis::Artefact 15151671922 ; versionCode 44 ; SHA-256 de Lectura.apk : $sha"
