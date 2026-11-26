@@ -16,7 +16,7 @@ cat > "$work/Test.lectura" <<'JSON'
 {"version":1,"id":"verification-linux","titre":"Candidat Linux","personnageId":"aicha","texte":"Bonjour et bienvenue dans Lectura, un logiciel de bureau. Approche un peu et écoute cette lecture de test. Merci et à bientôt !","audio":{"source":"voix"}}
 JSON
 lectura "$work/Test.lectura" >"$work/app.log" 2>&1 & pid=$!
-if ! wid=$(timeout 12s xdotool search --sync --onlyvisible --pid "$pid" --name 'Lectura .* Candidat Linux' --all --limit 1); then
+if ! wid=$(timeout 12s xdotool search --sync --onlyvisible --all --limit 1 --pid "$pid" --name 'Lectura .* Candidat Linux'); then
   cat "$work/app.log"; echo 'Fenêtre Lectura introuvable' >&2; exit 1
 fi
 xdotool windowfocus --sync "$wid"
@@ -32,7 +32,10 @@ done
 if [[ $heard != true ]]; then
   cat "$work/app.log"; echo 'Le paquet n’a pas ouvert de sortie audio.' >&2; exit 1
 fi
-if [[ -n ${LECTURA_SCREENSHOT:-} ]]; then import -window "$wid" "$LECTURA_SCREENSHOT"; fi
+if [[ -n ${LECTURA_SCREENSHOT:-} ]]; then
+  sleep .8
+  import -window "$wid" "$LECTURA_SCREENSHOT"
+fi
 xdotool key ctrl+Return
 for _ in {1..40}; do
   streams=$(pactl list sink-inputs short)
@@ -41,4 +44,4 @@ for _ in {1..40}; do
 done
 [[ -z $streams ]]
 kill -0 "$pid"
-echo 'Menu de bureau, ouverture .lectura, lecture audio et pause vérifiés.'
+echo '::notice title=Lectura installé::Lanceur, ouverture .lectura, lecture audio locale et pause vérifiés avec Xvfb/PulseAudio.'
