@@ -112,6 +112,17 @@ export function planAicha(segments, dureeMs, { emotions = true, humeur = null } 
   paroles.forEach(({ start }, i) => {
     if (start - (paroles[i - 1]?.end ?? 0) >= 1.2 && !windowAt(marches, start, start - .9)) reprises.push({ start: start - .82, end: start });
   });
+  // Espacer les gestes sans changer le regard.
+  let reposMains = 0, cote = 1;
+  for (const cue of cues) {
+    const salut = cue.kind === 'salut';
+    cue.hand = salut ? -1 : cue.kind !== 'ecoute' && cue.kind !== 'hoche'
+      && cue.end - cue.start >= .56 && cue.start >= reposMains ? cote : 0;
+    if (cue.hand) {
+      reposMains = Math.max(cue.end + .28, cue.start + 1.65);
+      cote = -cue.hand;
+    }
+  }
   return { duration, cues, marches, paroles, reprises };
 }
 
@@ -126,15 +137,15 @@ const faceDe = (nom) => familles.find(([motif]) => motif.test(nom))?.[1] || [0, 
 
 // Bras, tête, visage.
 const gestes = {
-  salut:   [[28, 106, .96, 9], [7.2, 3.1, -2.1, .17], [.69, .29, .45, 0, .10]],
-  presente:[[10, 64, .93, 6, 0, .17], [11.3, 4.1, 3.2, .55], [.33, .28, .31, .03, .22]],
-  confie:  [[-6, 93, .81, -5, .88, .12], [3.3, 5.1, 5.5, .11], [.29, .48, .17, .12, -.23]],
-  marque:  [[9, 54, .86, 4, 0, .1, .94], [6.5, 2.7, 3.6, .18], [.19, .39, .48, .12, .30]],
-  ouvre:   [[9, 68, .92, 4, 0, .83], [5.5, -3.9, -5.3, -.37], [.53, .41, .52, 0, .12]],
-  hoche:   [[3, 29, .53, 2, 0, .24], [3.2, 2.2, 11.8, .26], [.32, .22, .17, .03, .10]],
-  nuance:  [[-2, 61, .72, -6, .80, .23], [12, 4.2, -2.7, -.32], [.07, .21, .62, .30, .53]],
-  question:[[8, 46, .74, 5, 0, .45], [9.9, 7.1, -6.7, -.36], [.21, .76, .64, .08, .36]],
-  accent:  [[11, 58, .88, 5, 0, .42], [7.2, -3.9, 7.1, .18], [.49, .51, .54, 0, .21]],
+  salut:   [[16, 78, .94, 6], [7.2, 3.1, -2.1, .17], [.69, .29, .45, 0, .10]],
+  presente:[[5, 37, .84, 3], [11.3, 4.1, 3.2, .55], [.33, .28, .31, .03, .22]],
+  confie:  [[0, 41, .66, -3, .77], [3.3, 5.1, 5.5, .11], [.29, .48, .17, .12, -.23]],
+  marque:  [[5, 34, .82, 3, 0, 0, .9], [6.5, 2.7, 3.6, .18], [.19, .39, .48, .12, .30]],
+  ouvre:   [[5, 37, .84, 3, 0, .62], [5.5, -3.9, -5.3, -.37], [.53, .41, .52, 0, .12]],
+  hoche:   [[], [3.2, 2.2, 11.8, .26], [.32, .22, .17, .03, .10]],
+  nuance:  [[0, 34, .67, -3, .66, .12], [12, 4.2, -2.7, -.32], [.07, .21, .62, .30, .53]],
+  question:[[4, 28, .68, 3, 0, .15], [9.9, 7.1, -6.7, -.36], [.21, .76, .64, .08, .36]],
+  accent:  [[5, 36, .80, 3, 0, .22], [7.2, -3.9, 7.1, .18], [.49, .51, .54, 0, .21]],
   ecoute:  [[], [15.2, 5.8, 6.6, .78], [.06, .32, .24, .45, .18]],
 };
 
@@ -161,34 +172,25 @@ function acting(plan, t, gain) {
   };
 }
 
-function jeuMains(cues, cue, t, gain) {
+function jeuMains(cue, t, gain) {
   // Épaule, coude, paume, poignet, plan, index.
   const l = [0, 0, 0, 0, 0, 0], r = l.slice();
-  function joue({ start, end, kind, side }, suite) {
-    const [arm, elbow, palm, wrist, fold = 0, contra = 0, index = 0] = gestes[kind][0];
-    if (!elbow) return;
-    const span = end - start, u = (t - start) / span;
-    const fin = 1 + (suite?.start === end && gestes[suite.kind][0].length
-      ? Math.min(.36 / span, .28, (suite.end - end) / span) : 0);
-    if (u >= fin) return;
-    const force = gain * smooth(.24, .88, span), paume = bound(force);
-    const hand = paume * pulse(u, .16, .45, .66, fin);
-    const retard = force * contra * pulse(u, .27, .58, .71, fin);
-    const [m, o] = side < 0 ? [l, r] : [r, l];
-    m[0] += arm * force * pulse(u, .02, .30, .54, fin);
-    m[1] += elbow * force * pulse(u, .07, .40 + .05 * fold, .63, fin);
-    m[2] += palm * hand;
-    m[3] += wrist * hand * (kind === 'salut' ? Math.sin((u - .4) * Math.PI * 6) : 1);
-    m[4] += fold * smooth(0, .6, force) * pulse(u, 0, .26, .72, fin);
-    m[5] += index * paume * pulse(u, .32, .48, .58, .78);
-    o[0] += 7 * retard; o[1] += 38 * retard;
-    o[2] += .67 * retard; o[3] -= 3 * retard;
-  }
-  if (cue && gain && gestes[cue.kind][0].length) {
-    joue(cue, windowAt(cues, cue.end));
-    const avant = windowAt(cues, cue.start - .0001);
-    if (avant?.end === cue.start) joue(avant, cue);
-  }
+  if (!cue?.hand || !gain) return [l, r];
+  const { start, end, kind } = cue;
+  const [arm, elbow, palm, wrist, fold = 0, contra = 0, index = 0] = gestes[kind][0];
+  const span = end - start, u = (t - start) / span;
+  const force = Math.min(gain, 1.12) * smooth(.34, .91, span), paume = bound(force);
+  const hand = paume * pulse(u, .16, .46, .65, 1);
+  const retard = force * contra * pulse(u, .29, .61, .70, 1);
+  const [m, o] = cue.hand < 0 ? [l, r] : [r, l];
+  m[0] = arm * force * pulse(u, .025, .33, .55, 1);
+  m[1] = elbow * force * pulse(u, .07, .42 + .05 * fold, .63, 1);
+  m[2] = palm * hand;
+  m[3] = wrist * hand * (kind === 'salut' ? Math.sin((u - .4) * Math.PI * 6) : 1);
+  m[4] = fold * smooth(0, .6, force) * pulse(u, 0, .26, .72, 1);
+  m[5] = index * paume * pulse(u, .32, .48, .58, .78);
+  o[0] = 3 * retard; o[1] = 27 * retard;
+  o[2] = .67 * retard; o[3] = -3 * retard;
   return [l, r];
 }
 
@@ -254,7 +256,7 @@ export function poseAicha(plan, ms, { gain = 1, reduit = false, expression = '',
   const inertia = bound((phase(acting(plan, t - .158, k)) - phase(a)) * .94, -5.1, 5.1);
   const emotion = faceDe(expression || a.cue?.face || 'neutre');
   const env = expression ? 1 : a.face * (a.cue?.force ?? 0), accent = expression || reduit ? 0 : 1;
-  const [l, r] = jeuMains(plan.cues, a.cue, t, k);
+  const [l, r] = jeuMains(a.cue, t, k);
   const q = vie % 17.4, cycle = vie - q;
   const coup = activite * (1 - mix) ** 2 * (1 - bound(redresse)) * pulse(q, .74, 1, 1.58, 2.07);
   const tete = coup * coup;

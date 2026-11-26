@@ -119,6 +119,12 @@ final class FramingChecks {
             change(d,a);
             d.screen(a,dir,"portrait-curseurs",1080,2400,false);
             d.click(a,"Fermer");
+            d.main(()->{
+                // Use a marked right-hand gesture, not an arbitrary timestamp near the
+                // end: the reading plan now deliberately leaves the hands at rest there.
+                var cue=a.reading.aicha.plan.cues.stream().filter(c->c.hand>0&&c.kind.equals("presente")).findFirst().orElseThrow();
+                a.reading.seek((cue.start+(cue.end-cue.start)*.52)*1000);a.stage.updatePose(1200);
+            });
             d.screen(a,dir,"portrait-main-premier-plan",1080,2400,false);
             int[] palmPixels=new int[1];d.main(()->palmPixels[0]=front(a.stage));
             d.main(()->a.go("reglages"));d.click(a,"Ajuster sur la scène");

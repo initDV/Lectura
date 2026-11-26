@@ -20,7 +20,7 @@ public final class UpgradeChecks extends Instrumentation {
         try{
             if(seed){
                 Library db=new Library(new Refs(ctx));
-                db.set("tutorielVu",true);db.set("volume",.65);db.set("langue","en");
+                db.set("tutorielVu",true);db.set("volume",.65);db.set("langue","en");db.set("formatVideo","16:9");
                 db.set("licence","ancienne-cle-de-test");db.set("idInstallation","installation-de-test");
                 Project p=new Project(db.settings);p.title=TITLE;p.character="hacker";p.terminalTheme="matrix";p.cps=90;
                 Script.importSubtitles("WEBVTT\n\n00:00:01.500 --> 00:00:03.000\n"+TEXT+"\n",p);
@@ -36,6 +36,8 @@ public final class UpgradeChecks extends Instrumentation {
                     check(a.project.text.equals("Brouillon conservé")&&a.project.character.equals("moussa")&&a.modal==null,"Brouillon ou tutoriel perdu");
                     check(a.refs.character("moussa")==null&&a.stage.sprite!=null&&a.stage.sprite.robotStage!=null,"Repli du brouillon sur Robot Lectura");
                     check(a.db.locale().equals("en")&&Math.abs(a.volume()-.65)<.001,"Préférences perdues");
+                    check(a.db.settings.optString("formatVideo").equals("16:9")&&a.db.settings.optString("qualiteVideo").equals("720p"),
+                        "La mise à jour doit conserver le ratio et ajouter la HD par défaut");
                     check(!a.db.settings.has("licence")&&!a.db.settings.has("idInstallation"),"Champs obsolètes conservés");
                     try{
                         Project p=a.db.projects().get(0);a.open(p);

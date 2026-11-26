@@ -191,7 +191,7 @@ export function brasAicha(p, side) {
   const vue = (q) => camera(pt(q.x, q.y, q.z * p.marche));
   const e = vue(E), main = vue(W);
   const angleMain = Math.atan2(e.x - main.x, main.y - e.y) / rad(1);
-  return { S, E, W, main, map: bend(shoulder, elbow, wrist, vue(S), e, main, 5.9), rot: interp(angleMain, pincement, smooth(.64, 1, touche)) };
+  return { S, E, W, main, map: bend(shoulder, elbow, wrist, vue(S), e, main, 5.9, .82), rot: interp(angleMain, pincement, smooth(.64, 1, touche)) };
 }
 const knuckles = [[-2.78, 7.15, 12.25, -4.2], [-.98, 7.73, 14.82, -1.65], [.84, 7.66, 15.33, .92], [2.5, 6.77, 13.54, 3.26]];
 const strands = [pt(-10, -12), pt(-12, -8), pt(-13.5, -3)];
@@ -213,7 +213,6 @@ export function rigAicha(svg) {
   const light = { l: get('bras-l').querySelector('ellipse'), r: get('bras-r').querySelector('ellipse') };
   set('aicha-sol', { display: 'inline', 'aria-hidden': 'true' });
   const head = get('tete'), mancheG = get('bras-l'), mainG = get('poignet-l');
-  for (const side of limbs) head.before(get('bras-' + side));
 
   function drawEye(side, p) {
     const m = side === 'l' ? 1 : -1,

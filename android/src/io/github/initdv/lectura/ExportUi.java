@@ -32,7 +32,7 @@ final class ExportUi implements AutoCloseable {
     private double markedRate;
     private File mediaToOffer;
     private boolean offerAudio;
-    private String offerName;
+    private String offerName,offerSize;
     private VideoView showing;
     ExportUi(MainActivity a){
         this.a=a;u=a.ui;movies=new Movies(a);temp=Library.dir(a.getCacheDir(),"exports");
@@ -42,20 +42,32 @@ final class ExportUi implements AutoCloseable {
     boolean active(){return recording!=null&&!finishing;}
     boolean capturing(){return active()&&origin>0;}
     boolean busy(){return recording!=null;}
+    private boolean portrait(){return !a.db.settings.optString("formatVideo").equals("16:9");}
+    private MediaExport.Quality quality(){return MediaExport.Quality.from(a.db.settings.optString(MediaExport.Quality.KEY));}
+    void resolutionMenu(LinearLayout menu){
+        boolean portrait=portrait();MediaExport.Quality selected=quality();
+        var qualities=MediaExport.Quality.values();var labels=new java.util.ArrayList<String>();
+        for(var q:qualities)labels.add(q.label(portrait));
+        String title=t("android.video.resolution");
+        u.add(menu,u.p(title),8);
+        u.add(menu,u.button(selected.label(portrait),"chevron",()->a.choose(title,labels,selected.ordinal(),i->{
+            a.db.set(MediaExport.Quality.KEY,qualities[i].id);a.menu();
+        })),6);
+    }
     void toggle(){
         if(finishing)return;
         if(recording!=null){stop();return;}
-        if(a.reading==null||a.preparing){a.note(t("scene.err.rienACapturer"),"info");return;}
-        Reading reading=a.reading;Stage stage=a.stage;
-        if(reading.playing)reading.pause();reading.seek(0);reading.terminal.shown=0;a.playState();
-        boolean portrait=!a.db.settings.optString("formatVideo").equals("16:9");
+        if(a.reading==null||a.stage==null||a.preparing){a.note(t("scene.err.rienACapturer"),"info");return;}
+        Reading reading=a.reading;Stage stage=a.stage;boolean portrait=portrait();MediaExport.Quality quality=quality();
         String title=a.project.base();
         try{
-            MediaExport.Recording session=new MediaExport.Recording(portrait?720:1280,portrait?1280:720,temp,reading.pcm);
+            MediaExport.Recording session=new MediaExport.Recording(quality.width(portrait),quality.height(portrait),temp,reading.pcm);
             recording=session;origin=0;lastFrame=-1;markedRate=0;markedPlaying=false;
             task=executor.submit(()->{try{
                 File file=session.run(null,()->a.handler.post(()->{
                     if(closed||recording!=session||a.stage!=stage)return;
+                    // Only rewind once an encoder is ready, so a refused resolution leaves playback alone.
+                    reading.pause();reading.seek(0);reading.terminal.shown=0;
                     stage.recording=true;origin=System.nanoTime();
                     a.note(t(session.sound!=null?"scene.videoDebut":"scene.videoSansSon"),session.sound!=null?"info":"warn",7000);
                     a.startPlaying();mark(true); // The first frame comes from the next stage draw, with its sampled pose.
@@ -65,11 +77,25 @@ final class ExportUi implements AutoCloseable {
                     if(recording!=session){file.delete();return;}
                     recording=null;finishing=false;stage.recording=false;
                     if(mediaToOffer!=null)mediaToOffer.delete();mediaToOffer=file;offerName=title;offerAudio=session.sound!=null;
-                    a.note(t("scene.video.verifOk","detail",session.w+" × "+session.h+" · "+SharedMedia.extension(file.getName()).toUpperCase(Locale.ROOT)),"ok",8000);
+                    offerSize=MediaExport.dimensions(session.w,session.h);
+                    a.note(t("scene.video.verifOk","detail",offerSize+" · "+SharedMedia.extension(file.getName()).toUpperCase(Locale.ROOT)),"ok",8000);
                     foreground();
                 });
-            }catch(Exception e){a.handler.post(()->{if(recording==session){recording=null;finishing=false;stage.recording=false;if(!(e instanceof CancellationException))a.report("video",e);}});}});
+            }catch(Exception|OutOfMemoryError e){a.handler.post(()->failed(session,e));}});
         }catch(Exception e){a.report("video",e);}
+    }
+    private void failed(MediaExport.Recording session,Throwable error){
+        if(recording!=session)return;
+        abandon();
+        if(error instanceof CancellationException)return;
+        if(!session.uhd()){a.report("video",error);return;}
+        a.log("video-4k",error);
+        String size=MediaExport.dimensions(session.w,session.h);
+        boolean refused=error instanceof MediaExport.Unavailable;
+        String message=t(refused?"android.video.uhdUnsupported":"android.video.uhdFailed","detail",size);
+        if(!a.isForeground||a.modal!=null){a.note(message,"error",9000);return;}
+        LinearLayout r=a.sheet(t("android.video.uhdTitle"));u.add(r,u.p(message),4);
+        u.add(r,u.button(t("android.video.useHd"),null,()->{a.db.set(MediaExport.Quality.KEY,MediaExport.Quality.HD.id);a.dismiss();}),10);
     }
     void mark(boolean force){
         MediaExport.Recording r=recording;Reading p=a.reading;if(r==null||p==null||origin==0||finishing||r.sound==null)return;
@@ -82,9 +108,16 @@ final class ExportUi implements AutoCloseable {
     private long nowUs(){return Math.max(0,(System.nanoTime()-origin)/1000);}
     void frame(double sceneTime){
         MediaExport.Recording r=recording;if(r==null||origin==0||finishing||a.stage==null)return;
-        long index=nowUs()*30/1_000_000;if(index<=lastFrame)return;long timestamp=lastFrame<0?0:index*1_000_000/30;
-        Bitmap bitmap=r.buffer();if(bitmap==null)return;
-        a.stage.exportDraw(new Canvas(bitmap),r.w,r.h,false,sceneTime);r.offer(bitmap,timestamp);lastFrame=index;
+        long index=nowUs()*MediaExport.FPS/1_000_000;if(index<=lastFrame)return;
+        long timestamp=lastFrame<0?0:index*1_000_000/MediaExport.FPS;
+        Bitmap bitmap=null;
+        try{
+            bitmap=r.buffer();if(bitmap==null)return;
+            a.stage.exportDraw(new Canvas(bitmap),r.w,r.h,false,sceneTime);r.offer(bitmap,timestamp);lastFrame=index;
+        }catch(RuntimeException|OutOfMemoryError e){
+            if(bitmap!=null)bitmap.recycle();
+            a.handler.post(()->failed(r,e));
+        }
     }
     void naturalEnd(){if(active()&&origin>0){MediaExport.Recording r=recording;a.handler.postDelayed(()->{if(recording==r)stop();},600);}}
     void stop(){
@@ -112,7 +145,7 @@ final class ExportUi implements AutoCloseable {
                 (a.db.locale().equals("en")?"Recorded as ":"Enregistré en ")+ext.toUpperCase(Locale.ROOT)+".";
             u.add(row,u.small(help),4);
             if(!active){row.setAlpha(.5f);continue;}
-            if(!audio)u.add(row,u.small(Refs.size(file.length())),4);
+            if(!audio)u.add(row,u.small(offerSize+" · "+Refs.size(file.length())),4);
             LinearLayout r=u.row();u.add(row,r,6);
             addAction(r,t("dl.bouton.telecharger"),()->take(file,base,option,keep.isChecked(),false,sound));u.gap(r,6);
             addAction(r,t("dl.bouton.partager"),()->take(file,base,option,keep.isChecked(),true,sound));

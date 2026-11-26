@@ -55,6 +55,7 @@ final class AichaMotion {
     }
     static final class Cue extends Interval {
         final String kind,face;final int side;final double force;
+        int hand; // 0: eyes/head only; -1/+1: leading hand
         Cue(double a,double b,String k,int side,String face,double force){super(a,b);kind=k;this.side=side;this.face=face;this.force=force;}
     }
     static final class Walk extends Interval {
@@ -141,6 +142,12 @@ final class AichaMotion {
         }
         double end=0;
         for(Interval w:p.speech){if(w.start-end>=1.2&&at(p.walks,w.start,w.start-.9)==null)p.returns.add(new Interval(w.start-.82,w.start));end=w.end;}
+        // The gaze still marks each phrase; leave space between hand gestures.
+        double rest=0;int side=1;
+        for(Cue c:p.cues){
+            c.hand=c.kind.equals("salut")?-1:!c.kind.equals("ecoute")&&!c.kind.equals("hoche")&&c.end-c.start>=.56&&c.start>=rest?side:0;
+            if(c.hand!=0){rest=max(c.end+.28,c.start+1.65);side=-c.hand;}
+        }
         return p;
     }
 
@@ -155,15 +162,15 @@ final class AichaMotion {
     private static Map<String,double[]> faces(){Map<String,double[]> f=new java.util.HashMap<>();
         for(int i=0;i<FAMILIES.length;i++)for(String n:FAMILIES[i].split("\\|"))f.put(n,EXPRESSIONS[i]);return f;}
     private static final Map<String,double[][]> GESTURES=Map.of(
-        "salut",new double[][]{{28,106,.96,9,0,0,0},{7.2,3.1,-2.1,.17},{.69,.29,.45,0,.10}},
-        "presente",new double[][]{{10,64,.93,6,0,.17,0},{11.3,4.1,3.2,.55},{.33,.28,.31,.03,.22}},
-        "confie",new double[][]{{-6,93,.81,-5,.88,.12,0},{3.3,5.1,5.5,.11},{.29,.48,.17,.12,-.23}},
-        "marque",new double[][]{{9,54,.86,4,0,.1,.94},{6.5,2.7,3.6,.18},{.19,.39,.48,.12,.30}},
-        "ouvre",new double[][]{{9,68,.92,4,0,.83,0},{5.5,-3.9,-5.3,-.37},{.53,.41,.52,0,.12}},
-        "hoche",new double[][]{{3,29,.53,2,0,.24,0},{3.2,2.2,11.8,.26},{.32,.22,.17,.03,.10}},
-        "nuance",new double[][]{{-2,61,.72,-6,.80,.23,0},{12,4.2,-2.7,-.32},{.07,.21,.62,.30,.53}},
-        "question",new double[][]{{8,46,.74,5,0,.45,0},{9.9,7.1,-6.7,-.36},{.21,.76,.64,.08,.36}},
-        "accent",new double[][]{{11,58,.88,5,0,.42,0},{7.2,-3.9,7.1,.18},{.49,.51,.54,0,.21}},
+        "salut",new double[][]{{16,78,.94,6,0,0,0},{7.2,3.1,-2.1,.17},{.69,.29,.45,0,.10}},
+        "presente",new double[][]{{5,37,.84,3,0,0,0},{11.3,4.1,3.2,.55},{.33,.28,.31,.03,.22}},
+        "confie",new double[][]{{0,41,.66,-3,.77,0,0},{3.3,5.1,5.5,.11},{.29,.48,.17,.12,-.23}},
+        "marque",new double[][]{{5,34,.82,3,0,0,.9},{6.5,2.7,3.6,.18},{.19,.39,.48,.12,.30}},
+        "ouvre",new double[][]{{5,37,.84,3,0,.62,0},{5.5,-3.9,-5.3,-.37},{.53,.41,.52,0,.12}},
+        "hoche",new double[][]{{},{3.2,2.2,11.8,.26},{.32,.22,.17,.03,.10}},
+        "nuance",new double[][]{{0,34,.67,-3,.66,.12,0},{12,4.2,-2.7,-.32},{.07,.21,.62,.30,.53}},
+        "question",new double[][]{{4,28,.68,3,0,.15,0},{9.9,7.1,-6.7,-.36},{.21,.76,.64,.08,.36}},
+        "accent",new double[][]{{5,36,.80,3,0,.22,0},{7.2,-3.9,7.1,.18},{.49,.51,.54,0,.21}},
         "ecoute",new double[][]{{},{15.2,5.8,6.6,.78},{.06,.32,.24,.45,.18}});
     private static final class Acting {
         Cue cue;double face,gazeX,gazeY,neck,tilt,yaw,pitch,weight,hip,chest,smile,inner,outer,focus,asym;
@@ -183,23 +190,17 @@ final class AichaMotion {
         a.weight=side*2.66*support;a.hip=-.93*side*support;a.chest=(g[0].length>4&&g[0][4]>.4?-1.33:1.25)*side*support;
         a.smile=a.face*face[0];a.inner=a.face*face[1];a.outer=a.face*face[2];a.focus=a.face*face[3];a.asym=side*a.face*face[4];return a;
     }
-    private static void hand(Cue c,Cue next,double t,double gain,double[][] hands){
-        double[] v=GESTURES.get(c.kind)[0];if(v.length==0)return;
-        double span=c.end-c.start,u=(t-c.start)/span;
-        double end=1+(next!=null&&next.start==c.end&&GESTURES.get(next.kind)[0].length>0?min(.36/span,min(.28,(next.end-c.end)/span)):0);
-        if(u>=end)return;
-        double force=gain*smooth(.24,.88,span),open=bound(force),h=open*pulse(u,.16,.45,.66,end);
-        double late=force*v[5]*pulse(u,.27,.58,.71,end);int side=c.side<0?0:1;
+    private static double[][] hands(Cue c,double t,double gain){
+        double[][] hands=new double[2][6];
+        if(c==null||c.hand==0||gain==0)return hands;
+        double[] v=GESTURES.get(c.kind)[0];double span=c.end-c.start,u=(t-c.start)/span;
+        double force=min(gain,1.12)*smooth(.34,.91,span),open=bound(force),h=open*pulse(u,.16,.46,.65,1);
+        double late=force*v[5]*pulse(u,.29,.61,.70,1);int side=c.hand<0?0:1;
         double[] m=hands[side],o=hands[1-side];
-        m[0]+=v[0]*force*pulse(u,.02,.30,.54,end);m[1]+=v[1]*force*pulse(u,.07,.40+.05*v[4],.63,end);m[2]+=v[2]*h;
-        m[3]+=v[3]*h*(c.kind.equals("salut")?sin((u-.4)*PI*6):1);m[4]+=v[4]*smooth(0,.6,force)*pulse(u,0,.26,.72,end);
-        m[5]+=v[6]*open*pulse(u,.32,.48,.58,.78);o[0]+=7*late;o[1]+=38*late;o[2]+=.67*late;o[3]-=3*late;
-    }
-    private static double[][] hands(Plan p,Cue c,double t,double gain){
-        double[][] v=new double[2][6];
-        if(c!=null&&gain!=0&&GESTURES.get(c.kind)[0].length>0){hand(c,at(p.cues,c.end),t,gain,v);
-            Cue last=at(p.cues,c.start-.0001);if(last!=null&&last.end==c.start)hand(last,c,t,gain,v);}
-        return v;
+        m[0]=v[0]*force*pulse(u,.025,.33,.55,1);m[1]=v[1]*force*pulse(u,.07,.42+.05*v[4],.63,1);m[2]=v[2]*h;
+        m[3]=v[3]*h*(c.kind.equals("salut")?sin((u-.4)*PI*6):1);m[4]=v[4]*smooth(0,.6,force)*pulse(u,0,.26,.72,1);
+        m[5]=v[6]*open*pulse(u,.32,.48,.58,.78);o[0]=3*late;o[1]=27*late;o[2]=.67*late;o[3]=-3*late;
+        return hands;
     }
     static final class Foot {
         final double x,z,lift,pitch,roll;final boolean grounded;
@@ -252,7 +253,7 @@ final class AichaMotion {
         double inertia=bound((acting(p,t-.158,k).phase()-a.phase())*.94,-5.1,5.1);boolean forced=!expression.isEmpty();
         double[] face=FACES.getOrDefault(forced?expression:a.cue==null?"neutre":a.cue.face,EXPRESSIONS[5]);
         double env=forced?1:a.face*(a.cue==null?0:a.cue.force),accent=forced||reduced?0:1;
-        double[][] hands=hands(p,a.cue,t,k);double[] l=hands[0],r=hands[1];
+        double[][] hands=hands(a.cue,t,k);double[] l=hands[0],r=hands[1];
         double q=vie%17.4,cycle=vie-q,coup=activity*square(1-s.mix)*(1-bound(redresse))*pulse(q,.74,1,1.58,2.07),tete=square(coup);
         double lunettes=glasses?free(p,k,q,cycle,GLASSES):0,appui=free(p,k,q,cycle,FATIGUE),fatigue=k*appui,talon=k*smooth(.28,1,appui);
         double relache=q>FATIGUE[2]?bound(fatigue-talon):0,regard=k*free(p,k,q,cycle,TERMINAL),tourne=regard*smooth(9.85,10.42,q),bassin=s.hip+1.95*fatigue;

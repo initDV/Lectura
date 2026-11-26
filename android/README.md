@@ -120,5 +120,25 @@ un téléchargement réel. Si l’APK précédent est disponible, elle exerce au
 Sur un téléphone : télécharge une voix dans **Réglages → Lectura HD**, puis coupe
 le Wi‑Fi et les données en activant le mode avion. Relance Lectura, sélectionne
 la voix HD dans la scène et lis un nouveau texte. Essaie aussi une voix système
-locale et un fichier audio. Dans **Menu**, après avoir lancé la scène, tu peux
-choisir le format 16:9 ou 9:16 et enregistrer la vidéo. La vidéo peut contenir le son d’un fichier importé ou de la voix synthétisée localement. Le format vidéo dépend des encodeurs disponibles sur l’appareil.
+locale et un fichier audio.
+
+### Enregistrer en HD ou en 4K (Android)
+
+Dans **Menu**, choisis le format **16:9** ou **9:16**, puis la **Résolution de la
+vidéo**. La **HD** (720p) reste le réglage initial ; la **4K UHD** donne
+**3840 × 2160** en paysage ou **2160 × 3840** en portrait. Le choix est mémorisé
+et ne change ni l’aperçu ni le PNG. Lance la scène, puis utilise **Enregistrer
+la vidéo**. La scène est dessinée à sa résolution de sortie ; l’enregistrement
+vise 30 i/s selon les performances de l’appareil.
+
+La 4K nécessite un encodeur qui accepte la résolution dans l’orientation
+choisie. Lectura essaie les codecs du téléphone à la même résolution, en
+privilégiant les encodeurs matériels en 4K (AVC ou HEVC pour MP4, VPx pour WebM).
+Si aucun ne démarre, un message indique la résolution refusée et permet de
+sélectionner la HD. Il n’y a pas de retour automatique en HD. Si l’enregistrement
+aboutit, la résolution est vérifiée puis affichée au téléchargement.
+
+Le son d’un fichier importé ou d’une voix Lectura HD, le téléchargement, le
+partage et **Mes vidéos** restent disponibles. Prévois plus d’espace en 4K :
+le téléchargement de la vidéo et la copie facultative dans **Mes vidéos**
+sont distincts (la médiathèque garde sa limite totale de 150 Mio).

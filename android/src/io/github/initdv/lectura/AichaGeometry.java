@@ -130,7 +130,7 @@ final class AichaGeometry {
             }
             elbow=e;wrist=w;Vec screenElbow=armView(e,p.marche);hand=armView(w,p.marche);
             double a=toDegrees(atan2(screenElbow.x-hand.x,hand.y-screenElbow.y));turn=mix(a,PINCH,smooth(.64,1,touch));
-            warp=bend(SHOULDER,ELBOW,WRIST,armView(shoulder,p.marche),screenElbow,hand,5.9,1);
+            warp=bend(SHOULDER,ELBOW,WRIST,armView(shoulder,p.marche),screenElbow,hand,5.9,.82);
         }
     }
 }

@@ -40,7 +40,8 @@ const fix = ({ segs, langue, siwis = false, duration, id, ms, attentes = [0], em
         positions: [hip, knee, ankle, rest, heel, toe, contact].map(vec), reachable,
       }));
       const arms = ['L', 'R'].map((side) => {
-        const { S, E, W, main, rot } = brasAicha(p, side); return { positions: [S, E, W, main].map(vec), rot };
+        const { S, E, W, main, rot, map } = brasAicha(p, side);
+        return { positions: [S, E, W, main, map({ x: -34, y: 71, z: 0 })].map(vec), rot };
       });
       return { t, wait, gain, level, reduced, expression, glasses, p, legs, arms };
     }) };

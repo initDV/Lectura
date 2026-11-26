@@ -402,6 +402,7 @@ public final class MainActivity extends Activity {
             List.of("Paysage 16:9 (YouTube)","Vertical 9:16 (TikTok)");
         int format=db.settings.optString("formatVideo").equals("16:9")?0:1;
         ui.add(r,ui.button(formats.get(format),"chevron",()->choose(t("scene.format"),formats,format,i->{db.set("formatVideo",i==0?"16:9":"9:16");menu();})),6);
+        exports.resolutionMenu(r);
         ui.menuGroup(r,t("menu.avance"),2);
         choice(r,t("menu.mesVideos"),"video",false,()->{dismiss();movies();});
         String[] ids={"personnages","reglages","apropos"},icons={"smile","settings","info"};

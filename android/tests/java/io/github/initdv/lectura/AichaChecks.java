@@ -20,7 +20,8 @@ final class AichaChecks {
         require(a.size()==b.length(),"Nombre de repères "+a.size()+" / "+b.length());
         for(int i=0;i<a.size();i++){
             Interval one=a.get(i);JSONObject ref=b.getJSONObject(i);near(one.start,ref.getDouble("start"),"Début");near(one.end,ref.getDouble("end"),"Fin");
-            if(one instanceof Cue){Cue c=(Cue)one;require(c.kind.equals(ref.getString("kind"))&&c.side==ref.getInt("side")&&c.face.equals(ref.getString("face")),"Geste ou expression");near(c.force,ref.getDouble("force"),"Force");}
+            if(one instanceof Cue){Cue c=(Cue)one;require(c.kind.equals(ref.getString("kind"))&&c.side==ref.getInt("side")&&c.hand==ref.getInt("hand")
+                &&c.face.equals(ref.getString("face")),"Geste ou expression");near(c.force,ref.getDouble("force"),"Force");}
             if(one instanceof Walk){Walk w=(Walk)one;near(w.distance,ref.getDouble("distance"),"Avance");require(w.count==ref.getInt("count")&&w.foot==ref.getInt("pied"),"Pas");}
         }
     }
@@ -59,7 +60,8 @@ final class AichaChecks {
                     vectors(lj.getJSONArray("positions"),l.hip,l.knee,l.ankle,l.rest,l.heel,l.toe,l.contact);
                     require(l.reachable==lj.getBoolean("reachable"),at+"portée des jambes");
                     Arm a=new Arm(v,k==0,h);JSONObject aj=f.getJSONArray("arms").getJSONObject(k);
-                    vectors(aj.getJSONArray("positions"),a.shoulder,a.elbow,a.wrist,a.hand);near(a.turn,aj.getDouble("rot"),at+"poignet");
+                    double[] xy=new double[2];a.warp.map(-34,71,xy);
+                    vectors(aj.getJSONArray("positions"),a.shoulder,a.elbow,a.wrist,a.hand,new Vec(xy[0],xy[1]));near(a.turn,aj.getDouble("rot"),at+"poignet");
                 }
             }
         }

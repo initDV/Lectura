@@ -76,6 +76,9 @@ public final class DeviceChecks extends Instrumentation {
             case "offline-kokoro":
                 check("kokoro-en-avion",()->offlineNewVoice(ctx,"kokoro-siwis"));
                 break;
+            case "video-uhd":
+                check("video-uhd",()->VideoQualityChecks.run(this,ctx));
+                break;
             case "portrait-allonge":
                 check("portrait-allonge",()->FramingChecks.run(this,ctx));
                 break;
@@ -795,7 +798,7 @@ public final class DeviceChecks extends Instrumentation {
             return "Import VTT et SRT, exports exacts, timecodes pris en compte sur le WAV, capture de Prisca en PNG 1080×1920";
         }finally{input.delete();main(()->{a.db.audio(a.project).delete();a.finish();});}
     }
-    private File tone(Context ctx,int seconds)throws Exception {
+    File tone(Context ctx,int seconds)throws Exception {
         File dir=ctx.getExternalFilesDir("verification");require(dir!=null,"Stockage de test");
         File wav=File.createTempFile("tone-",".wav",dir);int rate=48000,frames=rate*seconds;
         try(RandomAccessFile out=new RandomAccessFile(wav,"rw")){Pcm.header(out,1,rate,frames*2);

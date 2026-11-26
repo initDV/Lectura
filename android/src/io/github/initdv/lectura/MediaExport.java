@@ -31,34 +31,63 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 
-/** Actual H.264/AAC and VP8/VP9/Opus containers, using only Android codecs. */
+/** Native MP4 (AVC/HEVC + AAC) and WebM (VPx + Opus) recording. */
 final class MediaExport {
-    private static final String AVC=MediaFormat.MIMETYPE_VIDEO_AVC,VP8=MediaFormat.MIMETYPE_VIDEO_VP8,VP9=MediaFormat.MIMETYPE_VIDEO_VP9,
-        AAC=MediaFormat.MIMETYPE_AUDIO_AAC,OPUS=MediaFormat.MIMETYPE_AUDIO_OPUS;
+    static final int FPS=30;
+    private static final String AVC=MediaFormat.MIMETYPE_VIDEO_AVC,HEVC=MediaFormat.MIMETYPE_VIDEO_HEVC,
+        VP8=MediaFormat.MIMETYPE_VIDEO_VP8,VP9=MediaFormat.MIMETYPE_VIDEO_VP9,AAC=MediaFormat.MIMETYPE_AUDIO_AAC,OPUS=MediaFormat.MIMETYPE_AUDIO_OPUS;
+    enum Quality {
+        HD("720p",1280,720),UHD("4k",3840,2160);
+        static final String KEY="qualiteVideo";
+        final String id;private final int large,small;
+        Quality(String id,int large,int small){this.id=id;this.large=large;this.small=small;}
+        static Quality from(String id){return UHD.id.equals(id)?UHD:HD;}
+        int width(boolean portrait){return portrait?small:large;}
+        int height(boolean portrait){return portrait?large:small;}
+        String label(boolean portrait){return (this==UHD?"4K UHD":"HD")+" · "+dimensions(width(portrait),height(portrait));}
+    }
+    static String dimensions(int w,int h){return w+" × "+h;}
+    private static boolean uhd(int w,int h){return Math.max(w,h)>=3840;}
+    static final class Unavailable extends IOException {
+        Unavailable(int w,int h,Exception cause){super("Aucun encodeur vidéo utilisable en "+dimensions(w,h)+" à "+FPS+" i/s.",cause);}
+    }
     static final class Format {
         final String video,audio,ext,mime;
         final int container;
         String videoCodec,audioCodec;
+        int bitRate;
         Format(String video,boolean webm){this.video=video;audio=webm?OPUS:AAC;ext=webm?"webm":"mp4";mime="video/"+ext;
             container=webm?MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM:MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4;}
     }
-    static List<Format> available(int w,int h,boolean audio,int channels,int rate){
-        List<Format> out=new ArrayList<>();MediaCodecList codecs=new MediaCodecList(MediaCodecList.REGULAR_CODECS);
-        for(String id:new String[]{AVC,VP9,VP8}){
-            Format f=new Format(id,!id.equals(AVC));try{
-                f.videoCodec=codecs.findEncoderForFormat(video(f,w,h,true));if(audio)f.audioCodec=codecs.findEncoderForFormat(audio(f,channels,rate));
-                if(f.videoCodec!=null&&(!audio||f.audioCodec!=null))out.add(f);
-            }catch(IllegalArgumentException ignored){}
+    static List<Format> available(int w,int h,boolean withAudio,int channels,int rate){
+        List<Format> out=new ArrayList<>(),software=new ArrayList<>();MediaCodecList codecs=new MediaCodecList(MediaCodecList.REGULAR_CODECS);
+        boolean uhd=uhd(w,h);MediaCodecInfo[] infos=codecs.getCodecInfos();
+        for(String id:uhd?new String[]{AVC,HEVC,VP9,VP8}:new String[]{AVC,VP9,VP8}){
+            boolean webm=id.equals(VP9)||id.equals(VP8);
+            String sound=withAudio?codecs.findEncoderForFormat(audio(new Format(id,webm),channels,rate)):null;
+            if(withAudio&&sound==null)continue;
+            for(MediaCodecInfo info:infos){
+                if(!info.isEncoder()||info.isAlias())continue;
+                try{
+                    MediaCodecInfo.CodecCapabilities caps=info.getCapabilitiesForType(id);
+                    MediaCodecInfo.VideoCapabilities video=caps.getVideoCapabilities();
+                    if(video==null||!video.areSizeAndRateSupported(w,h,FPS))continue;
+                    Format f=new Format(id,webm);f.videoCodec=info.getName();f.audioCodec=sound;
+                    f.bitRate=video.getBitrateRange().clamp(uhd?id.equals(AVC)?24_000_000:16_000_000:1_200_000);
+                    if(caps.isFormatSupported(video(f,w,h))) (uhd&&!info.isHardwareAccelerated()?software:out).add(f);
+                }catch(IllegalArgumentException ignored){/* The codec may not implement this MIME type. */}
+            }
         }
-        return out;
+        out.addAll(software);return out;
     }
-    private static MediaFormat video(Format f,int w,int h,boolean surface){
-        MediaFormat m=MediaFormat.createVideoFormat(f.video,w,h);m.setInteger(MediaFormat.KEY_COLOR_FORMAT,surface?MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface:MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible);
-        m.setInteger(MediaFormat.KEY_FRAME_RATE,30);m.setInteger(MediaFormat.KEY_BIT_RATE,1_200_000);m.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,2);
+    private static MediaFormat video(Format f,int w,int h){
+        MediaFormat m=MediaFormat.createVideoFormat(f.video,w,h);m.setInteger(MediaFormat.KEY_COLOR_FORMAT,MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+        m.setInteger(MediaFormat.KEY_FRAME_RATE,FPS);m.setInteger(MediaFormat.KEY_BIT_RATE,f.bitRate);m.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,2);
         m.setInteger(MediaFormat.KEY_COLOR_RANGE,MediaFormat.COLOR_RANGE_LIMITED);m.setInteger(MediaFormat.KEY_COLOR_STANDARD,MediaFormat.COLOR_STANDARD_BT709);
         m.setInteger(MediaFormat.KEY_COLOR_TRANSFER,MediaFormat.COLOR_TRANSFER_SDR_VIDEO);
-        // Keeping B-frames disabled avoids reordered presentation timestamps in the muxer.
-        if(f.video.equals(AVC))m.setInteger(MediaFormat.KEY_PROFILE,MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline);
+        // UHD AVC encoders may only expose higher profiles. Still prevent B-frames in MP4.
+        if(f.video.equals(AVC)&&!uhd(w,h))m.setInteger(MediaFormat.KEY_PROFILE,MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline);
+        else if(f.video.equals(AVC)||f.video.equals(HEVC))m.setInteger(MediaFormat.KEY_MAX_B_FRAMES,0);
         return m;
     }
     private static int sampleRate(Format f,int rate){return f.audio.equals(OPUS)||rate>48000||rate<8000?48000:rate;}
@@ -81,28 +110,36 @@ final class MediaExport {
         final int w,h;final File dir;final Pcm sound;
         private Frame next;
         private Bitmap spare;
-        private boolean stopped,cancelled,begun;
+        private boolean stopped,cancelled,begun,encoding;
         private long stopAt;
         private final ArrayList<Mark> marks=new ArrayList<>();
         Recording(int w,int h,File dir,Pcm sound)throws IOException{
             this.w=w;this.h=h;this.dir=dir;this.sound=sound==null?null:new Pcm(sound.file,sound.channels,sound.rate,sound.frames,false);
         }
-        synchronized boolean room(){return !stopped&&!cancelled&&next==null;}
+        boolean uhd(){return MediaExport.uhd(w,h);}
+        // A single reusable ~32 MiB frame for UHD. Skip a tick when the encoder
+        // is busy rather than blocking playback or accumulating large bitmaps.
+        synchronized boolean room(){return !stopped&&!cancelled&&next==null&&(!uhd()||!encoding);}
         synchronized Bitmap buffer(){
             if(!room())return null;
-            Bitmap b=spare;spare=null;return b==null?Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888):b;
+            Bitmap b=spare;spare=null;return b==null?newBuffer():b;
         }
+        private Bitmap newBuffer(){return Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);}
         synchronized void offer(Bitmap b,long us){if(!room()){b.recycle();return;}next=new Frame(b,us);notifyAll();}
         synchronized void mark(Mark mark){if(!stopped&&!cancelled&&sound!=null)marks.add(mark);}
-        synchronized void end(long us){stopped=true;stopAt=us;notifyAll();}
+        synchronized void end(long us){
+            stopped=true;stopAt=us;if(spare!=null){spare.recycle();spare=null;}notifyAll();
+        }
         synchronized void cancel(){
             if(cancelled)return;cancelled=true;if(next!=null){next.image.recycle();next=null;}
             if(spare!=null){spare.recycle();spare=null;}
             if(!begun&&sound!=null)sound.close();notifyAll();
         }
         synchronized void check(){if(cancelled||Thread.currentThread().isInterrupted())throw new CancellationException();}
-        private synchronized Frame take()throws InterruptedException {while(!stopped&&!cancelled&&next==null)wait(100);check();Frame f=next;next=null;return f;}
-        private synchronized void used(Bitmap b){if(spare!=null||cancelled||stopped)b.recycle();else spare=b;}
+        private synchronized Frame take()throws InterruptedException {
+            while(!stopped&&!cancelled&&next==null)wait(100);check();Frame f=next;next=null;encoding=f!=null;return f;
+        }
+        private synchronized void used(Bitmap b){encoding=false;if(spare!=null||cancelled||stopped)b.recycle();else spare=b;}
         File run(String forcedExt,Runnable started)throws Exception {
             synchronized(this){check();begun=true;}
             File video=null,audio=null,merged=null,finalFile=null;
@@ -110,20 +147,20 @@ final class MediaExport {
                 List<Format> choices=available(w,h,sound!=null,sound==null?1:sound.channels,sound==null?48000:sound.rate);
                 Format f=null;VideoEncoder encoder=null;Exception error=null;
                 for(Format candidate:choices){if(forcedExt!=null&&!candidate.ext.equals(forcedExt))continue;
-                    video=File.createTempFile("lecture-video-","."+candidate.ext,dir);
+                    check();video=File.createTempFile("lecture-video-","."+candidate.ext,dir);
                     try{encoder=new VideoEncoder(candidate,w,h,video);f=candidate;break;}
-                    catch(Exception e){error=e;video.delete();video=null;}}
-                if(encoder==null)throw new IOException("Aucun encodeur vidéo utilisable à cette résolution.",error);
+                    catch(Exception e){if(error!=null)e.addSuppressed(error);error=e;video.delete();video=null;}}
+                if(encoder==null)throw new Unavailable(w,h,error);
                 long last=0;int n=0;
                 try(VideoEncoder destination=encoder){
-                    started.run();
+                    check();used(newBuffer());check();started.run();
                     while(true){Frame frame=take();if(frame==null)break;
                         try{destination.write(frame);n++;last=frame.us;}finally{used(frame.image);}
                     }
                     if(n==0)throw new IOException("Enregistrement vide.");
                     destination.end();
                 }
-                check();long length=Math.max(last+33333,stopAt);
+                check();long length=Math.max(last+1_000_000/FPS,stopAt);
                 if(sound!=null){audio=File.createTempFile("lecture-audio-","."+(f.ext.equals("webm")?"webm":"m4a"),dir);encodeAudio(f,sound,length,new ArrayList<>(marks),audio);
                     merged=File.createTempFile("lectura-","."+f.ext,dir);join(f,video,audio,merged);
                 }else{merged=video;video=null;}
@@ -141,9 +178,9 @@ final class MediaExport {
         Track output;
         VideoEncoder(Format f,int w,int h,File file)throws Exception {
             try {
-                codec=MediaCodec.createByCodecName(f.videoCodec);codec.configure(video(f,w,h,true),null,null,MediaCodec.CONFIGURE_FLAG_ENCODE);
+                codec=MediaCodec.createByCodecName(f.videoCodec);codec.configure(video(f,w,h),null,null,MediaCodec.CONFIGURE_FLAG_ENCODE);
                 window=codec.createInputSurface();egl=new Egl(window,w,h);codec.start();output=new Track(file,f.container);
-            }catch(Exception e){close();throw e;}
+            }catch(Exception|OutOfMemoryError e){try{close();}catch(Exception cleanup){e.addSuppressed(cleanup);}throw e;}
         }
         void write(Frame frame)throws IOException{
             output.drain(codec,0);egl.blit(frame.image,frame.us);output.drain(codec,0);
@@ -258,7 +295,9 @@ final class MediaExport {
         try(MediaMetadataRetriever r=new MediaMetadataRetriever()){
             r.setDataSource(file.getPath());String d=r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
             if(d==null||Long.parseLong(d)<=0)throw new IOException("La durée de la vidéo est illisible.");
-            Bitmap frame=r.getFrameAtTime(0,MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+            // Verify decoding without retaining another full-resolution ARGB image.
+            Bitmap frame=uhd(w,h)?r.getScaledFrameAtTime(0,MediaMetadataRetriever.OPTION_CLOSEST_SYNC,w/6,h/6)
+                :r.getFrameAtTime(0,MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
             if(frame==null)throw new IOException("La première image de la vidéo est illisible.");frame.recycle();
             return w+" × "+h+" · "+Refs.time(Long.parseLong(d));
         }
@@ -301,7 +340,6 @@ final class MediaExport {
         final int width,height;
         final FloatBuffer vertex=ByteBuffer.allocateDirect(64).order(ByteOrder.nativeOrder()).asFloatBuffer();
         int program,tex,xy,uv;
-        boolean uploaded;
         Egl(Surface target,int w,int h)throws IOException{
             width=w;height=h;
             try{
@@ -311,8 +349,10 @@ final class MediaExport {
                 context=EGL14.eglCreateContext(display,cfg[0],EGL14.EGL_NO_CONTEXT,new int[]{EGL14.EGL_CONTEXT_CLIENT_VERSION,2,EGL14.EGL_NONE},0);
                 surface=EGL14.eglCreateWindowSurface(display,cfg[0],target,new int[]{EGL14.EGL_NONE},0);
                 req(EGL14.eglMakeCurrent(display,surface,surface,context));
+                int[] max=new int[1];GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE,max,0);
+                if(Math.max(w,h)>max[0])throw new IOException("Texture vidéo trop grande : "+dimensions(w,h)+" (limite GPU : "+max[0]+")");
                 int v=shader(GLES20.GL_VERTEX_SHADER,"attribute vec2 aPos;attribute vec2 aUv;varying vec2 uv;void main(){uv=aUv;gl_Position=vec4(aPos,0.0,1.0);}");
-                int f=shader(GLES20.GL_FRAGMENT_SHADER,"precision mediump float;varying vec2 uv;uniform sampler2D img;void main(){gl_FragColor=texture2D(img,uv);}");
+                int f=shader(GLES20.GL_FRAGMENT_SHADER,"#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\nvarying vec2 uv;uniform sampler2D img;void main(){gl_FragColor=texture2D(img,uv);}");
                 program=GLES20.glCreateProgram();GLES20.glAttachShader(program,v);GLES20.glAttachShader(program,f);GLES20.glLinkProgram(program);
                 int[] ok=new int[1];GLES20.glGetProgramiv(program,GLES20.GL_LINK_STATUS,ok,0);if(ok[0]==0)throw new IOException(GLES20.glGetProgramInfoLog(program));
                 GLES20.glDeleteShader(v);GLES20.glDeleteShader(f);GLES20.glUseProgram(program);GLES20.glGenTextures(1,ok,0);tex=ok[0];
@@ -324,17 +364,21 @@ final class MediaExport {
                 GLES20.glEnableVertexAttribArray(xy);GLES20.glEnableVertexAttribArray(uv);
                 vertex.position(0);GLES20.glVertexAttribPointer(xy,2,GLES20.GL_FLOAT,false,16,vertex);vertex.position(2);GLES20.glVertexAttribPointer(uv,2,GLES20.GL_FLOAT,false,16,vertex);
                 GLES20.glViewport(0,0,w,h);
-            }catch(Exception e){close();throw e;}
+                GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D,0,GLES20.GL_RGBA,w,h,0,GLES20.GL_RGBA,GLES20.GL_UNSIGNED_BYTE,null);
+                checkGl();
+            }catch(Exception|OutOfMemoryError e){close();throw e;}
         }
         void blit(Bitmap b,long us)throws IOException {
-            if(uploaded)GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D,0,0,0,b);
-            else{GLUtils.texImage2D(GLES20.GL_TEXTURE_2D,0,b,0);uploaded=true;}
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);
+            GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D,0,0,0,b);
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);checkGl();
             req(EGLExt.eglPresentationTimeANDROID(display,surface,us*1000));req(EGL14.eglSwapBuffers(display,surface));
         }
         private static int shader(int kind,String source)throws IOException{
             int shader=GLES20.glCreateShader(kind);GLES20.glShaderSource(shader,source);GLES20.glCompileShader(shader);int[] ok=new int[1];GLES20.glGetShaderiv(shader,GLES20.GL_COMPILE_STATUS,ok,0);
             if(ok[0]==0)throw new IOException(GLES20.glGetShaderInfoLog(shader));return shader;
+        }
+        private static void checkGl()throws IOException{
+            int code=GLES20.glGetError();if(code!=GLES20.GL_NO_ERROR)throw new IOException("OpenGL : 0x"+Integer.toHexString(code));
         }
         private void req(boolean ok)throws IOException{if(!ok)throw new IOException("EGL : 0x"+Integer.toHexString(EGL14.eglGetError()));}
         @Override public void close(){if(display!=EGL14.EGL_NO_DISPLAY){

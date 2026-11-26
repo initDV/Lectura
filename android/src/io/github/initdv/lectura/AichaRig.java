@@ -26,7 +26,8 @@ final class AichaRig {
         this.svg=svg;torso=node("buste");head=node("tete");pelvis=node("bassin");
         left=new Side("l");right=new Side("r");trousers=Skin.of(node("pantalon"));
         node("aicha-sol").a.remove("display");
-        torso.before(left.sleeve,head);torso.before(right.sleeve,head);
+        // Keep sleeves behind the bodice as in the SVG; the glasses adjustment
+        // temporarily raises its hand above the face, independently of the terminal.
         glasses=!node("lunettes").children.isEmpty();
     }
     private Svg.Node node(String id){Svg.Node n=svg.get(id);if(n==null)throw new IllegalArgumentException("Pièce SVG manquante : "+id);return n;}

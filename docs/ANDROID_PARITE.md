@@ -30,6 +30,8 @@ Le cadrage rapproché Android s’applique en portrait jusqu’à 480 dp de larg
 
 Le PNG et la vidéo conservent leur composition 38/62, indépendante de ces préférences d’écran. Le terminal est composé avant le personnage, et le dessin n’est pas rogné à la frontière du terminal.
 
+Android propose un [choix de résolution HD ou 4K UHD](../android/README.md#enregistrer-en-hd-ou-en-4k-android) distinct du ratio. La recette UHD exerce les deux ratios à leur taille native : sur un appareil compatible, elle contrôle les dimensions encodées et le son du fichier téléchargé ; sinon, elle contrôle le refus explicite sans changement automatique de résolution. Un refus sur l’émulateur ne valide pas l’encodage 4K sur un téléphone.
+
 Campagne sur l’APK [`1aec807`](https://github.com/initDV/Lectura/commit/1aec807) : [exécution `44295570195`](https://github.com/initDV/Lectura/actions/runs/44295570195) réussie. Résultats API 31 :
 
 | Contrôle | Résultat observé |

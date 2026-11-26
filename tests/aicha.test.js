@@ -73,61 +73,70 @@ describe('Mise en scène au temps de la source', () => {
     }
   });
 
-  it('anime toute une phrase sans ponctuation, par gestes alternés plutôt que par une seule pose au début', () => {
+  it('ponctue une longue phrase jusqu’à la fin, sans balancer les bras à chaque groupe', () => {
     expect(long.duration).toBe(14);
     expect(long.cues).toHaveLength(7);
-    expect(new Set(long.cues.map(c => c.kind)).size).toBeGreaterThanOrEqual(5);
-    expect(long.cues.every((cue, i) => cue.kind !== 'ecoute' && (!i || cue.side !== long.cues[i - 1].side))).toBe(true);
     expect(long.cues.at(-1).end).toBe(14);
-    const actives = Array.from({ length: 14 }, (_, s) =>
-      Array.from({ length: 20 }, (_, i) => poseAicha(long, s * 1000 + i * 50)).some(p => Math.max(p.flexL, p.flexR) > 18),
-    );
-    expect(actives.filter(Boolean).length).toBeGreaterThanOrEqual(12);
-    expect(actives.slice(-3)).toEqual([true, true, true]);
+    const mains = long.cues.filter(c => c.hand);
+    expect(mains.length).toBeGreaterThanOrEqual(3);
+    expect(mains.length).toBeLessThanOrEqual(4);
+    expect(mains.at(-1).start).toBeGreaterThan(9);
+    expect(mains.slice(1).every((cue, i) => cue.hand !== mains[i].hand && cue.start - mains[i].end >= .27)).toBe(true);
     expect(long.marches[0]?.start).toBeGreaterThan(2);
     expect(long.marches[0]?.end).toBeLessThan(14);
   });
 
-  it('varie le plan des coudes, le doigt d’accent, les deux mains et la direction du regard', () => {
+  it('garde le regard et les hochements même entre les gestes des mains', () => {
     const jeu = { ...long, marches: [] };
     const pose = (kind, u) => poseAicha(jeu, sampleCue(jeu.cues.find(c => c.kind === kind), u));
-    const raconte = pose('presente', .52), confie = pose('confie', .52), ouvre = pose('ouvre', .56);
-    expect(brasAicha(raconte, 'R').W.x).toBeLessThan(-52);
-    expect(brasAicha(confie, 'L').W.x).toBeGreaterThan(-12); // main ramenée vers le torse
-    expect(ouvre.flexL).toBeGreaterThan(60);
-    expect(ouvre.flexR).toBeGreaterThan(28);
-    expect(ouvre.flexL - ouvre.flexR).toBeGreaterThan(20); // pas un miroir des deux paumes
-    expect(pose('marque', .5).indexR).toBeGreaterThan(.8);
+    const raconte = pose('presente', .52), confie = pose('confie', .52), hoche = pose('hoche', .41);
+    expect(brasAicha(raconte, 'R').W.x).toBeLessThan(-45);
     expect(raconte.gazeX).toBeGreaterThan(.65);
     expect(confie.gazeX).toBeLessThan(-.65);
-    expect(pose('hoche', .41).pitch).toBeGreaterThan(8);
+    expect(hoche.pitch).toBeGreaterThan(8);
+    expect([hoche.openL, hoche.openR]).toEqual([0, 0]);
   });
 
-  it('laisse la main redescendre pendant le geste suivant sans à-coup ni débordement sur un silence', () => {
+  it('repose les deux mains en douceur entre deux groupes, même sans pause audio', () => {
     const jeu = { ...long, marches: [] }, first = jeu.cues[0], t = 1000 * first.end;
     expect(jeu.cues[1].start).toBe(first.end);
     const [avant, liaison, apres] = [-1, 0, 1].map(d => poseAicha(jeu, t + d));
-    expect(liaison.flexR).toBeGreaterThan(10);
-    expect(liaison.openR).toBeGreaterThan(.15);
-    expect(avant.flexR).toBeGreaterThan(liaison.flexR);
-    expect(apres.flexR).toBeLessThan(liaison.flexR);
-    expect(avant.flexR - apres.flexR).toBeLessThan(.5);
-    const silence = { ...jeu, cues: [first] };
-    expect(poseAicha(silence, t - 1).flexR).toBeCloseTo(2.5, 2);
-    expect(poseAicha(silence, t + 1).openR).toBe(0);
+    expect(avant.flexR).toBeCloseTo(2.5, 3);
+    for (const p of [liaison, apres]) expect([p.flexL, p.flexR, p.openL, p.openR]).toEqual([2.4, 2.5, 0, 0]);
   });
 
   it('fait suivre la paume au coude et accentue avec l’index sans secouer le bras', () => {
     const jeu = { ...long, marches: [] };
     const pose = (kind, u) => poseAicha(jeu, sampleCue(jeu.cues.find(c => c.kind === kind), u));
-    const depart = pose('presente', .14), arrivee = pose('presente', .51);
-    expect(depart.flexR).toBeGreaterThan(9);
+    const depart = pose('presente', .15), arrivee = pose('presente', .51);
+    expect(depart.flexR).toBeGreaterThan(6);
     expect(depart.openR).toBe(0);
     expect(arrivee.openR).toBeGreaterThan(.8);
-    expect(pose('marque', .41).indexR).toBeLessThan(.6);
-    expect(pose('marque', .52).indexR).toBeGreaterThan(.8);
-    expect(pose('marque', .81).indexR).toBe(0);
-    expect(pose('marque', .50).flexR).toBeCloseTo(pose('marque', .57).flexR, 8);
+    expect(pose('marque', .41).indexL).toBeLessThan(.6);
+    expect(pose('marque', .52).indexL).toBeGreaterThan(.8);
+    expect(pose('marque', .81).indexL).toBe(0);
+    expect(pose('marque', .50).flexL).toBeCloseTo(pose('marque', .57).flexL, 8);
+  });
+
+  it.each(['presente', 'confie', 'ouvre', 'marque', 'nuance', 'question', 'accent'])('garde toute la main sous la poitrine (%s)', kind => {
+    const cue = { start: .1, end: 1.9, kind, side: 1, hand: 1, face: 'neutre', force: 1 };
+    const jeu = { ...repose, cues: [cue], duration: 2 };
+    for (let t = 0; t <= 2000; t += 10) {
+      const p = poseAicha(jeu, t, { gain: 1.3, monture: false });
+      for (const s of ['L', 'R']) {
+        const a = brasAicha(p, s), angle = (a.rot + p['wrist' + s]) * Math.PI / 180;
+        // Upper bound of the lifted hand, including all finger tips and the cuff.
+        const top = a.main.y - 6 * Math.abs(Math.sin(angle)) + Math.min(-3.5 * Math.cos(angle), 16.5 * Math.cos(angle));
+        expect(top).toBeGreaterThan(73);
+      }
+    }
+  });
+
+  it('affine la manche au coude sans raccourcir le bras', () => {
+    const arm = brasAicha(poseAicha(repose, 0), 'L');
+    expect(distance(arm.map({ x: -24, y: 71, z: 0 }), arm.map({ x: -34, y: 71, z: 0 }))).toBeLessThan(8.5);
+    expect(distance(arm.S, arm.E)).toBeCloseTo(Math.hypot(6.7, 35.5), 7);
+    expect(distance(arm.E, arm.W)).toBeCloseTo(Math.hypot(3.9, 31.2), 7);
   });
 
   it('ne jette pas les bras sur un mot trop bref pour préparer un geste', () => {
@@ -173,7 +182,7 @@ describe('Mise en scène au temps de la source', () => {
     expect(Math.abs(prep.gazeX)).toBeGreaterThan(.015);
     expect(Math.abs(prep.neck)).toBe(0);
     expect(prep.yaw).toBe(0);
-    expect(high.flexL).toBeGreaterThan(100);
+    expect(high.flexL).toBeGreaterThan(74);
     expect(high.openL).toBeGreaterThan(.9);
     expect(high.flexR).toBeLessThan(5);
     expect(release.flexL).toBeLessThan(high.flexL);

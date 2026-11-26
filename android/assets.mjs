@@ -35,7 +35,7 @@ const voices = [
 ];
 const version = (await read('android/AndroidManifest.xml')).match(/\bandroid:versionName="(\d+\.\d+\.\d+)"/)?.[1];
 if (!version) throw Error('Version Android absente du manifeste.');
-const defaults = { ...DEFAUTS, moteurVoix: 'auto', voixId: '' };
+const defaults = { ...DEFAUTS, moteurVoix: 'auto', voixId: '', qualiteVideo: '720p' };
 const androidStrings = (labels, overrides) => ({ ...labels, ...overrides });
 await mkdir(output, { recursive: true });
 await mkdir(resolve(res, 'mipmap-xxxhdpi'), { recursive: true });
@@ -53,6 +53,11 @@ await Promise.all([
     'apropos.confidentialite.texte': 'Tes textes, projets et lectures restent sur cet appareil. Lectura utilise Internet seulement pour télécharger les voix HD à ta demande. Aucun compte ni traceur.',
     'voix.err.aucune': 'Aucune voix locale disponible. Installe une voix dans les réglages du téléphone ou télécharge une voix Lectura HD.',
     'android.terminal.fontSystem': 'Système',
+    'android.video.resolution': 'Résolution de la vidéo',
+    'android.video.uhdTitle': 'Enregistrement 4K indisponible',
+    'android.video.uhdUnsupported': 'Aucun encodeur disponible pour la 4K en {detail} à 30 i/s sur cet appareil. Essaie en HD ou dans l’autre orientation.',
+    'android.video.uhdFailed': 'L’enregistrement 4K en {detail} a échoué. Aucune vidéo n’a été créée. Essaie en HD.',
+    'android.video.useHd': 'Choisir la résolution HD',
     'android.cadrage.titre': 'Cadrage de la scène',
     'android.cadrage.aide': 'Règle la fenêtre du terminal et le personnage indépendamment, avec un aperçu en direct.',
     'android.cadrage.ajuster': 'Ajuster sur la scène',
@@ -80,6 +85,11 @@ await Promise.all([
     'apropos.confidentialite.texte': 'Your text, projects and playback stay on this device. Lectura only uses the Internet to download HD voices on request. No accounts or trackers.',
     'voix.err.aucune': 'No local voice available. Install one in your phone settings or download a Lectura HD voice.',
     'android.terminal.fontSystem': 'System',
+    'android.video.resolution': 'Video resolution',
+    'android.video.uhdTitle': '4K recording unavailable',
+    'android.video.uhdUnsupported': 'No encoder for {detail} 4K at 30 fps is available on this device. Try HD or the other orientation.',
+    'android.video.uhdFailed': '4K recording at {detail} failed. No video was created. Try HD instead.',
+    'android.video.useHd': 'Choose HD resolution',
     'android.cadrage.titre': 'Scene layout',
     'android.cadrage.aide': 'Adjust the terminal window and character independently, with a live preview.',
     'android.cadrage.ajuster': 'Adjust on stage',
