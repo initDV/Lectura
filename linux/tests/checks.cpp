@@ -17,6 +17,7 @@
 #include <QJsonDocument>
 #include <QInputDialog>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMediaDevices>
 #include <QProcess>
 #include <QPushButton>
@@ -407,20 +408,26 @@ void DesktopChecks::windowExport() {
         if (tries > 80) { if (auto *dialog = qobject_cast<QDialog *>(active)) dialog->reject(); return; }
         if (const auto format = qobject_cast<QInputDialog *>(active)) { formatSeen = true; format->accept(); }
         else if (const auto save = qobject_cast<QFileDialog *>(active)) {
-            saveSeen = true; save->selectFile(output);
-            static_cast<QDialog *>(save)->accept();
+            if (auto *name = save->findChild<QLineEdit *>("fileNameEdit")) {
+                name->setText(output); // selectFile() doesn't change the visible, focused editor.
+                saveSeen = save->selectedFiles() == QStringList{output};
+                if (saveSeen) static_cast<QDialog *>(save)->accept();
+            }
         }
     });
     dialogs.start(50);
     action->trigger();
     dialogs.stop();
     QVERIFY(formatSeen && saveSeen);
-    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(output).size() > 1000, 12000);
+    QTRY_VERIFY_WITH_TIMEOUT(action->isEnabled(), 12000);
+    const auto notice = window.findChild<QLabel *>("notice");
+    QVERIFY(notice);
+    QVERIFY2(notice->text().contains("Vidéo MP4 enregistrée"), qPrintable(notice->text()));
+    QVERIFY(QFileInfo(output).size() > 1000);
     const auto streams = checkVideo(output).value("streams").toArray();
     QCOMPARE(streams.size(), 2);
     QCOMPARE(streams.at(0).toObject().value("codec_name").toString(), QString("h264"));
     QCOMPARE(streams.at(1).toObject().value("codec_name").toString(), QString("aac"));
-    QTRY_VERIFY_WITH_TIMEOUT(window.findChild<QLabel *>("notice")->text().contains("Vidéo MP4 enregistrée"), 5000);
     QCOMPARE(seeker->maximum(), 0); // Export did not start the player.
 }
 
