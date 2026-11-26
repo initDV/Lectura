@@ -6,6 +6,7 @@
 #include <QMainWindow>
 #include <QTimer>
 
+class QAction;
 class QCheckBox;
 class QCloseEvent;
 class QComboBox;
@@ -82,6 +83,7 @@ private:
     QComboBox *cast = nullptr, *audio = nullptr, *motion = nullptr;
     QCheckBox *reduced = nullptr, *emotions = nullptr;
     QLabel *receipt = nullptr, *character = nullptr, *phase = nullptr, *timecode = nullptr, *count = nullptr, *message = nullptr;
+    QAction *exportMovie = nullptr;
     QPushButton *read = nullptr, *stop = nullptr, *pick = nullptr, *mute = nullptr;
     QSlider *seek = nullptr;
     int visibleChars = 0;

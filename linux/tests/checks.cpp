@@ -5,12 +5,17 @@
 #include "video.hpp"
 #include "window.hpp"
 
+#include <QAction>
+#include <QApplication>
 #include <QAudioDevice>
 #include <QComboBox>
+#include <QDialog>
 #include <QDir>
 #include <QFile>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QInputDialog>
 #include <QLabel>
 #include <QMediaDevices>
 #include <QProcess>
@@ -20,6 +25,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTextEdit>
+#include <QTimer>
 #include <QXmlStreamReader>
 #include <QtEndian>
 #include <QtConcurrentRun>
@@ -87,6 +93,7 @@ private Q_SLOTS:
     void videoExports();
     void audioControls();
     void windowControls();
+    void windowExport();
 };
 
 void DesktopChecks::initTestCase() { QStandardPaths::setTestModeEnabled(true); }
@@ -234,8 +241,11 @@ void DesktopChecks::siwisVoice() {
     const auto error = exportFromWorker(arts.at(4), t, project, video);
     QVERIFY2(error.isEmpty(), qPrintable(error));
     const auto media = checkVideo(video);
+    saveFile(QDir(output).filePath("Lectura-Linux-Siwis.ffprobe.json"), QJsonDocument(media).toJson());
     const auto streams = media.value("streams").toArray();
     QCOMPARE(streams.size(), 2);
+    QCOMPARE(streams.at(0).toObject().value("codec_name").toString(), QString("h264"));
+    QCOMPARE(streams.at(1).toObject().value("codec_name").toString(), QString("aac"));
     const auto formats = media.value("format").toObject().value("tags").toObject();
     QVERIFY(formats.value("comment").toString().contains("CC BY 4.0"));
     const double v = streams.at(0).toObject().value("duration").toString().toDouble();
@@ -297,6 +307,12 @@ void DesktopChecks::videoExports() {
     const auto cancelled = exportFromWorker(art, t, project, landscape, {}, &cancel, [&](int n) { if (n >= 4) cancel.store(true); });
     QVERIFY(cancelled.contains("annulé"));
     QCOMPARE(readFile(landscape, 8000000), saved);
+
+    const auto blocked = tmp.filePath("Dossier.mp4");
+    QVERIFY(QDir().mkdir(blocked));
+    const auto notSaved = exportFromWorker(art, silent, silentProject, blocked);
+    QVERIFY(notSaved.contains("Impossible d’enregistrer le MP4"));
+    QVERIFY(QFileInfo(blocked).isDir());
     QVERIFY(QDir(tmp.path()).entryList({".lectura-video-*"}, QDir::Dirs | QDir::Hidden).isEmpty());
 }
 
@@ -365,6 +381,47 @@ void DesktopChecks::windowControls() {
         QTest::qWait(200);
         QVERIFY(window.grab().save(qEnvironmentVariable("LECTURA_SCREENSHOT"), "PNG"));
     }
+}
+
+void DesktopChecks::windowExport() {
+    QTemporaryDir tmp;
+    auto project = newProject("Un aperçu natif.");
+    project["titre"] = "Export depuis le menu";
+    project["audio"] = QJsonObject{{"source","voix"}, {"modeLinux","espeak"}};
+    const auto input = tmp.filePath("Projet.lectura"), output = tmp.filePath("Scène.mp4");
+    saveProject(input, project);
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+    Window window(assets); window.openPath(input); window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    const auto action = window.findChild<QAction *>("exportMp4");
+    const auto seeker = window.findChild<QSlider *>("seek");
+    QVERIFY(action && seeker);
+    QCOMPARE(seeker->maximum(), 0); // no playback or prepared soundtrack yet
+    bool formatSeen = false, saveSeen = false;
+    QTimer dialogs;
+    int tries = 0;
+    connect(&dialogs, &QTimer::timeout, this, [&] {
+        ++tries;
+        const auto active = QApplication::activeModalWidget();
+        if (!active) return;
+        if (tries > 80) { if (auto *dialog = qobject_cast<QDialog *>(active)) dialog->reject(); return; }
+        if (const auto format = qobject_cast<QInputDialog *>(active)) { formatSeen = true; format->accept(); }
+        else if (const auto save = qobject_cast<QFileDialog *>(active)) {
+            saveSeen = true; save->selectFile(output);
+            static_cast<QDialog *>(save)->accept();
+        }
+    });
+    dialogs.start(50);
+    action->trigger();
+    dialogs.stop();
+    QVERIFY(formatSeen && saveSeen);
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(output).size() > 1000, 12000);
+    const auto streams = checkVideo(output).value("streams").toArray();
+    QCOMPARE(streams.size(), 2);
+    QCOMPARE(streams.at(0).toObject().value("codec_name").toString(), QString("h264"));
+    QCOMPARE(streams.at(1).toObject().value("codec_name").toString(), QString("aac"));
+    QTRY_VERIFY_WITH_TIMEOUT(window.findChild<QLabel *>("notice")->text().contains("Vidéo MP4 enregistrée"), 5000);
+    QCOMPARE(seeker->maximum(), 0); // Export did not start the player.
 }
 
 QTEST_MAIN(DesktopChecks)

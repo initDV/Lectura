@@ -3,6 +3,7 @@
 #include "transcript.hpp"
 #include "video.hpp"
 
+#include <QAction>
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
@@ -204,15 +205,16 @@ void Window::ui(const QString &assets) {
     menu->addSeparator();
     auto *png = menu->addAction("Capturer la scène en PNG…");
     auto *wav = menu->addAction("Exporter la piste en WAV…");
-    auto *movie = menu->addAction("Exporter la vidéo MP4…");
+    exportMovie = menu->addAction("Exporter la vidéo MP4…");
+    exportMovie->setObjectName("exportMp4");
+    exportMovie->setShortcut(QKeySequence("Ctrl+Shift+E"));
+    addAction(exportMovie);
     menu->addSeparator();
     auto *siwis = menu->addAction("Gérer la voix Siwis HD…");
     auto *info = menu->addAction("À propos de Lectura");
     more->setMenu(menu);
-    connect(menu, &QMenu::aboutToShow, this, [this, wav, movie] {
+    connect(menu, &QMenu::aboutToShow, this, [this, wav] {
         wav->setEnabled(player.track() && !player.track()->pcm.isEmpty());
-        const auto text = script->toPlainText();
-        movie->setEnabled(!cancelVideo && !preparing && !text.trimmed().isEmpty() && text.size() <= maxText);
     });
     connect(make, &QPushButton::clicked, this, [this] { if (confirmDiscard()) readProject(newProject(), {}); });
     connect(open, &QPushButton::clicked, this, [this] {
@@ -223,7 +225,7 @@ void Window::ui(const QString &assets) {
     connect(saveAs, &QAction::triggered, this, [this] { save(true); });
     connect(png, &QAction::triggered, this, &Window::exportPng);
     connect(wav, &QAction::triggered, this, &Window::exportWav);
-    connect(movie, &QAction::triggered, this, &Window::exportVideo);
+    connect(exportMovie, &QAction::triggered, this, &Window::exportVideo);
     connect(siwis, &QAction::triggered, this, &Window::manageSiwis);
     connect(info, &QAction::triggered, this, [this] { about(this); });
     connect(cast, &QComboBox::currentIndexChanged, this, [this] {
@@ -390,7 +392,10 @@ void Window::refresh() {
 void Window::controls() {
     using State = Transport::State;
     const auto s = player.state(); const auto track = player.track();
-    read->setEnabled(!preparing && !cancelVideo && !script->toPlainText().trimmed().isEmpty() && script->toPlainText().size() <= maxText);
+    const auto text = script->toPlainText();
+    const bool ready = !preparing && !cancelVideo && !text.trimmed().isEmpty() && text.size() <= maxText;
+    read->setEnabled(ready);
+    exportMovie->setEnabled(ready);
     read->setText(preparing ? "Préparation…" : s == State::Playing ? "Ⅱ  Pause" : s == State::Paused ? "▶  Reprendre" : s == State::Finished ? "↻  Relire" : "▶  Lire");
     stop->setEnabled(preparing || s == State::Playing || s == State::Paused || s == State::Finished);
     stop->setText(preparing ? "Annuler" : "Arrêter");
@@ -424,7 +429,7 @@ void Window::chooseAudio() {
     audioPath = path;
     { const QSignalBlocker block(audio); audio->setCurrentIndex(audio->findData(int(Source::File))); }
     changed(true);
-    notify("Audio associé. Appuie sur Lire pour le préparer.");
+    notify("Audio associé. Tu peux le lire ou exporter la vidéo.");
 }
 
 Request Window::request() const { return {project, source(), audioPath, assetPath, siwisModelPath()}; }
@@ -510,7 +515,7 @@ void Window::exportWav() {
     catch (const std::exception &e) { notify(QString::fromUtf8(e.what()), true); }
 }
 void Window::exportVideo() {
-    if (preparing || cancelVideo || script->toPlainText().trimmed().isEmpty()) return;
+    if (!exportMovie->isEnabled()) return;
     if (!ensureSource()) return;
     const QStringList formats{"Paysage · 1280 × 720", "Portrait · 720 × 1280"};
     bool ok = false;
