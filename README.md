@@ -4,6 +4,10 @@ Un robot animé parle à côté d'un faux terminal où ton texte s'affiche au fi
 tu appuies sur « Lancer », tu filmes l'écran ou tu exportes la vidéo. Application web gratuite, installable, qui
 fonctionne hors ligne. Aucun compte, aucun serveur, aucune statistique.
 
+## Logiciel natif pour ordinateur
+
+[Lectura pour Linux (Debian / Ubuntu, paquet `.deb`)](linux/README.md) : interface Qt native, sept personnages et lecture audio hors ligne, sans navigateur.
+
 ## Démarrer (Ubuntu, terminal)
 
 ```bash

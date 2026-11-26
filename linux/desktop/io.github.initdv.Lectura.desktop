@@ -1,0 +1,15 @@
+[Desktop Entry]
+Name=Lectura
+GenericName=Animated reading studio
+GenericName[fr]=Studio de lecture animé
+Comment=Read a text with an animated character, offline
+Comment[fr]=Fais lire ton texte par un personnage animé, hors ligne
+Exec=lectura %f
+Icon=io.github.initdv.Lectura
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;
+Keywords=reading;voice;animation;audio;
+Keywords[fr]=lecture;voix;animation;audio;
+MimeType=application/x-lectura;
+StartupNotify=true

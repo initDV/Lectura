@@ -1,0 +1,131 @@
+name: Lectura Linux — paquet natif
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'linux/**'
+      - 'characters/**'
+      - 'src/modules/**'
+      - 'data/**'
+      - 'icons/192.png'
+      - 'tools/character-catalogue.mjs'
+      - '.github/workflows/linux.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'linux/**'
+      - 'characters/**'
+      - 'src/modules/**'
+      - 'data/**'
+      - 'icons/192.png'
+      - 'tools/character-catalogue.mjs'
+      - '.github/workflows/linux.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lectura-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compiler et tester (Debian 12)
+    runs-on: ubuntu-24.04
+    container: debian:12
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Dépendances de compilation et de test
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates git build-essential cmake pkg-config dpkg-dev \
+            qt6-base-dev qt6-multimedia-dev qt6-qpa-plugins librsvg2-dev libcairo2-dev \
+            ffmpeg espeak-ng xvfb xauth fonts-dejavu-core pulseaudio pulseaudio-utils
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Compiler le binaire natif
+        run: |
+          npm ci --prefix linux --no-audit --no-fund
+          cmake -S linux -B linux/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build linux/build --parallel 2
+      - name: Recette intégrée de la scène, du son et des projets
+        run: |
+          useradd -m lectura-test
+          chown -R lectura-test linux/build
+          runuser -u lectura-test -- bash linux/tests/with-desktop.sh ctest --test-dir linux/build -V
+      - name: Générer le .deb et les empreintes
+        run: |
+          bash linux/package.sh
+          dpkg-deb --info linux/out/*.deb
+          (cd linux/out; sha256sum -c ./*.sha256)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lectura-Linux-amd64-deb
+          path: linux/out/*
+          if-no-files-found: error
+
+  install:
+    name: Installer le même .deb — ${{ matrix.distribution }}
+    needs: build
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distribution: Debian 12
+            image: debian:12
+            slug: debian-12
+          - distribution: Debian 13
+            image: debian:13
+            slug: debian-13
+          - distribution: Ubuntu 24.04 LTS
+            image: ubuntu:24.04
+            slug: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Préparer une session audio et X11 de test
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates git desktop-file-utils shared-mime-info fonts-dejavu-core \
+            xvfb xauth xdotool pulseaudio pulseaudio-utils imagemagick
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: Lectura-Linux-amd64-deb
+          path: linux/out
+      - name: Installer depuis APT et lancer comme utilisateur de bureau
+        run: |
+          cd linux/out
+          sha256sum -c ./*.sha256
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ./*.deb
+          cd ../..
+          useradd -m lectura-test
+          snapshots=$(mktemp -d)
+          chown lectura-test "$snapshots"
+          runuser -u lectura-test -- env LECTURA_SCREENSHOT="$snapshots/Lectura.png" \
+            bash linux/tests/with-desktop.sh bash linux/tests/installed.sh
+          mkdir -p linux/out/capture
+          mv "$snapshots/Lectura.png" linux/out/capture/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Apercu-Lectura-${{ matrix.slug }}
+          path: linux/out/capture/Lectura.png
+          if-no-files-found: error
