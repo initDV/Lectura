@@ -1,6 +1,9 @@
 name: Lectura Linux — remise ponctuelle des fichiers vérifiés
 
 on:
+  push:
+    branches: ['arena/d2229c4f-lectura']
+    paths: ['.github/workflows/lectura-linux-transfer.yml']
   workflow_dispatch:
     inputs:
       run:
@@ -16,13 +19,19 @@ on:
         required: true
         type: string
 
-permissions:
-  actions: read
-  contents: write
+permissions: {}
 
 jobs:
+  register:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'La remise de fichiers ne se fait que sur demande explicite.'
   transfer:
-    if: github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura'
+    permissions:
+      actions: read
+      contents: write
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura'
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     steps:
