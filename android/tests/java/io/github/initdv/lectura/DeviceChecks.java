@@ -134,12 +134,13 @@ public final class DeviceChecks extends Instrumentation {
         runOnMainSync(()->{try{fn.run();}catch(Throwable e){error.set(e);}});
         Throwable e=error.get();if(e instanceof Exception)throw (Exception)e;if(e instanceof Error)throw (Error)e;
     }
-    static View named(View view,String label){
-        if(view.getVisibility()!=View.VISIBLE)return null;
-        if(label.contentEquals(view.getContentDescription()==null?"":view.getContentDescription())
-            ||view instanceof TextView&&label.contentEquals(((TextView)view).getText()))return view;
+    static View named(View view,String label){return named(view,label,View.class);}
+    static <T extends View> T named(View view,String label,Class<T> type){
+        if(view==null||view.getVisibility()!=View.VISIBLE)return null;
+        if(type.isInstance(view)&&(label.contentEquals(view.getContentDescription()==null?"":view.getContentDescription())
+            ||view instanceof TextView&&label.contentEquals(((TextView)view).getText())))return type.cast(view);
         if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){
-            View match=named(group.getChildAt(i),label);if(match!=null)return match;
+            T match=named(group.getChildAt(i),label,type);if(match!=null)return match;
         }}return null;
     }
     private static JSONArray bounds(View v){
@@ -1056,7 +1057,7 @@ public final class DeviceChecks extends Instrumentation {
                 int w=ext.equals("mp4")?1280:720,h=ext.equals("mp4")?720:1280;
                 File encoded=encode(a,pcm,dir,ext,w,h);File named=new File(dir,"lectura-test."+ext);Files.move(encoded.toPath(),named.toPath(),StandardCopyOption.REPLACE_EXISTING);
                 shareGrant(a,named);
-                try(Pcm decoded=Pcm.decode(named,dir)){require(decoded.duration()>1200,"Audio réel " + ext);short[] b=new short[4096];int n=decoded.read(decoded.rate/2,b,4096);int peak=0;for(int i=0;i<n;i++)peak=Math.max(peak,Math.abs((int)b[i]));require(peak>5000,"Audio audible "+ext);
+                try(Pcm decoded=Pcm.decode(named,dir)){require(decoded.duration()>1200,"Audio réel "+ext+" : "+decoded.duration()+" ms décodés");short[] b=new short[4096];int n=decoded.read(decoded.rate/2,b,4096);int peak=0;for(int i=0;i<n;i++)peak=Math.max(peak,Math.abs((int)b[i]));require(peak>5000,"Audio audible "+ext);
                     int crossings=0;for(int i=1;i<n;i++)if(b[i-1]<0&&b[i]>=0)crossings++;
                     double hz=crossings*(double)decoded.rate/n;require(hz>400&&hz<490,"Fréquence après accélération "+hz+" Hz");}
                 if(ext.equals("mp4")){

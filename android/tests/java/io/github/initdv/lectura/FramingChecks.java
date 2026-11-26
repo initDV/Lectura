@@ -141,11 +141,11 @@ final class FramingChecks {
 
     private static boolean near(float a,float b){return Math.abs(a-b)<.025f;}
     private static void set(MainActivity a,Control control,int value){
-        View view=DeviceChecks.named(a.modal,a.t(LABEL+control.key));
-        require(view instanceof SeekBar,"Curseur absent : "+control.key);
+        SeekBar slider=DeviceChecks.named(a.modal,a.t(LABEL+control.key),SeekBar.class);
+        require(slider!=null,"Curseur absent : "+control.key);
         Bundle args=new Bundle();args.putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,value);
-        require(view.performAccessibilityAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),args),"Curseur inactif : "+control.key);
-        require(((SeekBar)view).getProgress()==value&&view.getStateDescription().toString().endsWith(value+" %"),"Valeur non affichée : "+control.key);
+        require(slider.performAccessibilityAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),args),"Curseur inactif : "+control.key);
+        require(slider.getProgress()==value&&slider.getStateDescription().toString().endsWith(value+" %"),"Valeur non affichée : "+control.key);
     }
 
     private static void change(DeviceChecks d,MainActivity a)throws Exception{
