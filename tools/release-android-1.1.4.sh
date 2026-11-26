@@ -3,17 +3,18 @@
 set -Eeuo pipefail
 repo=initDV/Lectura
 branch=arena/d2229c4f-lectura
-tag=v1.1.3
+expected_sha=dcc8a8034211f3e506ff40b5b359866315b28eac
+tag=v1.1.4
 version=${tag#v}
 bundle="Lectura-$tag-android.zip"
 sources=Lectura-Android-sources.zip
 base="https://github.com/$repo/releases/download/$tag/"
 phase=prévol
-trap 'rc=$?; printf "::error title=Distribution Android 1.1.3::%s (ligne %s, code %s)\n" "$phase" "$LINENO" "$rc" >&2; exit "$rc"' ERR
+trap 'rc=$?; printf "::error title=Distribution Android 1.1.4::%s (ligne %s, code %s)\n" "$phase" "$LINENO" "$rc" >&2; exit "$rc"' ERR
 [[ ${GITHUB_REPOSITORY:-} == "$repo" && ${GITHUB_REF:-} == "refs/heads/$branch" && ${GITHUB_EVENT_NAME:-} == workflow_dispatch ]]
 : "${GH_TOKEN:?Jeton Actions absent}" "${ANDROID_HOME:?SDK absent}"
 run=${1:-}; draft=${2:-}
-[[ $run =~ ^[1-9][0-9]+$ && $draft =~ ^[1-9][0-9]+$ ]]
+[[ $run == 45901739826 && $draft =~ ^[1-9][0-9]+$ ]]
 api() { gh api "repos/$repo/$1" "${@:2}"; }
 release() { gh release "$@" --repo "$repo"; }
 sha256() { sha256sum "$1" | cut -d' ' -f1; }
@@ -27,13 +28,15 @@ api "actions/runs/$run" > "$work/run.json"
 sha=$(jq -er --arg branch "$branch" '
   select(.head_branch==$branch and .path==".github/workflows/android.yml" and .event=="push"
     and .status=="completed" and .conclusion=="success") | .head_sha' "$work/run.json")
-[[ $sha =~ ^[0-9a-f]{40}$ ]]
+[[ $sha == "$expected_sha" ]]
 code=$(jq -er '.run_number' "$work/run.json")
-((code > 44)) # Supérieur aussi au candidat de test déjà remis (code 44).
+[[ $code == 47 ]] # Le prédécesseur public 1.1.3 porte le code 46.
 git merge-base --is-ancestor "$sha" HEAD
 # Les sources du produit publié doivent être celles validées ; seul le circuit de publication peut être ajouté ensuite.
-git diff --exit-code "$sha" HEAD -- . ':!.github/workflows/publish-lectura-1.1.3.yml' \
-  ':!tools/release-android-1.1.3.sh' ':!tools/distribution/landing-update-1.1.3.py'
+git diff --exit-code "$sha" HEAD -- . \
+  ':!.github/workflows/publish-lectura-1.1.3.yml' ':!.github/workflows/publish-lectura-1.1.4.yml' \
+  ':!tools/release-android-1.1.3.sh' ':!tools/release-android-1.1.4.sh' \
+  ':!tools/distribution/landing-update-1.1.3.py' ':!tools/distribution/landing-update-1.1.4.py'
 api "actions/runs/$run/jobs" | jq -e '
   any(.jobs[]; .name=="android" and .conclusion=="success"
     and any(.steps[]; .name=="Test Android 12" and .conclusion=="success"))' >/dev/null
@@ -41,7 +44,7 @@ api "releases/$draft" | jq -e --arg tag "$tag" --arg sha "$sha" --arg zip "$bund
   .draft and (.prerelease|not) and .tag_name==$tag and .target_commitish==$sha
   and all(.assets[]; .name=="Lectura.apk" or .name==$zip or .name==$src)' >/dev/null
 [[ -z $(git ls-remote --tags "https://github.com/$repo.git" "refs/tags/$tag") ]]
-api 'releases/latest' | jq -e '.tag_name=="v1.1.2"' >/dev/null
+api 'releases/latest' | jq -e '.tag_name=="v1.1.3"' >/dev/null
 
 phase='récupération et vérification des artefacts originaux'
 api "actions/runs/$run/artifacts" > "$work/artifacts.json"
@@ -91,11 +94,12 @@ EOF
 cat > "$work/notes.md" <<EOF
 ## Lectura $version pour Android 12 ou plus
 
-- En portrait sur téléphone, les sept personnages sont affichés en plus grand. La scène prend toute la largeur et le terminal passe sous le personnage.
+- Corrige le cadrage sur les téléphones en portrait allongé : la scène donne toute la largeur aux sept personnages et le terminal passe dessous. Le cas 1080 × 2400 à 600 dp de large a été testé sur émulateur.
+- **À propos** indique désormais **Lectura Android** pour le distinguer de Lectura Web.
 - Le paysage et le cadrage des exports PNG et vidéo ne changent pas.
 - Téléchargez **Lectura.apk** et installez-le par-dessus la version précédente, **sans désinstaller**. Le ZIP est facultatif et contient aussi les sources et les notices.
 
-[APK de la recette signée Android #$code](https://github.com/$repo/actions/runs/$run), commit \`$sha\`. La mise à jour depuis la 1.1.2 publique, la conservation des projets et les exports ont été vérifiés sur émulateur Android 12.
+[APK de la recette signée Android #$code](https://github.com/$repo/actions/runs/$run), commit \`$sha\`. La mise à jour depuis la 1.1.3 publique, la conservation des projets et les exports ont été vérifiés sur émulateur Android 12.
 
 - SHA-256 de l’APK : \`$apk_hash\`
 - Certificat de signature inchangé : \`$cert\`
@@ -112,7 +116,7 @@ verify_apk "$work/relu/Lectura.apk"
 release edit "$tag" --notes-file "$work/notes.md"
 
 phase='publication et téléchargement public sans authentification'
-api 'releases/latest' | jq -e '.tag_name=="v1.1.2"' >/dev/null
+api 'releases/latest' | jq -e '.tag_name=="v1.1.3"' >/dev/null
 release edit "$tag" --draft=false --latest
 api "git/ref/tags/$tag" | jq -e --arg sha "$sha" '.object.type=="commit" and .object.sha==$sha' >/dev/null
 api "releases/tags/$tag" > "$work/release.json"
@@ -127,5 +131,5 @@ for file in "$apk" "$work/$bundle" "$work/$sources"; do
   curl -fsSL --retry 3 --retry-all-errors --max-time 120 "$base$name" -o "$work/public"
   cmp "$file" "$work/public"
 done
-printf '::notice title=APK Android 1.1.3 publié::Code %s ; téléchargement anonyme identique ; SHA-256 %s.\n' "$code" "$apk_hash"
+printf '::notice title=APK Android 1.1.4 publié::Code %s ; téléchargement anonyme identique ; SHA-256 %s.\n' "$code" "$apk_hash"
 printf -- '- [Télécharger Lectura.apk](%sLectura.apk)\n- Recette Android #%s, SHA-256 : `%s`\n' "$base" "$code" "$apk_hash" >> "$GITHUB_STEP_SUMMARY"

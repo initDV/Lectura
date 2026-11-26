@@ -17,14 +17,15 @@ import zipfile
 REPO = 'initDV/Lectura'
 SITE = 'https://initdv.github.io/Lectura/'
 RELEASES = f'https://github.com/{REPO}/releases/'
-TAG = 'v1.1.3'
-OLD_TAG = 'v1.1.2'
+TAG = 'v1.1.4'
+RELEASE_SHA = 'dcc8a8034211f3e506ff40b5b359866315b28eac'
+OLD_TAG = 'v1.1.3'
 PAGE = 'app/index.html'
-BASE_DEPLOYMENT = 8092626596
-BASE_RUN = 45872307580
-BASE_SHA = '56ad09ca8305c4e0cd44e34d8930d20e1cfb8b97'
-ARTIFACT = 15142494527
-ARCHIVE_DIGEST = 'sha256:3d202bd0270ce086b11fdd14fd5d5713a5756f0836c7f2cec4678dd9c93ac7bf'
+BASE_DEPLOYMENT = 8095770739
+BASE_RUN = 45895096560
+BASE_SHA = '006449bbaf8956e5c483c2e3388e4ef88c2a5f09'
+ARTIFACT = 15153137600
+ARCHIVE_DIGEST = 'sha256:97ff86c250e38e9252f97b83261ca262aff8c9748f0e1fb22268a28076a44e81'
 # Contrôler aussi que le navigateur garde le même service worker, script et cadrage PWA.
 PUBLIC_CHECKS = (PAGE, 'index.html', 'sw.js', 'manifest.webmanifest', 'src/version.js',
                  'src/ui/scene.js', 'src/ui/styles/scene.css', 'models/index.json',
@@ -57,7 +58,8 @@ def assets(tag):
 
 def release_guard():
     release = api(f'releases/tags/{TAG}')
-    require(release['tag_name'] == TAG and not release['draft'] and not release['prerelease'],
+    require(release['tag_name'] == TAG and release['target_commitish'] == RELEASE_SHA
+            and not release['draft'] and not release['prerelease'],
             'La version Android n’est pas publique.')
     actual = {a['browser_download_url'] for a in release['assets']
               if a['state'] == 'uploaded' and a['size'] > 0 and re.fullmatch(r'sha256:[a-f0-9]{64}', a.get('digest') or '')}
@@ -79,6 +81,19 @@ class Links(HTMLParser):
 def check_page(html, tag):
     require(Links(html).release_links == assets(tag) | {f'{RELEASES}tag/{tag}'},
             f'Liens de téléchargement incohérents dans /app/ ({tag}).')
+
+
+def update_android_version(content):
+    # Reprendre le HTML public lui-même : changer les liens et les deux mentions de la version Android.
+    check_page(content.decode('utf-8'), OLD_TAG)
+    fields = [f'href="{url}"' for url in assets(OLD_TAG) | {f'{RELEASES}tag/{OLD_TAG}'}]
+    fields += [f'<span class="header-platform">Android</span> {OLD_TAG}', f'<p>Android {OLD_TAG} · Lectura Web</p>']
+    for field in fields:
+        old = field.encode()
+        require(old in content, f'Mention de la version Android introuvable : {field}')
+        content = content.replace(old, field.replace(OLD_TAG, TAG).encode())
+    check_page(content.decode('utf-8'), TAG)
+    return content
 
 
 def sha256(path):
@@ -117,11 +132,11 @@ def restore(archive, site):
                         shutil.copyfileobj(src, dst)
 
 
-def prepare(site, proof, archive, page):
+def prepare(site, proof, archive):
     snapshot_guard()
     release_guard()
     run = api(f'actions/runs/{BASE_RUN}')
-    require(run['conclusion'] == 'success' and run['path'] == '.github/workflows/deploy.yml' and run['head_sha'] == BASE_SHA,
+    require(run['conclusion'] == 'success' and run['path'] == '.github/workflows/publish-lectura-1.1.3.yml' and run['head_sha'] == BASE_SHA,
             'Provenance du snapshot Pages invalide.')
     artifact = api(f'actions/artifacts/{ARTIFACT}')
     require(artifact['name'] == 'github-pages' and not artifact['expired'] and artifact['digest'] == ARCHIVE_DIGEST
@@ -136,9 +151,8 @@ def prepare(site, proof, archive, page):
     require(set(PUBLIC_CHECKS) <= before.keys(), 'Des fichiers du site public manquent dans le snapshot.')
     for path in PUBLIC_CHECKS:
         require(fetch_hash(path) == before[path], f'Le fichier en ligne ne correspond pas au snapshot : {path}')
-    check_page((site / PAGE).read_text(), OLD_TAG)
-    check_page(page.read_text(), TAG)
-    shutil.copyfile(page, site / PAGE)
+    page = site / PAGE
+    page.write_bytes(update_android_version(page.read_bytes()))
     after = inventory(site)
     require(before.keys() == after.keys() and [p for p in before if before[p] != after[p]] == [PAGE],
             'Seul app/index.html doit être modifié.')
@@ -162,7 +176,7 @@ def verify(proof):
     for path, digest in expected.items():
         require(fetch_hash(path) == digest, f'Contenu servi inattendu : {path}')
     release_guard()
-    print(f'::notice title=Téléchargement v1.1.3 en ligne::Bouton APK vérifié sur /app/ ; {info["unchanged"]} fichiers repris sans modification, dont la PWA.')
+    print(f'::notice title=Téléchargement v1.1.4 en ligne::Bouton APK vérifié sur /app/ ; {info["unchanged"]} fichiers repris sans modification, dont la PWA.')
 
 
 if __name__ == '__main__':
