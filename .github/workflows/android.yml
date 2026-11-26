@@ -133,16 +133,18 @@ jobs:
                   raise SystemExit('Des poids vocaux sont incorporés à l’APK.')
           print('::notice title=ABI et poids::ONNX et Sherpa présents en ARM64 et x86_64 ; aucun modèle vocal incorporé.')
           PY
-      - name: Récupérer l’APK à mettre à jour
+      - name: Récupérer un candidat de référence sur demande
+        if: inputs.predecessor_run != ''
+        timeout-minutes: 2
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: Lectura-Android-API31+
           github-token: ${{ github.token }}
-          # Last public APK: v1.1.2 (code 42), signed with the permanent certificate.
-          run-id: ${{ inputs.predecessor_run || '45869559426' }}
+          run-id: ${{ inputs.predecessor_run }}
           path: ${{ runner.temp }}/lectura-predecessor
       - name: Comparer les certificats de signature
+        timeout-minutes: 4
         id: certificates
         env:
           LECTURA_REPORT: ${{ runner.temp }}/lectura-report
@@ -157,12 +159,10 @@ jobs:
           echo "Nouveau : $current" > "$LECTURA_REPORT/apk-certificates.txt"
           previous="$RUNNER_TEMP/lectura-predecessor/Lectura.apk"
           if [[ -z "$REFERENCE_RUN" ]]; then
-            # Artifacts expire; the public predecessor remains available and can be checked byte for byte.
-            if [[ ! -f "$previous" ]]; then
-              mkdir -p "$(dirname "$previous")"
-              curl -fsSL --retry 3 --retry-all-errors --max-time 150 \
-                'https://github.com/initDV/Lectura/releases/download/v1.1.2/Lectura.apk' -o "$previous"
-            fi
+            # Test the actual public APK, with a bounded download and its pinned hash.
+            mkdir -p "$(dirname "$previous")"
+            curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 --max-time 85 --retry-max-time 170 \
+              'https://github.com/initDV/Lectura/releases/download/v1.1.2/Lectura.apk' -o "$previous"
             printf '%s  %s\n' 'a3709407bef5f41808ed07b5c0f1c685796edafaac60b4c91d0319c84e3efee8' "$previous" | sha256sum -c -
           fi
           if [[ -f "$previous" ]]; then
