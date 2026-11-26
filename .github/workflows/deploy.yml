@@ -63,7 +63,8 @@ jobs:
           {
             echo 'sha256<<LECTURA_SHA256'
             sha256sum index.html sw.js manifest.webmanifest src/version.js models/index.json \
-              app/index.html app/styles.css app/reveal.js privacy/index.html robots.txt sitemap.xml google121a4ae782cb28f.html
+              app/index.html app/styles.css app/reveal.js privacy/index.html robots.txt sitemap.xml google121a4ae782cb28f.html \
+              characters/robot_lectura_scene.svg src/modules/robot-motion.js src/modules/robot-stage.js src/ui/scene-export.js
             echo LECTURA_SHA256
           } >> "$GITHUB_OUTPUT"
       - uses: actions/configure-pages@v5
@@ -105,7 +106,7 @@ jobs:
           }
           for tentative in {1..12}; do
             if verifier; then
-              echo '::notice title=Pages vérifié::PWA, téléchargements, confidentialité et référencement correspondent au build déployé.'
+              echo '::notice title=Pages vérifié::PWA, rig du robot, export, téléchargements, confidentialité et référencement correspondent au build déployé.'
               exit 0
             fi
             sleep 5

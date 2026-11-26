@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 const racine = join(dirname(fileURLToPath(import.meta.url)), '..'), dist = join(racine, 'dist');
 const A_COPIER = ['index.html', 'offline.html', 'manifest.webmanifest', 'sw.js', 'LICENSE', 'THIRD_PARTY_LICENSES.md', 'src', 'characters', 'data', 'icons', 'fonts'];
 const PAGES_PUBLIQUES = ['app', 'privacy', 'robots.txt', 'sitemap.xml', 'google121a4ae782cb28f.html'];
-const RELEASE_ANDROID = 'v1.1.0';
+const RELEASE_ANDROID = 'v1.1.1';
 const PIECES = ['#body', '#arm-l', '#arm-r', '#mouth', '#eye-l', '#eye-r', '#brow-l', '#brow-r'];
 
 /** Vérifie chaque personnage (JSON + SVG) et réécrit characters/index.json : aucun code à modifier pour en ajouter un. */
