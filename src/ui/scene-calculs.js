@@ -8,6 +8,8 @@ import { NOMS } from '../modules/expressions.js';
  *   personnageId: string, terminal: {vitesseCps: number}}} projet
  */
 export function signaturePreparation(texteNettoye, apercu, projet) {
+  // L'aperçu n'a pas de voix ni de vitesse cuite : le ralenti agit sur l'horloge déjà chargée.
+  if (apercu) return JSON.stringify([texteNettoye, true, projet.personnageId, projet.terminal.vitesseCps]);
   return JSON.stringify([texteNettoye, apercu, projet.audio.source, projet.audio.nomFichier, projet.audio.voix.moteur, projet.audio.voix.id,
     projet.audio.voix.moteur === 'piper' ? projet.audio.voix.vitesse : 0, projet.personnageId, projet.terminal.vitesseCps]);
 }

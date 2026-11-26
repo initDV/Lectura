@@ -8,39 +8,15 @@ import { gzipSync } from 'node:zlib';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { empaqueterPersonnages, reindexerPersonnages } from './character-catalogue.mjs';
 
 const racine = join(dirname(fileURLToPath(import.meta.url)), '..'), dist = join(racine, 'dist');
-const A_COPIER = ['index.html', 'offline.html', 'manifest.webmanifest', 'sw.js', 'LICENSE', 'THIRD_PARTY_LICENSES.md', 'src', 'characters', 'data', 'icons', 'fonts'];
+const A_COPIER = ['index.html', 'offline.html', 'manifest.webmanifest', 'sw.js', 'LICENSE', 'THIRD_PARTY_LICENSES.md', 'src', 'data', 'icons', 'fonts'];
 const PAGES_PUBLIQUES = ['app', 'privacy', 'robots.txt', 'sitemap.xml', 'google121a4ae782cb28f.html'];
 const RELEASE_ANDROID = 'v1.1.1';
-const PIECES = ['#body', '#arm-l', '#arm-r', '#mouth', '#eye-l', '#eye-r', '#brow-l', '#brow-r'];
 
-/** Vérifie chaque personnage (JSON + SVG) et réécrit characters/index.json : aucun code à modifier pour en ajouter un. */
-function indexPersonnages() {
-  const dossier = join(racine, 'characters'), ids = [], erreurs = [];
-  for (const f of readdirSync(dossier).filter((x) => x.endsWith('.json') && x !== 'index.json').sort()) {
-    try {
-      const def = JSON.parse(readFileSync(join(dossier, f), 'utf8')), id = f.slice(0, -5);
-      if (def.id !== id) throw new Error(`"id" vaut "${def.id}" mais le fichier s'appelle ${f}`);
-      for (const k of ['nom', 'svg', 'mouvements']) if (!def[k]) throw new Error(`champ "${k}" manquant`);
-      for (const nom of [def.svg, def.svgScene].filter(Boolean)) {
-        const svg = readFileSync(join(dossier, nom), 'utf8');
-        for (const p of PIECES) if (!svg.includes(`id="${p.slice(1)}"`)) throw new Error(`${nom} : élément ${p} manquant`);
-        if (/href="(?!#)|<image|<foreignObject/i.test(svg)) throw new Error(`${nom} : le dessin doit être autonome (aucune référence externe)`);
-        if (/<script|\son\w+=|javascript:/i.test(svg)) throw new Error(`${nom} : script interdit dans un personnage`);
-      }
-      ids.push(id);
-    } catch (err) { erreurs.push(`  ✖ ${f} : ${err.message}`); }
-  }
-  if (erreurs.length) throw new Error(`Personnages invalides :\n${erreurs.join('\n')}`);
-  const ordre = ['robot_lectura', 'robot_rouge'], rang = (id) => (ordre.includes(id) ? ordre.indexOf(id) : ordre.length);
-  const liste = ids.sort((a, b) => rang(a) - rang(b));
-  const ancien = JSON.parse(readFileSync(join(dossier, 'index.json'), 'utf8'));
-  const garde = (ancien.personnages || ancien).filter((id) => liste.includes(id)); // conserve l'ordre déjà choisi
-  const final = [...garde, ...liste.filter((id) => !garde.includes(id))];
-  writeFileSync(join(dossier, 'index.json'), `${JSON.stringify(Array.isArray(ancien) ? final : { ...ancien, personnages: final }, null, 2)}\n`);
-  console.log(`✔ characters/index.json : ${final.length} personnages (${final.join(', ')})`);
-}
+const catalogue = join(racine, 'characters');
+const annoncer = (ids) => console.log(`✔ characters/index.json : ${ids.length} personnages (${ids.join(', ')})`);
 
 const lister = (d) => readdirSync(d).flatMap((f) => { const p = join(d, f); return statSync(p).isDirectory() ? lister(p) : [p]; });
 
@@ -48,6 +24,7 @@ function construire() {
   if (!existsSync(join(racine, 'THIRD_PARTY_LICENSES.md'))) throw new Error('THIRD_PARTY_LICENSES.md est absent.');
   rmSync(dist, { recursive: true, force: true });
   mkdirSync(dist, { recursive: true });
+  annoncer(empaqueterPersonnages(catalogue, join(dist, 'characters')));
   for (const f of A_COPIER) cpSync(join(racine, f), join(dist, f), { recursive: true });
   writeFileSync(join(dist, '.nojekyll'), '');
   let voix = 'non incluse (lance « npm run voice » avant le build pour proposer la voix HD)';
@@ -96,14 +73,14 @@ function construire() {
   const total = fichiers.reduce((a, f) => a + statSync(join(dist, f)).size, 0);
   console.log(`✔ dist/ prêt : ${fichiers.length} fichiers, ${(total / 1024).toFixed(0)} Ko (hors voix HD)`);
   console.log(`✔ version ${version} · ${date} · ${h}`);
-  console.log(`✔ code + styles + polices : ${(gz / 1024).toFixed(0)} Ko compressés ${gz < 300 * 1024 ? '(< 300 Ko : objectif tenu)' : '(> 300 Ko : objectif dépassé !)'}`);
+  console.log(`✔ code + styles + polices : ${gz} o gzip ${gz < 307200 ? '(< 307 200 o : objectif tenu)' : '(≥ 307 200 o : objectif dépassé !)'}`);
   console.log(`✔ voix Lectura HD : ${voix}`);
   if (gz >= 300 * 1024) process.exitCode = 2;
 }
 
 try {
-  indexPersonnages();
-  if (!process.argv.includes('--index')) construire();
+  if (process.argv.includes('--index')) annoncer(reindexerPersonnages(catalogue));
+  else construire();
 } catch (err) {
   console.error(`✖ ${err.message}`);
   process.exit(1);

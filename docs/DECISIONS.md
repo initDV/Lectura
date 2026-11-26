@@ -9,7 +9,7 @@ Les parties B (personnage) et D (interface) du cahier des charges ont été remp
 
 - **Personnage** : le bonhomme pictogramme est supprimé. `robot_lectura.svg` reproduit la référence B2 à l'identique.
   Les 12 autres robots en dérivent (même corps, couleur et accessoires différents).
-- **Catalogue** : les 43 personnages sont tous accessibles. La vignette de `robot_lectura` reste intacte ; la scène utilise un SVG articulé distinct.
+- **Catalogue** : le [catalogue commun actuel](AICHA-PWA.md) compte sept personnages. La vignette de `robot_lectura` reste intacte ; la scène utilise un SVG articulé distinct.
 - **Anciens projets** : `professor_1` devient `robot_lectura`, `robot` devient `robot_rouge`, l'ancien fond devient `#0d0d12`.
 - **`character.js`** : le code de référence B3 est repris (hauteurs de bouche, respiration, bras, clignement,
   expressions). Ajouts, sans le contourner : style de mouvement lu dans la fiche JSON, geste sur les mots-clés,

@@ -114,7 +114,7 @@ async function sourcePiper(projet, audio, onProgress, signal) {
   }
   signal?.throwIfAborted();
   await audio.load(wav, signal);
-  return { source: new FileSource(audio), segments: segs.map((s, i) => ({ id: i + 1, expression: 'auto', ...s })), vitesseBase: v.vitesse };
+  return { source: new FileSource(audio), blob: wav, segments: segs.map((s, i) => ({ id: i + 1, expression: 'auto', ...s })), vitesseBase: v.vitesse };
 }
 
 async function sourceFichier(projet, audio, signal) {
@@ -122,14 +122,14 @@ async function sourceFichier(projet, audio, signal) {
   if (!blob) throw new Error(t('scene.err.sansAudio'));
   const duree = await audio.load(blob, signal);
   const ok = projet.timing === 'sous-titres' && segmentsValides(projet.texte, projet.segments); // dates d'un .srt/.vtt
-  return { source: new FileSource(audio), segments: ok ? projet.segments : autoTiming(projet.texte, duree) };
+  return { source: new FileSource(audio), blob, segments: ok ? projet.segments : autoTiming(projet.texte, duree) };
 }
 
 /**
  * @param {any} projet
- * @param {{audio: import('./audio.js').AudioEngine, apercu?: boolean, perso?: {def:any, svg:any}|null, signal?: AbortSignal, onProgress?: (fait:number, total:number, etape:string)=>void}} o
+ * @param {{audio: import('./audio.js').AudioEngine, apercu?: boolean, perso?: {def:any, svg:any}|null, analyserAudio?: (blob:Blob, audio:import('./audio.js').AudioEngine, signal?:AbortSignal)=>Promise<((ms:number)=>number)|null>, signal?: AbortSignal, onProgress?: (fait:number, total:number, etape:string)=>void}} o
  */
-export async function prepare(projet, { audio, apercu = false, perso: dejaCharge = null, onProgress, signal }) {
+export async function prepare(projet, { audio, apercu = false, perso: dejaCharge = null, analyserAudio, onProgress, signal }) {
   if (!projet.texte.trim()) throw new Error(t('scene.err.texteVide'));
   onProgress?.(0, 1, t('scene.prep.ressources'));
   const [dict, perso, lexique] = await Promise.all([loadDict(), dejaCharge || loadProjectCharacter(projet), loadLexique()]);
@@ -147,8 +147,16 @@ export async function prepare(projet, { audio, apercu = false, perso: dejaCharge
   } else {
     res = await sourceVoixSysteme(projet);
   }
-  const segments = reportExpressions(res.segments, res.segments === projet.segments ? [] : projet.segments);
-  if (!segments.length) throw new Error(t('scene.err.texteVide'));
-  // vitesseBase = vitesse déjà « cuite » dans la source (voix) ; la scène applique ensuite vitesse ÷ vitesseBase.
-  return { dict, matcher, lexique, def: perso.def, svg: perso.svg, source: res.source, segments, timeline: new Timeline(projet.texte, segments), vitesseBase: res.vitesseBase || 1 };
+  try {
+    const segments = reportExpressions(res.segments, res.segments === projet.segments ? [] : projet.segments);
+    if (!segments.length) throw new Error(t('scene.err.texteVide'));
+    const enveloppe = analyserAudio && 'blob' in res ? await analyserAudio(res.blob, audio, signal) : null;
+    signal?.throwIfAborted();
+    // vitesseBase = vitesse déjà « cuite » dans la source (voix) ; la scène applique ensuite vitesse ÷ vitesseBase.
+    return { dict, matcher, lexique, def: perso.def, svg: perso.svg, source: res.source, segments, enveloppe,
+      timeline: new Timeline(projet.texte, segments), vitesseBase: res.vitesseBase || 1 };
+  } catch (err) {
+    res.source.dispose();
+    throw err;
+  }
 }

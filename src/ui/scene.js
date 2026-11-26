@@ -12,6 +12,7 @@ import { prepare, loadProjectCharacter } from '../modules/prepare.js';
 import { planRobot, poseRobot } from '../modules/robot-motion.js';
 import { rigRobot } from '../modules/robot-stage.js';
 import { WithOutro } from '../modules/player.js';
+import { RIG_AICHA } from '../modules/character-spec.js';
 import { Character } from '../modules/character.js';
 import { creerHumeur } from '../modules/humeur.js';
 import { Terminal } from '../modules/terminal.js';
@@ -40,7 +41,7 @@ export async function render(root) {
   const projet = store.projet, audio = new AudioEngine();
   /** @type {any} */ let prep = null; /** @type {any} */ let perso = null; /** @type {any} */ let character = null; /** @type {any} */ let terminal = null;
   /** @type {any} */ let humeur = null;
-  let preparation = null, essaiLecture = 0, robotRig = null, direction = null, pausedFrame = null;
+  let preparation = null, chargementPerso = null, aicha = null, essaiLecture = 0, robotRig = null, direction = null, pausedFrame = null;
   let raf = 0, vivant = true, exprManuelle = '', derniereExpr = '', dernierSeg = null, dernierRang = 0, muet = false, clic = 0, arrete = true, signature = '', masque = false;
 
   const charPane = h('div', { class: 'char-pane' });
@@ -71,7 +72,8 @@ export async function render(root) {
 
   const temps = () => (prep ? prep.source.timeMs() : 0);
   const pret = () => !!prep && ['PRET', 'LECTURE', 'PAUSE', 'FIN'].includes(store.etat);
-  const pourCanvas = () => ({ projet, svg: perso.svg, terminal, titreTerminal: store.settings.titreTerminal, texteMasque: masque });
+  const pourCanvas = () => ({ projet, svg: perso.svg, terminal, titreTerminal: store.settings.titreTerminal, texteMasque: masque,
+    peindreDecor: aicha?.decor.peindre, avance: aicha?.decor.avance });
   const exportScene = creerExport({ projet, badge: badgeRec, pret: () => pret() && !!terminal, pourCanvas, source: () => prep.source, pause, chercher, jouer, format: () => store.settings.formatVideo });
   const majUi = () => controls.update({ etat: varianteCommandes(store.etat, arrete), muet });
   let _brut = '', _propre = '';
@@ -106,18 +108,28 @@ export async function render(root) {
     oeil.title = oeil.getAttribute('aria-label');
   }
 
-  /** Charge le personnage et l'anime au repos (visible avant même le premier « Lancer »). */
-  async function chargerPerso() {
-    try {
+  /** Une seule lecture du SVG, même si « Lancer » arrive pendant le chargement initial. */
+  function chargerPerso() {
+    if (chargementPerso) return chargementPerso;
+    chargementPerso = (async () => {
       const p = await loadProjectCharacter(projet);
       if (!vivant) return;
+      const gain = GAINS[projet.reglages.mouvements] || 1;
+      if (p.def.rig === RIG_AICHA) {
+        const { creerAicha } = await import('../modules/aicha/stage.js');
+        if (!vivant) return;
+        aicha = creerAicha(p.svg, { reduireAnimations: store.settings.reduireAnimations, gain, couleurs: store.settings.decor });
+        aicha.repos();
+      } else {
+        character = new Character(p.svg, p.def);
+        robotRig = p.def.id === 'robot_lectura' ? rigRobot(p.svg) : null;
+        character.setReduced(store.settings.reduireAnimations || character.reduce);
+        character.setGain(gain);
+      }
       perso = p;
-      clear(charPane).append(creerDecor(store.settings.decor), p.svg);
-      character = new Character(p.svg, p.def);
-      robotRig = p.def.id === 'robot_lectura' ? rigRobot(p.svg) : null;
-      character.setReduced(store.settings.reduireAnimations || character.reduce);
-      character.setGain(GAINS[projet.reglages.mouvements] || 1);
-    } catch (err) { erreur(err); }
+      clear(charPane).append(aicha?.decor.element || creerDecor(store.settings.decor), p.svg);
+    })().catch((err) => { chargementPerso = null; throw err; });
+    return chargementPerso;
   }
 
   function erreur(err) {
@@ -149,13 +161,14 @@ export async function render(root) {
       if (!perso) await chargerPerso();
       a.signal.throwIfAborted();
       const projetLecture = { ...projet, texte: textePropre(), audio: { ...projet.audio, voix: { ...projet.audio.voix } } };
-      const nouveau = await prepare(projetLecture, { audio, apercu, perso, signal: a.signal, onProgress: (fait, total, texte) => { barre.value = total ? fait / total : 0; if (texte) etape.textContent = texte; } });
+      const nouveau = await prepare(projetLecture, { audio, apercu, perso, analyserAudio: aicha?.analyserAudio, signal: a.signal, onProgress: (fait, total, texte) => { barre.value = total ? fait / total : 0; if (texte) etape.textContent = texte; } });
       if (!vivant || a.signal.aborted) { nouveau.source.dispose(); return false; }
       prep = nouveau; signature = sig; derniereExpr = ''; dernierSeg = null; pausedFrame = null;
       direction = robotRig && !character.reduce && projet.reglages.emotions ? planRobot(prep.segments, prep.source.dureeMs) : null;
       robotRig?.plan(direction);
       if (direction?.end > prep.source.dureeMs) prep.source = new WithOutro(prep.source, direction.end);
       humeur = creerHumeur({ lexique: prep.lexique, matcher: prep.matcher, actif: projet.reglages.emotions });
+      aicha?.preparer(prep, projetLecture, humeur);
       terminal = new Terminal(termBody, prep.dict, prep.matcher);
       terminal.load(textePropre());
       prep.source.onEnd = fin;
@@ -192,13 +205,15 @@ export async function render(root) {
   async function lancer(apercu = false) {
     if (store.etat === 'PREPARATION') return;
     annulerPrechauffage();
-    if (store.etat === 'LECTURE' && apercu !== true) return pause();
-    if (store.etat === 'PAUSE' && !arrete && apercu !== true && signer(false) === signature) return jouer();
+    if (store.etat === 'LECTURE' && (apercu !== true || signer(true) === signature)) return pause();
+    const reprend = store.etat === 'PAUSE' && !arrete && apercu !== true;
+    const sansSon = apercu === true || (reprend && prep?.source.kind === 'apercu');
+    if (reprend && signer(sansSon) === signature) return jouer();
     if (!textePropre().trim()) { notify(t('scene.err.texteVide'), 'warn'); controls.texte.focus(); return; }
     arrete = true;
-    if (await preparer(apercu === true)) await jouer();
+    if (await preparer(sansSon)) await jouer();
   }
-  /** Bouton « Arrêter » : coupe la voix, remet le robot au repos, garde le texte affiché. */
+  /** Bouton « Arrêter » : coupe la voix, remet le personnage au repos, garde le texte affiché. */
   function arreter() {
     essaiLecture++;
     annulerPrechauffage(); annulerPreparation();
@@ -207,6 +222,7 @@ export async function render(root) {
     if (store.etat === 'LECTURE') transition('PAUSE');
     arrete = true; wakeLock(false);
     character?.setExpression('neutre'); derniereExpr = 'neutre';
+    aicha?.repos();
     majUi();
   }
   function fin() { transition('FIN'); arrete = true; wakeLock(false); majUi(); if (exportScene.actif) setTimeout(() => exportScene.arreter(), 600); }
@@ -214,6 +230,7 @@ export async function render(root) {
     if (!pret()) return;
     prep.source.seek(Math.max(0, Math.min(prep.source.dureeMs - 1, ms)));
     if (store.etat === 'FIN') { transition('PAUSE'); arrete = false; }
+    if (aicha) arrete = false;
     majUi();
   }
   function basculerMuet() { muet = !muet; prep?.source.setMuted(muet); majUi(); }
@@ -257,7 +274,7 @@ export async function render(root) {
   function image(now) {
     if (!vivant) return;
     raf = requestAnimationFrame(image);
-    if (!character) return;
+    if (!character && !aicha) return;
     let robot = null, quietMouth = false;
     if (prep && terminal && store.etat !== 'PREPARATION' && store.etat !== 'ERREUR') {
       const s = prep.source, lecture = store.etat === 'LECTURE', ms = s.timeMs();
@@ -269,6 +286,13 @@ export async function render(root) {
       const anime = direction && (!arrete || store.etat === 'FIN');
       // Web Speech fournit un curseur réel/estimé par mot ; sa projection dans la timeline respecte les plages parlées.
       const sceneMs = s.kind === 'voix-systeme' && ms < (s.finAudio ?? s.dureeMs) ? prep.timeline.timeAt(chars) : ms;
+      if (aicha) {
+        if (arrete && store.etat !== 'FIN') aicha.repos(now);
+        else aicha.image(prep, { ms, sceneMs, lecture, fin: store.etat === 'FIN', expression: exprManuelle, now: exportScene.actif ? undefined : now });
+        if (lecture) bus.emit('timeline:tick', { ms, chars });
+        exportScene.image(now);
+        return;
+      }
       if (anime) robot = poseRobot(direction, sceneMs, !exprManuelle);
       quietMouth = !parle;
       if (lecture && seg && parle && !robot?.blend) detecterPonctuation(seg, chars, now);
@@ -293,7 +317,8 @@ export async function render(root) {
       const cadre = !lecture && robot ? `${ms}|${exprManuelle}|${store.etat}` : null;
       if (cadre !== null && cadre === pausedFrame) { exportScene.image(now); return; }
       pausedFrame = cadre;
-    } else { pausedFrame = null; character.setViseme(0); character.setTalking(0); character.setMouthShape('normal'); }
+    } else if (aicha) { aicha.repos(now); return; }
+    else { pausedFrame = null; character.setViseme(0); character.setTalking(0); character.setMouthShape('normal'); }
     character.tick(now, robot, quietMouth);
     robotRig?.paint(robot);
     exportScene.image(now);
@@ -349,7 +374,7 @@ export async function render(root) {
   basculerTexte(false);
   majUi();
   raf = requestAnimationFrame(image);
-  chargerPerso();
+  chargerPerso().catch((err) => { if (vivant && !preparation) erreur(err); });
   nomVoix(projet).then((nom) => controls.setVoix(nom)).catch((err) => report('voix', err));
   if (store.settings.modePresentation) presentation(true);
   if (store.apercu) { store.apercu = false; lancer(true); }
@@ -361,7 +386,7 @@ export async function render(root) {
     document.removeEventListener('visibilitychange', visibilite);
     cancelAnimationFrame(raf); clearTimeout(clic); off();
     window.removeEventListener('keydown', clavier);
-    exportScene.abandonner();
+    exportScene.abandonner(); aicha?.decor.dispose();
     try { prep?.source.dispose(); } catch (err) { logError('scene', err); }
     getEngine('webspeech').then((m) => m.stop());
     audio.close();

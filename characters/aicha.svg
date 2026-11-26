@@ -1,0 +1,325 @@
+<svg xmlns="http://www.w3.org/2000/svg" id="lectura-char" viewBox="-101 -32 202 288" role="img" aria-labelledby="aicha-title aicha-desc">
+  <title id="aicha-title">Aïcha</title>
+  <desc id="aicha-desc">Aïcha, avec ses tresses cuivrées, ses lunettes et son casque turquoise. Personnage articulé de Lectura (PWA).</desc>
+  <defs>
+    <g id="handL">
+      <path d="M-3.1 -3.2 L3.1 -3.2 L3.2 0.4 L-3.2 0.4 Z" fill="#57408a" />
+      <path d="M-2.4 0 Q-3.1 4 -2.9 7.8 L2.7 7.6 Q3 4 2.2 0 Z" fill="#8a5a3c" />
+      <path d="M0.6 0 Q1.2 4 0.9 7.7 L2.7 7.6 Q3 4 2.2 0 Z" fill="#000" opacity="0.12" />
+      <g fill="none" stroke-linecap="round">
+        <path d="M0.1 7.8 Q-0.1 10.4 1.3 11.8" stroke="#5f3b26" stroke-width="2.9" />
+        <path d="M0.1 7.8 Q-0.1 10.4 1.3 11.8" stroke="#7a4d32" stroke-width="2.4" />
+        <path d="M-0.5 7.8 Q-0.6 11.4 1.5 13" stroke="#5f3b26" stroke-width="3.1" />
+        <path d="M-0.5 7.8 Q-0.6 11.4 1.5 13" stroke="#80513a" stroke-width="2.6" />
+        <path d="M-1 7.8 Q-1.1 12.2 1.4 14.4" stroke="#5f3b26" stroke-width="3.2" />
+        <path d="M-1 7.8 Q-1.1 12.2 1.4 14.4" stroke="#8a5a3c" stroke-width="2.7" />
+        <path d="M-1.5 7.6 Q-1.7 11.4 0.5 13.2" stroke="#5f3b26" stroke-width="3.3" />
+        <path d="M-1.5 7.6 Q-1.7 11.4 0.5 13.2" stroke="#8f5f40" stroke-width="2.8" />
+        <path d="M-2.8 9.6 L-0.7 9.7 M-2.5 11.5 L-0.6 11.8" stroke="#5f3b26" stroke-width="0.3" opacity="0.8" />
+        <path d="M-2.3 8.6 L-2.1 9.2 M-2.9 10.5 L-2.6 11" stroke="#fff" stroke-width="0.3" opacity="0.3" />
+        <path d="M0.5 2 Q0.9 5.4 1 8.2" stroke="#5f3b26" stroke-width="3" />
+        <path d="M0.5 2 Q0.9 5.4 1 8.2" stroke="#9a6648" stroke-width="2.5" />
+      </g>
+      <ellipse cx="1" cy="8.5" rx="0.9" ry="0.7" fill="#d2a584" opacity="0.85" />
+      <ellipse cx="1.3" cy="3.4" rx="1.5" ry="3" fill="#b07650" opacity="0.4" />
+    </g>
+    <clipPath id="cadre-iris-l">
+      <path d="M-10.6 -1.6 Q-8.6 -5.2 -5.8 -5 Q-3.4 -4.8 -2.4 -0.4 Q-4.6 2.2 -7 2.2 Q-9.6 1.6 -10.6 -1.6 Z" fill="#fff" id="limite-l" />
+    </clipPath>
+    <clipPath id="cadre-iris-r">
+      <path d="M-10.6 -1.6 Q-8.6 -5.2 -5.8 -5 Q-3.4 -4.8 -2.4 -0.4 Q-4.6 2.2 -7 2.2 Q-9.6 1.6 -10.6 -1.6 Z" fill="#fff" id="limite-r" />
+    </clipPath>
+    <clipPath id="clip-bouche">
+      <path id="bord-bouche" />
+    </clipPath>
+  </defs>
+  <g id="aicha-sol" fill="#090718" display="none" aria-hidden="true">
+    <ellipse id="ombre-appui" cy="232" rx="35" ry="3.1" opacity="0.53" />
+    <ellipse id="ombre-chaussure-l" ry="1.35" />
+    <ellipse id="ombre-chaussure-r" ry="1.35" />
+  </g>
+  <g id="pantalon">
+    <path d="M-17 72 Q-26 82 -28 100 Q-27 120 -21 139 Q-18.5 152 -19.5 162 Q-22 180 -19 200 Q-16.5 212 -15 220 L-5 220 Q-4 204 -4.6 188 Q-5 168 -3.6 148 Q-3 136 -3 130 Q-1.5 118 0 108 Q1.5 118 3 130 Q3 136 3.6 148 Q5 168 4.6 188 Q4 204 5 220 L15 220 Q16.5 212 19 200 Q22 180 19.5 162 Q18.5 152 21 139 Q27 120 28 100 Q26 82 17 72 Z" fill="#3a3f4b" />
+    <path d="M0 108 Q1.5 118 3 130 Q3 136 3.6 148 Q5 168 4.6 188 Q4 204 5 220 L15 220 Q16.5 212 19 200 Q22 180 19.5 162 Q18.5 152 21 139 Q27 120 28 100 Q26 82 17 72 L0 72 Z" fill="#000" opacity="0.1" />
+    <path d="M-25 92 Q-26.5 102 -24.5 114 M25 92 Q26.5 102 24.5 114" fill="none" stroke="#5a6272" stroke-width="1.4" stroke-linecap="round" opacity="0.7" />
+    <path d="M-17.5 170 Q-19.5 184 -17.5 198 M17.5 170 Q19.5 184 17.5 198" fill="none" stroke="#5a6272" stroke-width="1.2" stroke-linecap="round" opacity="0.45" />
+    <path d="M0 108 L0 120" stroke="#2a2e38" stroke-width="0.8" />
+    <path d="M-17 70 L17 70 L17 74 L-17 74 Z" fill="#57408a" />
+    <path d="M-17 72 L17 72 L21.4 78 L-21.4 78 Z" fill="#5b6475" />
+    <path d="M-21.4 78 L21.4 78" stroke="#4fd8e8" stroke-width="1.2" stroke-linecap="round" />
+    <path d="M-21.4 78 L21.4 78 L22.7 80.5 L-22.7 80.5 Z" fill="#000" opacity="0.2" />
+    <path d="M-1.5 78 Q-3 83 -3.5 88 M1.5 78 Q3 83 3.5 88" fill="none" stroke="#e8e4da" stroke-width="0.8" stroke-linecap="round" />
+    <path d="M-27.5 104 Q-27 120 -20.8 139 Q-18 152 -19 162 Q-21.5 180 -18.5 200 Q-16 212 -14.5 216" fill="none" stroke="#4fd8e8" stroke-width="1.2" stroke-linecap="round" />
+    <path d="M-18.5 159 Q-12 163 -6.5 159" fill="none" stroke="#2a2e38" stroke-width="1" stroke-linecap="round" />
+    <g id="liseres-r" transform="scale(-1 1)">
+      <path d="M-27.5 104 Q-27 120 -20.8 139 Q-18 152 -19 162 Q-21.5 180 -18.5 200 Q-16 212 -14.5 216" fill="none" stroke="#4fd8e8" stroke-width="1.2" stroke-linecap="round" />
+      <path d="M-18.5 159 Q-12 163 -6.5 159" fill="none" stroke="#2a2e38" stroke-width="1" stroke-linecap="round" />
+    </g>
+  </g>
+  <g id="chaussure-l">
+    <rect x="-16.5" y="212" width="12.5" height="8" rx="2" fill="#2a2e38" />
+    <rect x="-19" y="220" width="17" height="11" rx="5" fill="#dfe3ea" />
+    <rect x="-19" y="228" width="17" height="3" rx="1.5" fill="#4fd8e8" />
+    <path d="M-12 223 L-7 223 M-12 226 L-7 226" stroke="#9aa3b2" stroke-width="0.8" />
+  </g>
+  <g id="chaussure-r">
+    <g id="sneaker-r" transform="scale(-1 1)">
+      <rect x="-16.5" y="212" width="12.5" height="8" rx="2" fill="#2a2e38" />
+      <rect x="-19" y="220" width="17" height="11" rx="5" fill="#dfe3ea" />
+      <rect x="-19" y="228" width="17" height="3" rx="1.5" fill="#4fd8e8" />
+      <path d="M-12 223 L-7 223 M-12 226 L-7 226" stroke="#9aa3b2" stroke-width="0.8" />
+    </g>
+  </g>
+  <g id="bassin">
+    <g id="buste">
+      <path d="M-5.6 9 L5.6 9 Q5.4 17 6.4 22 Q8 26 12 29 L-12 29 Q-8 26 -6.4 22 Q-5.4 17 -5.6 9 Z" fill="#8a5a3c" id="cou" />
+      <path id="cou-ombre" fill="#4f2e21" opacity="0.22" d="M-5.6 10 L5.6 10 Q5.4 17 6 20.7 Q1.1 19.1 -6.2 24 Q-5.6 18 -5.6 10Z" />
+      <g id="bras-l" transform="">
+        <path d="M-17.9 36.31 Q-18.25 54.28 -24.45 71.14 Q-25.9 86.4 -29.6 102.03 L-36.6 101.37 Q-38.4 86.4 -35.35 69.89 Q-35.25 51.65 -28.5 33.5 Q-22.8 29 -17.9 36.31 Z" fill="#6b4fa0" />
+        <path d="M-17.9 36.31 Q-18.25 54.28 -24.45 71.14 Q-25.9 86.4 -29.6 102.03 L-27.2 102.22 Q-23.8 86.4 -22.1 70.67 Q-16.25 53.41 -15.5 36.75 Z" fill="#000" opacity="0.14" />
+        <ellipse cx="-25" cy="40" rx="2.65" ry="5.5" fill="#fff" opacity="0.08" transform="rotate(20 -25 40)" />
+        <path d="M-34.1 67.87 Q-30.8 69.45 -26.6 68.92 M-33.7 70.93 Q-30.65 72.22 -26.5 71.27" fill="none" stroke="#57408a" stroke-width="0.6" stroke-linecap="round" opacity="0.9" />
+        <g id="poignet-l" transform="translate(-33.1 101.7) rotate(7.1)">
+          <use id="profil-l" href="#handL" />
+          <g id="paume-l" opacity="0">
+            <path id="pouce-l" fill="none" stroke="#8a5a3c" stroke-width="2.7" stroke-linecap="round" />
+            <path id="doigt-l-0" fill="none" stroke="#936145" stroke-linecap="round" stroke-width="1.75" />
+            <path id="doigt-l-1" fill="none" stroke="#936145" stroke-linecap="round" stroke-width="1.95" />
+            <path id="doigt-l-2" fill="none" stroke="#936145" stroke-linecap="round" stroke-width="1.95" />
+            <path id="doigt-l-3" fill="none" stroke="#936145" stroke-linecap="round" stroke-width="1.65" />
+            <path id="main-l" d="M-2.8 -1 Q-3.65 1 -4 5.8 Q-3.9 8.4 -.6 9.3 Q3.4 8.9 4.05 6.3 Q4.9 4 3.3 2 L2.15 -.65 Z" fill="#8a5a3c" />
+            <path id="lignes-l" d="M-2.8 4.3 Q0 3.2 2.2 4.1 M.1 7.1 Q1.7 5.5 2.95 4.8" fill="none" stroke="#663f2c" stroke-width="0.3" stroke-linecap="round" opacity="0.75" />
+            <path id="manche-l" d="M-3.1 -3.1 L3.1 -3.1 L3.3 .35 L-3.3 .35 Z" fill="#57408a" />
+          </g>
+        </g>
+      </g>
+      <g id="bras-r" transform="scale(-1 1)">
+        <path d="M-17.9 36.31 Q-18.25 54.28 -24.45 71.14 Q-25.9 86.4 -29.6 102.03 L-36.6 101.37 Q-38.4 86.4 -35.35 69.89 Q-35.25 51.65 -28.5 33.5 Q-22.8 29 -17.9 36.31 Z" fill="#6b4fa0" />
+        <path d="M-17.9 36.31 Q-18.25 54.28 -24.45 71.14 Q-25.9 86.4 -29.6 102.03 L-27.2 102.22 Q-23.8 86.4 -22.1 70.67 Q-16.25 53.41 -15.5 36.75 Z" fill="#000" opacity="0.14" />
+        <ellipse cx="-25" cy="40" rx="2.65" ry="5.5" fill="#fff" opacity="0.08" transform="rotate(20 -25 40)" />
+        <path d="M-34.1 67.87 Q-30.8 69.45 -26.6 68.92 M-33.7 70.93 Q-30.65 72.22 -26.5 71.27" fill="none" stroke="#57408a" stroke-width="0.6" stroke-linecap="round" opacity="0.9" />
+        <g id="poignet-r" transform="translate(-33.1 101.7) rotate(7.1)">
+          <use id="profil-r" href="#handL" />
+          <g id="paume-r" opacity="0">
+            <path id="pouce-r" fill="none" stroke="#8a5a3c" stroke-width="2.7" stroke-linecap="round" />
+            <path id="doigt-r-0" fill="none" stroke="#936145" stroke-linecap="round" stroke-width="1.75" />
+            <path id="doigt-r-1" fill="none" stroke="#936145" stroke-linecap="round" stroke-width="1.95" />
+            <path id="doigt-r-2" fill="none" stroke="#936145" stroke-linecap="round" stroke-width="1.95" />
+            <path id="doigt-r-3" fill="none" stroke="#936145" stroke-linecap="round" stroke-width="1.65" />
+            <path id="main-r" d="M-2.8 -1 Q-3.65 1 -4 5.8 Q-3.9 8.4 -.6 9.3 Q3.4 8.9 4.05 6.3 Q4.9 4 3.3 2 L2.15 -.65 Z" fill="#8a5a3c" />
+            <path id="lignes-r" d="M-2.8 4.3 Q0 3.2 2.2 4.1 M.1 7.1 Q1.7 5.5 2.95 4.8" fill="none" stroke="#663f2c" stroke-width="0.3" stroke-linecap="round" opacity="0.75" />
+            <path id="manche-r" d="M-3.1 -3.1 L3.1 -3.1 L3.3 .35 L-3.3 .35 Z" fill="#57408a" />
+          </g>
+        </g>
+      </g>
+      <g id="sweat">
+        <path d="M-11 28 Q-22 29 -23 35 Q-22 41 -20.6 44 Q-21.8 50 -17.8 57 Q-15.5 63 -15 66 Q-15.5 69 -17 72 L17 72 Q15.5 69 15 66 Q15.5 63 17.8 57 Q21.8 50 20.6 44 Q22 41 23 35 Q22 29 11 28 L7 27 Q0 31 -7 27 Z" fill="#6b4fa0" />
+        <path d="M2 28 Q22 29 23 35 Q22 41 20.6 44 Q21.8 50 17.8 57 Q15.5 63 15 66 Q15.5 69 17 72 L2 72 Z" fill="#000" opacity="0.1" />
+        <path d="M-8 31.5 Q-15 31 -21.5 34.5 M8 31.5 Q15 31 21.5 34.5" fill="none" stroke="#fff" stroke-width="1" stroke-linecap="round" opacity="0.08" />
+        <g>
+          <ellipse cx="-11" cy="40" rx="8.5" ry="5.5" fill="#fff" opacity="0.08" />
+          <ellipse cx="-11.5" cy="41.5" rx="4.8" ry="2.8" fill="#fff" opacity="0.1" />
+          <path d="M-4 47 Q-5 56 -11 57.5 Q-18 56.5 -19.8 49 Q-12 53.5 -4 47 Z" fill="#1a0f33" opacity="0.12" />
+          <path d="M-4.4 50 Q-6 56.2 -11 57.4 Q-16 56.4 -18.6 51.5 Q-11 55 -4.4 50 Z" fill="#1a0f33" opacity="0.12" />
+          <path d="M-3.5 53 Q-10 59 -19 54.5" fill="none" stroke="#1a0f33" stroke-width="2.2" stroke-linecap="round" opacity="0.2" />
+          <ellipse cx="-3.4" cy="46" rx="1.6" ry="8" fill="#000" opacity="0.12" />
+          <ellipse cx="-19.8" cy="47" rx="1.8" ry="6" fill="#000" opacity="0.1" />
+          <path d="M-20 47 Q-16 46.5 -13.5 46 M-20 51 Q-16 50 -13 48 M-17 38 Q-15 41 -13.5 44" fill="none" stroke="#57408a" stroke-width="0.6" stroke-linecap="round" opacity="0.7" />
+        </g>
+        <g transform="scale(-1,1)">
+          <ellipse cx="-11" cy="40" rx="8.5" ry="5.5" fill="#fff" opacity="0.08" />
+          <ellipse cx="-11.5" cy="41.5" rx="4.8" ry="2.8" fill="#fff" opacity="0.1" />
+          <path d="M-4 47 Q-5 56 -11 57.5 Q-18 56.5 -19.8 49 Q-12 53.5 -4 47 Z" fill="#1a0f33" opacity="0.12" />
+          <path d="M-4.4 50 Q-6 56.2 -11 57.4 Q-16 56.4 -18.6 51.5 Q-11 55 -4.4 50 Z" fill="#1a0f33" opacity="0.12" />
+          <path d="M-3.5 53 Q-10 59 -19 54.5" fill="none" stroke="#1a0f33" stroke-width="2.2" stroke-linecap="round" opacity="0.2" />
+          <ellipse cx="-3.4" cy="46" rx="1.6" ry="8" fill="#000" opacity="0.12" />
+          <ellipse cx="-19.8" cy="47" rx="1.8" ry="6" fill="#000" opacity="0.1" />
+          <path d="M-20 47 Q-16 46.5 -13.5 46 M-20 51 Q-16 50 -13 48 M-17 38 Q-15 41 -13.5 44" fill="none" stroke="#57408a" stroke-width="0.6" stroke-linecap="round" opacity="0.7" />
+        </g>
+        <path d="M-8.5 27.5 Q0 37 8.5 27.5 Q0 32 -8.5 27.5 Z" fill="#57408a" stroke="#57408a" stroke-width="2.5" stroke-linejoin="round" />
+        <path d="M-2.6 33 L-3 49 M2.6 33 L3 49" stroke="#e8e4da" stroke-width="0.8" stroke-linecap="round" id="cordons" />
+        <circle cx="-3" cy="49.5" r="0.9" fill="#e8e4da" id="embout-l" />
+        <circle cx="3" cy="49.5" r="0.9" fill="#e8e4da" id="embout-r" />
+        <path d="M-9 61 L9 61 L11 67 L-11 67 Z" fill="#57408a" />
+        <path d="M-16.8 68 L16.8 68 L17 72 L-17 72 Z" fill="#57408a" />
+        <path d="M-19 58 Q-16.5 60 -15.8 64 M19 58 Q16.5 60 15.8 64" fill="none" stroke="#57408a" stroke-width="1" stroke-linecap="round" />
+      </g>
+      <g id="tete">
+        <path d="M-15 -4 Q-18 -19 0 -19.5 Q18 -19 15 -4 Q16.9 7 16.9 16.1 Q16.4 20.8 12.2 21.6 Q10.4 17.9 8.7 16.35 Q4.1 14.65 0 14.5 Q-4.1 14.75 -8.7 16.35 Q-10.8 18.25 -12.1 21.25 Q-16.4 20.45 -16.8 16.0 Q-16.9 7 -15 -4Z" fill="#6e2610" />
+        <g id="tresses-l" transform="">
+          <g id="tresse-l-0" fill="none" stroke-dasharray="2.4 .7">
+            <g stroke="#6e2610" stroke-width="3.8">
+              <path d="M-10 -12 Q-16 4 -15 22 Q-15 32 -14 42" />
+            </g>
+            <g stroke="#a63f19" stroke-width="3">
+              <path d="M-10 -12 Q-16 4 -15 22 Q-15 32 -14 42" />
+            </g>
+            <g stroke="#e07a3a" stroke-width="0.9" stroke-dashoffset="1.2">
+              <path d="M-10.6 -12 Q-16.6 4 -15.6 22 Q-15.6 32 -14.6 42" />
+            </g>
+            <circle cx="-14" cy="43.5" r="1.2" fill="#4fd8e8" />
+          </g>
+          <g id="tresse-l-1" fill="none" stroke-dasharray="2.4 .7">
+            <g stroke="#6e2610" stroke-width="3.8">
+              <path d="M-12 -8 Q-18 6 -18 22 Q-19 32 -18 40" />
+            </g>
+            <g stroke="#a63f19" stroke-width="3">
+              <path d="M-12 -8 Q-18 6 -18 22 Q-19 32 -18 40" />
+            </g>
+            <g stroke="#e07a3a" stroke-width="0.9" stroke-dashoffset="1.2">
+              <path d="M-12.6 -8 Q-18.6 6 -18.6 22 Q-19.6 32 -18.6 40" />
+            </g>
+            <circle cx="-18" cy="41.5" r="1.2" fill="#4fd8e8" />
+          </g>
+          <g id="tresse-l-2" fill="none" stroke-dasharray="2.4 .7">
+            <g stroke="#6e2610" stroke-width="3.8">
+              <path d="M-13.5 -3 Q-20 8 -21 22 Q-22 30 -22 37" />
+            </g>
+            <g stroke="#a63f19" stroke-width="3">
+              <path d="M-13.5 -3 Q-20 8 -21 22 Q-22 30 -22 37" />
+            </g>
+            <g stroke="#e07a3a" stroke-width="0.9" stroke-dashoffset="1.2">
+              <path d="M-14.1 -3 Q-20.6 8 -21.6 22 Q-22.6 30 -22.6 37" />
+            </g>
+            <circle cx="-22" cy="38.5" r="1.2" fill="#4fd8e8" />
+          </g>
+        </g>
+        <g id="tresses-r" transform="scale(-1 1)">
+          <g id="tresse-r-0" fill="none" stroke-dasharray="2.4 .7">
+            <g stroke="#6e2610" stroke-width="3.8">
+              <path d="M-10 -12 Q-16 4 -15 22 Q-15 32 -14 42" />
+            </g>
+            <g stroke="#a63f19" stroke-width="3">
+              <path d="M-10 -12 Q-16 4 -15 22 Q-15 32 -14 42" />
+            </g>
+            <g stroke="#e07a3a" stroke-width="0.9" stroke-dashoffset="1.2">
+              <path d="M-10.6 -12 Q-16.6 4 -15.6 22 Q-15.6 32 -14.6 42" />
+            </g>
+            <circle cx="-14" cy="43.5" r="1.2" fill="#4fd8e8" />
+          </g>
+          <g id="tresse-r-1" fill="none" stroke-dasharray="2.4 .7">
+            <g stroke="#6e2610" stroke-width="3.8">
+              <path d="M-12 -8 Q-18 6 -18 22 Q-19 32 -18 40" />
+            </g>
+            <g stroke="#a63f19" stroke-width="3">
+              <path d="M-12 -8 Q-18 6 -18 22 Q-19 32 -18 40" />
+            </g>
+            <g stroke="#e07a3a" stroke-width="0.9" stroke-dashoffset="1.2">
+              <path d="M-12.6 -8 Q-18.6 6 -18.6 22 Q-19.6 32 -18.6 40" />
+            </g>
+            <circle cx="-18" cy="41.5" r="1.2" fill="#4fd8e8" />
+          </g>
+          <g id="tresse-r-2" fill="none" stroke-dasharray="2.4 .7">
+            <g stroke="#6e2610" stroke-width="3.8">
+              <path d="M-13.5 -3 Q-20 8 -21 22 Q-22 30 -22 37" />
+            </g>
+            <g stroke="#a63f19" stroke-width="3">
+              <path d="M-13.5 -3 Q-20 8 -21 22 Q-22 30 -22 37" />
+            </g>
+            <g stroke="#e07a3a" stroke-width="0.9" stroke-dashoffset="1.2">
+              <path d="M-14.1 -3 Q-20.6 8 -21.6 22 Q-22.6 30 -22.6 37" />
+            </g>
+            <circle cx="-22" cy="38.5" r="1.2" fill="#4fd8e8" />
+          </g>
+        </g>
+        <ellipse cx="-12.6" cy="2" rx="1.8" ry="3" fill="#8a5a3c" />
+        <ellipse cx="12.6" cy="2" rx="1.8" ry="3" fill="#8a5a3c" />
+        <path d="M-12.5 -4 Q-12.7 3 -10.5 8.5 Q-8.3 13.5 -4.2 16 Q-2 17.2 0 17.2 Q2 17.2 4.2 16 Q8.3 13.5 10.5 8.5 Q12.7 3 12.5 -4 Q12.3 -16.5 0 -17 Q-12.3 -16.5 -12.5 -4 Z" fill="#8a5a3c" id="visage-peau" />
+        <path d="M3 -16.5 Q12.3 -16 12.5 -4 Q12.7 3 10.5 8.5 Q8.3 13.5 4.2 16 Q2 17.2 0 17.2 Q6 8 4 -2 Z" fill="#000" opacity="0.07" id="visage-ombre" />
+        <g id="plan-visage">
+          <g id="joues">
+            <path d="M-10 4 Q-8.3 9 -4.6 12.8 M10 4 Q8.3 9 4.6 12.8" fill="none" stroke="#5f3b26" stroke-width="1.2" stroke-linecap="round" opacity="0.18" />
+            <ellipse cx="-7.2" cy="5.8" rx="2.4" ry="1.3" fill="#d0606a" opacity="0.16" />
+            <ellipse cx="7.2" cy="5.8" rx="2.4" ry="1.3" fill="#d0606a" opacity="0.16" />
+          </g>
+          <g id="front" opacity="0" fill="none" stroke="#613d2a" stroke-width="0.33" stroke-linecap="round">
+            <path id="pli-front-haut" d="M-3.8 -10.7 Q-.5 -11.64 3.94 -11.12" />
+            <path id="pli-front-bas" d="M-3.3 -9.87 Q-.5 -10.61 3.55 -10.19" />
+          </g>
+          <path id="pli-concentration" d="M-.6 -9.4 Q-1.55 -8.3 -1.15 -7.4 M.58 -9.35 Q1.32 -8.82 1.13 -7.85" fill="none" stroke="#613d2a" stroke-width="0.31" stroke-linecap="round" opacity="0" />
+          <g id="oeil-l" transform="">
+            <path d="M-10.6 -1.6 Q-8.6 -5.2 -5.8 -5 Q-3.4 -4.8 -2.4 -0.4 Q-4.6 2.2 -7 2.2 Q-9.6 1.6 -10.6 -1.6 Z" fill="#fff" id="blanc-l" />
+            <g id="masque-iris-l" clip-path="url(#cadre-iris-l)">
+              <g id="iris-l">
+                <circle cx="-6.2" cy="-1.4" r="2.3" fill="#6b4226" />
+                <ellipse cx="-6.2" cy="-0.2" rx="1.6" ry="1.1" fill="#a8733c" opacity="0.65" />
+                <circle cx="-6.2" cy="-1.4" r="2.3" fill="none" stroke="#3a2012" stroke-width="0.5" />
+                <circle cx="-6.2" cy="-1.4" r="0.9" fill="#000" />
+                <circle cx="-5.4" cy="-2.4" r="0.8" fill="#fff" />
+                <circle cx="-7.1" cy="-0.5" r="0.4" fill="#fff" opacity="0.75" />
+              </g>
+            </g>
+            <path d="M-10.6 -1.6 Q-8.6 -5.2 -5.8 -5 Q-3.4 -4.8 -2.4 -0.4 Q-5 -3.4 -6.4 -3.6 Q-9 -3.6 -10.6 -1.6 Z" fill="#000" opacity="0.14" id="ombre-paupiere-l" />
+            <path d="M-10.9 -1.8 Q-8.6 -5.8 -5.8 -5.5 Q-3.2 -5.2 -2.2 -0.4" fill="none" stroke="#1f1410" stroke-width="1.4" stroke-linecap="round" id="paupiere-haute-l" />
+            <path d="M-10.9 -1.8 L-11.9 -2.5" stroke="#1f1410" stroke-width="0.9" stroke-linecap="round" id="cil-l" />
+            <path d="M-9.8 -0.4 Q-7 2.6 -3.4 0.6" fill="none" stroke="#6f4630" stroke-width="0.45" id="paupiere-basse-l" />
+          </g>
+          <g id="arcade-l" transform="">
+            <path id="sourcil-l" d="M-12 -9 Q-7.2 -12 -2.2 -9.4" fill="none" stroke="#8a3216" stroke-width="1.1" stroke-linecap="round" />
+          </g>
+          <g id="oeil-r" transform="scale(-1 1)">
+            <path d="M-10.6 -1.6 Q-8.6 -5.2 -5.8 -5 Q-3.4 -4.8 -2.4 -0.4 Q-4.6 2.2 -7 2.2 Q-9.6 1.6 -10.6 -1.6 Z" fill="#fff" id="blanc-r" />
+            <g id="masque-iris-r" clip-path="url(#cadre-iris-r)">
+              <g id="iris-r">
+                <circle cx="-6.2" cy="-1.4" r="2.3" fill="#6b4226" />
+                <ellipse cx="-6.2" cy="-0.2" rx="1.6" ry="1.1" fill="#a8733c" opacity="0.65" />
+                <circle cx="-6.2" cy="-1.4" r="2.3" fill="none" stroke="#3a2012" stroke-width="0.5" />
+                <circle cx="-6.2" cy="-1.4" r="0.9" fill="#000" />
+                <circle cx="-5.4" cy="-2.4" r="0.8" fill="#fff" />
+                <circle cx="-7.1" cy="-0.5" r="0.4" fill="#fff" opacity="0.75" />
+              </g>
+            </g>
+            <path d="M-10.6 -1.6 Q-8.6 -5.2 -5.8 -5 Q-3.4 -4.8 -2.4 -0.4 Q-5 -3.4 -6.4 -3.6 Q-9 -3.6 -10.6 -1.6 Z" fill="#000" opacity="0.14" id="ombre-paupiere-r" />
+            <path d="M-10.9 -1.8 Q-8.6 -5.8 -5.8 -5.5 Q-3.2 -5.2 -2.2 -0.4" fill="none" stroke="#1f1410" stroke-width="1.4" stroke-linecap="round" id="paupiere-haute-r" />
+            <path d="M-10.9 -1.8 L-11.9 -2.5" stroke="#1f1410" stroke-width="0.9" stroke-linecap="round" id="cil-r" />
+            <path d="M-9.8 -0.4 Q-7 2.6 -3.4 0.6" fill="none" stroke="#6f4630" stroke-width="0.45" id="paupiere-basse-r" />
+          </g>
+          <g id="arcade-r" transform="scale(-1 1)">
+            <path id="sourcil-r" d="M-12 -9 Q-7.2 -12 -2.2 -9.4" fill="none" stroke="#8a3216" stroke-width="1.1" stroke-linecap="round" />
+          </g>
+          <g id="lunettes">
+            <rect x="-12.4" y="-6.8" width="10.8" height="10.8" rx="4.4" fill="#4fd8e8" fill-opacity="0.1" stroke="#3a2a5c" stroke-width="1.1" />
+            <rect x="1.6" y="-6.8" width="10.8" height="10.8" rx="4.4" fill="#4fd8e8" fill-opacity="0.1" stroke="#3a2a5c" stroke-width="1.1" />
+            <path d="M-10.4 -4.6 L-8.6 -5.8 M3.4 -4.6 L5.2 -5.8" fill="none" stroke="#fff" stroke-width="0.6" stroke-linecap="round" opacity="0.7" />
+            <path d="M-1.6 -2.4 Q0 -3.8 1.6 -2.4 M-12.4 -2 L-13.8 -1.6 M12.4 -2 L13.8 -1.6" fill="none" stroke="#3a2a5c" stroke-width="1.1" stroke-linecap="round" />
+          </g>
+          <g id="nez">
+            <path d="M-1.2 1.4 Q-1.6 3.4 -1.9 5" fill="none" stroke="#5f3b26" stroke-width="0.45" stroke-linecap="round" opacity="0.55" />
+            <ellipse cx="0" cy="5.6" rx="1.5" ry="1.1" fill="#fff" opacity="0.14" />
+            <path d="M-1.3 6 Q-2.6 6 -2.5 7 Q-2.2 7.5 -1.6 7.3 M1.3 6 Q2.6 6 2.5 7 Q2.2 7.5 1.6 7.3" fill="none" stroke="#5f3b26" stroke-width="0.5" stroke-linecap="round" />
+            <ellipse cx="-0.95" cy="7" rx="0.55" ry="0.35" fill="#3a2214" />
+            <ellipse cx="0.95" cy="7" rx="0.55" ry="0.35" fill="#3a2214" />
+          </g>
+          <g id="levres-repos">
+            <path d="M-4.8 10.9 Q-3 10 -1.3 10.2 Q0 9.8 1.3 10.2 Q3 10 4.8 10.9 Q2.5 11.3 0 11.2 Q-2.5 11.3 -4.8 10.9 Z" fill="#a8405a" />
+            <path d="M-4.6 11 Q0 11.6 4.6 11 Q3.6 13.3 0 13.4 Q-3.6 13.3 -4.6 11 Z" fill="#c85d70" />
+            <ellipse cx="0" cy="12.2" rx="1.6" ry="0.4" fill="#fff" opacity="0.3" />
+            <path d="M-5 10.9 Q0 11.8 5 10.9" fill="none" stroke="#6a2434" stroke-width="0.4" stroke-linecap="round" />
+            <path d="M-5.2 10.6 Q-5.7 10.2 -5.9 9.8 M5.2 10.6 Q5.7 10.2 5.9 9.8" fill="none" stroke="#7a4a3a" stroke-width="0.35" stroke-linecap="round" opacity="0.6" />
+            <ellipse cx="0" cy="14.4" rx="2.4" ry="0.45" fill="#5f3b26" opacity="0.18" />
+          </g>
+          <g id="bouche" opacity="0">
+            <path id="levre-haute" fill="#a8405a" />
+            <path id="levre-basse" fill="#c85d70" />
+            <path id="cavite" fill="#421d2e" stroke="#6a2434" stroke-width="0.26" />
+            <g id="interieur" clip-path="url(#clip-bouche)">
+              <path id="dents" fill="#fbede6" />
+              <path id="langue" fill="#ba566f" />
+            </g>
+            <path id="reflet-levre" stroke="#fae5db" stroke-width="0.29" opacity="0.34" fill="none" stroke-linecap="round" />
+          </g>
+        </g>
+        <g id="cheveux-et-casque">
+          <path d="M-12.8 -4 Q-12.3 -16.5 0 -17.5 Q12.3 -16.5 12.8 -4 Q10.5 -11 4 -13 Q0 -9 -3 -13 Q-10.5 -11 -12.8 -4 Z" fill="#a63f19" />
+          <path d="M-12.8 -4 Q-10.5 -11 -3 -13 Q0 -9 4 -13 Q10.5 -11 12.8 -4 Q10 -9 4 -10.5 Q0 -7 -3 -10.5 Q-9.5 -9 -12.8 -4 Z" fill="#6e2610" opacity="0.5" />
+          <path d="M-3 -13 Q0 -16 3 -13 M-8 -14 Q-5 -16.5 -2 -15.5 M2 -15.5 Q5 -16.5 8 -14" fill="none" stroke="#e07a3a" stroke-width="0.55" stroke-linecap="round" />
+          <path d="M-14.6 -1 A14.6 17.5 0 0 1 14.6 -1" fill="none" stroke="#4fd8e8" stroke-width="1.8" stroke-linecap="round" />
+          <ellipse cx="-14.2" cy="1" rx="3.2" ry="5.2" fill="#2fa9bd" />
+          <ellipse cx="14.2" cy="1" rx="3.2" ry="5.2" fill="#2fa9bd" />
+          <ellipse cx="-14.6" cy="1" rx="1.8" ry="3.2" fill="#4fd8e8" />
+          <ellipse cx="14.6" cy="1" rx="1.8" ry="3.2" fill="#4fd8e8" />
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

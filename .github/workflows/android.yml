@@ -3,7 +3,7 @@ name: Lectura Android
 on:
   push:
     branches: ['arena/d2229c4f-lectura']
-    paths: ['android/**', '.github/workflows/android.yml']
+    paths: ['android/**', 'characters/**', 'src/modules/aicha/**', 'src/modules/character-spec.js', 'tools/character-catalogue.mjs', '.github/workflows/android.yml']
   workflow_dispatch:
     inputs:
       predecessor_run:
@@ -99,14 +99,29 @@ jobs:
         run: |
           LECTURA_BUILD="${GITHUB_SHA:0:8}" LECTURA_VERSION_CODE="$GITHUB_RUN_NUMBER" \
             LECTURA_TEST_APK="$RUNNER_TEMP/LecturaTests.apk" bash android/ci-signing.sh build "$RUNNER_TEMP/Lectura.apk"
-      - name: Vérifier les bibliothèques 64 bits dans l’APK
+      - name: Vérifier les bibliothèques 64 bits et le catalogue dans l’APK
         run: |
           python3 - "$RUNNER_TEMP/Lectura.apk" <<'PY'
+          import json
           import struct
           import sys
+          from pathlib import Path
           from zipfile import ZipFile
 
           with ZipFile(sys.argv[1]) as apk:
+              source = Path('characters')
+              expected = {'index.json'}
+              for ident in json.loads((source / 'index.json').read_bytes())['personnages']:
+                  sheet = ident + '.json'
+                  info = json.loads((source / sheet).read_bytes())
+                  expected.update(filter(None, [sheet, info['svg'], info.get('svgScene')]))
+              assets = {n for n in apk.namelist() if n.startswith('assets/characters/') and not n.endswith('/')}
+              if assets != {'assets/characters/' + name for name in expected}:
+                  raise SystemExit('Le catalogue de l’APK diffère de l’index.')
+              for name in expected:
+                  if apk.read('assets/characters/' + name) != (source / name).read_bytes():
+                      raise SystemExit(f'Dessin ou fiche modifié : {name}')
+              print(f'::notice title=Catalogue::Les {len(expected)} fichiers sont identiques aux sources du catalogue.')
               for abi, machine in [('arm64-v8a', 183), ('x86_64', 62)]:
                   for lib in ['onnxruntime', 'onnxruntime4j_jni', 'sherpa-onnx-jni']:
                       path = f'lib/{abi}/lib{lib}.so'
@@ -124,13 +139,14 @@ jobs:
         with:
           name: Lectura-Android-API31+
           github-token: ${{ github.token }}
-          # Last public APK: v1.1.0 (code 38), signed with the permanent certificate.
-          run-id: ${{ inputs.predecessor_run || '45513815595' }}
+          # Last public APK: v1.1.1 (code 40), signed with the permanent certificate.
+          run-id: ${{ inputs.predecessor_run || '45719452193' }}
           path: ${{ runner.temp }}/lectura-predecessor
       - name: Comparer les certificats de signature
         id: certificates
         env:
           LECTURA_REPORT: ${{ runner.temp }}/lectura-report
+          REFERENCE_RUN: ${{ inputs.predecessor_run }}
         run: |
           signer="$ANDROID_HOME/build-tools/37.0.0/apksigner"
           mkdir -p "$LECTURA_REPORT"
@@ -140,6 +156,15 @@ jobs:
           echo "::notice title=Certificat APK Lectura::SHA-256 $current"
           echo "Nouveau : $current" > "$LECTURA_REPORT/apk-certificates.txt"
           previous="$RUNNER_TEMP/lectura-predecessor/Lectura.apk"
+          if [[ -z "$REFERENCE_RUN" ]]; then
+            # Artifacts expire; the public predecessor remains available and can be checked byte for byte.
+            if [[ ! -f "$previous" ]]; then
+              mkdir -p "$(dirname "$previous")"
+              curl -fsSL --retry 3 --retry-all-errors --max-time 150 \
+                'https://github.com/initDV/Lectura/releases/download/v1.1.1/Lectura.apk' -o "$previous"
+            fi
+            printf '%s  %s\n' '7bbba02e52612f611c95c6506f61f85c1c4871ea315fc188e4e43b506f1fb7ec' "$previous" | sha256sum -c -
+          fi
           if [[ -f "$previous" ]]; then
             old=$(fingerprint "$previous")
             test -n "$old"

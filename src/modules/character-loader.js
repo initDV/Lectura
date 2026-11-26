@@ -1,13 +1,13 @@
 // @ts-check
 // Chargement des personnages : characters/index.json → fiches JSON → SVG nettoyé et vérifié.
 // Ajouter un personnage = déposer un SVG + un JSON (voir docs/ADD_CHARACTER.md), sans toucher au code.
+import { piecesSvg, RIG_AICHA } from './character-spec.js';
 
 const NS = 'http://www.w3.org/2000/svg';
-const BALISES = new Set(['svg', 'g', 'defs', 'rect', 'circle', 'ellipse', 'line', 'path', 'polygon', 'polyline', 'use', 'title', 'desc']);
+const BALISES = new Set(['svg', 'g', 'defs', 'rect', 'circle', 'ellipse', 'line', 'path', 'polygon', 'polyline', 'use', 'title', 'desc', 'clipPath']);
 const ATTRIBUTS = new Set(['id', 'x', 'y', 'width', 'height', 'rx', 'ry', 'cx', 'cy', 'r', 'x1', 'y1', 'x2', 'y2', 'd', 'points', 'fill',
   'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'opacity', 'fill-opacity', 'stroke-opacity', 'transform', 'viewBox',
   'role', 'aria-label', 'display']);
-const PIECES = ['#body', '#arm-l', '#arm-r', '#mouth', '#eye-l', '#eye-r', '#brow-l', '#brow-r'];
 const BASE = 'characters/';
 let cache = null;
 
@@ -50,6 +50,7 @@ function nettoyer(src, mode) {
   for (const a of src.attributes) {
     if (ATTRIBUTS.has(a.name)) el.setAttribute(a.name, a.value);
     else if (a.name === 'href' && a.value.startsWith('#')) el.setAttribute('href', a.value);
+    else if (a.name === 'clip-path' && /^url\(#[\w-]+\)$/.test(a.value)) el.setAttribute('clip-path', a.value);
     else if (a.name === 'style') {
       // style="display:none" est interdit par la CSP : on le convertit (CSSOM en direct, attribut pour une vignette)
       for (const decl of a.value.split(';')) {
@@ -77,7 +78,8 @@ async function lireSvg(def, mode) {
     throw new Error(`Le fichier ${def.svg} n'est pas un SVG valide.`);
   }
   const svg = nettoyer(doc.documentElement, mode);
-  for (const sel of PIECES) {
+  for (const id of piecesSvg(def)) {
+    const sel = `#${id}`;
     if (!svg.querySelector(sel)) throw new Error(`Personnage « ${def.nom} » incomplet : la pièce ${sel} manque dans ${def.svg}.`);
   }
   if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', '0 0 240 600');
@@ -88,7 +90,7 @@ async function lireSvg(def, mode) {
 export async function loadCharacterSvg(def) {
   const svg = await lireSvg(def, 'direct');
   svg.setAttribute('aria-label', def.nom);
-  svg.setAttribute('preserveAspectRatio', 'xMidYMax meet');
+  svg.setAttribute('preserveAspectRatio', def.rig === RIG_AICHA ? 'xMidYMid meet' : 'xMidYMax meet');
   return svg;
 }
 

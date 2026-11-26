@@ -1,0 +1,8 @@
+{
+  "id": "aicha",
+  "nom": "Aïcha",
+  "svg": "aicha.svg",
+  "rig": "aicha",
+  "mouvements": { "style": "fluide" },
+  "voixSuggeree": { "hauteur": 1, "vitesse": 1 }
+}

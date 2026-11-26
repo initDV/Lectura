@@ -84,6 +84,11 @@ public final class DeviceChecks extends Instrumentation {
                 check("jeu-du-personnage",()->performance(refs));
                 check("quatre-gestes",()->robotChoreo(ctx,refs));
                 check("catalogue-et-reglages",()->fullAccess(ctx));
+                check("cinq-lectrices",()->{
+                    int frames=AichaChecks.parity(refs.json("g2p.json"),fixtures().getJSONArray("aicha"));
+                    AichaChecks.stage(this,ctx);
+                    return frames+" poses Web comparées (appuis, mains, regards et visèmes) ; cinq lectures en mode avion, pause et recherche déterministes";
+                });
                 check("lips-reference",()->lipsReference(ctx,refs));
                 check("audio-importe",()->imported(ctx));
                 check("preparation-et-reprise",()->preparationLifecycle(ctx));
@@ -220,11 +225,16 @@ public final class DeviceChecks extends Instrumentation {
     }
     static void require(boolean b,String msg) {if(!b)throw new AssertionError(msg);}
     private String refsAndModels(Refs refs)throws Exception {
-        require(refs.characters.size()==43,"Catalogue personnages");
+        require(refs.characters.size()==7,"Catalogue personnages");
         require(Sprite.fixed2(1.005)==1f&&Sprite.fixed2(1.125)==1.13f&&Sprite.fixed2(2.675)==2.67f
             &&Sprite.fixed2(-2.675)==-2.67f&&Sprite.fixed2(-.005)==-.01f,"Arrondi SVG coté à mi-centième sur Android 12");
         Bitmap frame=Bitmap.createBitmap(200,330,Bitmap.Config.ARGB_8888);Canvas c=new Canvas(frame);
-        for(JSONObject def:refs.characters){Sprite s=new Sprite(refs,def);s.expression("enthousiaste",1,"triste",.3);
+        require(refs.character("hacker")==null&&refs.character("wend")==null&&refs.character("moussa")==null,"Ancien catalogue chargé");
+        require(refs.context.getAssets().list("characters").length==16,"Anciens dessins empaquetés");
+        for(JSONObject def:refs.characters){
+            AichaChecks.thumbnail(refs,def);
+            if(AichaTrack.matches(def))continue;
+            Sprite s=new Sprite(refs,def);s.expression("enthousiaste",1,"triste",.3);
             for(int i=0;i<8;i++){s.viseme=i%4;s.letter="aeiou".substring(i%5,i%5+1);s.tick(i*16);}
             s.svg.fit(c,0,0,200,330,true);
         }
@@ -266,7 +276,7 @@ public final class DeviceChecks extends Instrumentation {
         require(Script.subtitles(parts,true).equals(subtitles.getString("exported")),"Export VTT");
         require(Project.fromJson(p.json()).text.equals(p.text),"Projet version 1");
         JSONArray characters=fixture.getJSONArray("characters"),expressions=fixture.getJSONArray("expressions");
-        require(characters.length()==43&&expressions.length()==38,"Catalogue de référence");
+        require(characters.length()==7&&expressions.length()==38,"Catalogue de référence");
         for(int i=0;i<characters.length();i++)require(refs.characters.get(i).optString("id").equals(characters.getString(i)),"Ordre du catalogue");
         JSONObject personal=Refs.put(new JSONObject(),"ci",Refs.put(new JSONObject(),"mots",new JSONArray().put("lecturaciunique")));
         Script.Keywords words=new Script.Keywords(refs,"fr",personal);
@@ -278,7 +288,7 @@ public final class DeviceChecks extends Instrumentation {
         }
         Script.Segment mixed=Script.timing("Bravo, je suis triste.",2000,0).get(0);
         require(!mood.summary(mixed).second.isEmpty()&&!mood.pose(mixed,mixed.text.length()).mix.isEmpty(),"Mélange d’émotions indisponible");
-        return "43 rigs, 38 poses, mélange d’émotions, mots étendus/personnalisés, G2P partagé + cas vérifiés, 8 chronologies, SRT/VTT et projet v1";
+        return "Sept vignettes, deux rigs robots, 38 poses, mélange d’émotions, mots étendus/personnalisés, G2P partagé + cas vérifiés, 8 chronologies, SRT/VTT et projet v1";
     }
     private String prosody(Refs refs)throws Exception {
         JSONObject lex=Refs.object(refs.json("prononciation.json"),"fr");
@@ -362,7 +372,7 @@ public final class DeviceChecks extends Instrumentation {
         // Question starts at 835 ms. Check the full rig, not merely the selected expression name.
         glide(refs.rig,directions,835,"neutre → pensif");
         glide(refs.rig,directions,parts.get(1).from,"changement de phrase");
-        for(String rig:List.of("robot_lectura","wend")){
+        for(String rig:List.of("robot_lectura","robot_rouge")){
             var sprite=new Sprite(refs,refs.character(rig));
             Bitmap before=performanceFrame(sprite,directions,835,835);
             Bitmap first=performanceFrame(sprite,directions,995,995);
@@ -387,7 +397,7 @@ public final class DeviceChecks extends Instrumentation {
         parts.get(1).expression="auto";
         Performance disabled=new Performance(parts,new Mood(refs,"fr",words,false),refs.rig);
         require(disabled.gesture(2775)==null&&disabled.face(2310).expr.equals("neutre"),"Désactivation de la mise en scène auto");
-        return poses+" poses détectées + neutre, "+gestures.size()+" mouvements ; fondu 320 ms pour tous les axes, continuité aux coupures, priorité manuelle, images intermédiaires identiques à repère audio égal après pause/saut (robot, Wend)";
+        return poses+" poses détectées + neutre, "+gestures.size()+" mouvements ; fondu 320 ms pour tous les axes, continuité aux coupures, priorité manuelle, images intermédiaires identiques à repère audio égal après pause/saut (les deux robots)";
     }
     private static void glide(RigPose rig,Performance p,long at,String name){
         double[] start=rig.rest(),end=rig.rest(),sample=rig.rest(),before=rig.rest();
@@ -561,7 +571,7 @@ public final class DeviceChecks extends Instrumentation {
     }
     private String lipsReference(Context ctx,Refs refs)throws Exception {
         JSONObject f=fixtures().getJSONObject("lips");String text=f.getString("text");
-        JSONArray speech=f.getJSONArray("speech"),audio=f.getJSONArray("audio"),paths=f.getJSONArray("paths");
+        JSONArray speech=f.getJSONArray("speech"),audio=f.getJSONArray("audio"),envelope=f.getJSONArray("envelope");
         int speechFrames=0;
         for(int i=0;i<speech.length();i++){
             JSONArray trace=speech.getJSONArray(i);speechFrames+=trace.length();
@@ -596,20 +606,14 @@ public final class DeviceChecks extends Instrumentation {
                 if(level>0&&lip.shape!=48)spectral++;
                 require(pos==r.getInt(1)&&level==r.getInt(2),"Fenêtre PCM à "+t+" ms : "+pos+"/"+level+" ; attendu "+r);
             }
+            AichaTrack.Envelope levels=new AichaTrack.Envelope(pcm);
+            for(int i=0;i<envelope.length();i++){
+                JSONArray row=envelope.getJSONArray(i);
+                require(Math.abs(levels.level(row.getDouble(0))-row.getDouble(1))<.000002,"Enveloppe des lectrices à "+row.getDouble(0));
+            }
         }finally{input.delete();}
         require(spectral>0,"Aucune variation spectrale de la bouche");
-        String[] nodes={"levre-creux","levre-haut","levre-bas","bouche-dents","bouche-langue"};
-        String[] keys={"interieur","levreHaut","levreBas","dents","langue"};
-        for(int i=0;i<paths.length();i++){
-            JSONObject p=paths.getJSONObject(i),expected=p.getJSONObject("paths");Sprite s=new Sprite(refs,refs.character("wend"));
-            s.expression(p.getString("expr"),1,"",0);s.viseme=p.getInt("level");s.letter=p.getString("letter");s.tick(16);
-            for(int j=0;j<nodes.length;j++){
-                Svg.Node node=s.svg.get(nodes[j]);String d=expected.getString(keys[j]);
-                require(node.alpha==(d.isEmpty()?0:1),"Visibilité "+nodes[j]);
-                if(!d.isEmpty())require(Arrays.equals(node.current.approximate(.04f),Svg.parsePath(d).approximate(.04f)),"Tracé "+nodes[j]+" (cas "+i+")");
-            }
-        }
-        return speechFrames+" images TTS (callbacks rejoués, avec/sans limites de mots), "+audio.length()+" fenêtres du même WAV ("+spectral+" variations spectrales) et "+paths.length()+" formes Wend : positions/niveaux/tracés de référence à 1,25×";
+        return speechFrames+" images TTS (callbacks rejoués), "+audio.length()+" fenêtres du même WAV et "+envelope.length()+" mesures Web/natif de l’enveloppe des lectrices";
     }
     static boolean noNetwork(Context ctx){
         return Settings.Global.getInt(ctx.getContentResolver(),Settings.Global.AIRPLANE_MODE_ON,0)==1
@@ -646,13 +650,14 @@ public final class DeviceChecks extends Instrumentation {
                 click(a,def.getString("nom"));
                 main(()->require(a.project.character.equals(def.optString("id")),"Sélection : "+def.optString("id")));
             }
-            click(a,"Hacker");click(a,a.t("editeur.expressions")+" (1)");click(a,a.t("editeur.expressionDe","n",1));
+            main(()->require(named(a.content,"Hacker")==null&&named(a.content,"Wend")==null,"Ancien personnage sélectionnable"));
+            click(a,"Prisca");click(a,a.t("editeur.expressions")+" (1)");click(a,a.t("editeur.expressionDe","n",1));
             List<String> poses=Screens.expressions(a.refs);
             main(()->{require(poses.size()==39,"38 poses + Auto");noSalesCopy(a.modal);
                 for(String id:poses.subList(1,poses.size()))available(a.modal,a.t("expr."+id));});
             click(a,a.t("expr.colere"));click(a,"Retour à la scène");
             main(()->{
-                require(a.stage.sprite.svg.root.attr("aria-label").equals("Hacker"),"Personnage Hacker non rendu");
+                require(a.stage.aicha!=null&&a.stage.artwork.root.attr("aria-label").equals("Prisca"),"Prisca non rendue");
                 require(a.project.recalc().get(0).expression.equals("colere"),"Pose imposée non conservée");
                 a.content.requestFocus();
                 for(int i=0;i<poses.size()-2;i++)a.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_E));
@@ -679,9 +684,9 @@ public final class DeviceChecks extends Instrumentation {
                 a.go("scene");require(a.project.cps==90&&a.stage.term.optString("nom").equals("Matrix")
                     &&a.stage.termFont.equals(android.graphics.Typeface.MONOSPACE),"Réglages terminal non appliqués");
                 a.db.set("personnageId","robot_lectura");a.db.set("themeTerminal","sombre");
-                a.db.set("policeTerminal","JetBrains Mono");a.db.set("vitesseDefilement",28);
+                a.db.set("policeTerminal","JetBrains Mono");a.db.set("vitesseDefilement",28);a.project.character="robot_lectura";
             });
-            return "43 personnages sélectionnés, 38 poses + Auto, FR/EN sans offre ni clé ; terminal, mots personnalisés, vidéo, sous-titres et galerie accessibles";
+            return "Sept personnages sélectionnés, 38 poses + Auto, FR/EN sans offre ni clé ; terminal, mots personnalisés, vidéo, sous-titres et galerie accessibles";
         }finally{main(a::finish);}
     }
     // Use the real menu actions and the platform activity-result contract. No DocumentsUI is
@@ -739,7 +744,7 @@ public final class DeviceChecks extends Instrumentation {
         File srt=new File(dir,"lectura-export.srt"),vtt=new File(dir,"lectura-export.vtt"),png=new File(dir,"lectura-capture.png");
         JSONObject f=fixtures().getJSONObject("subtitles");
         try{
-            main(()->a.open(new Project(a.db.settings)));
+            main(()->{Project p=new Project(a.db.settings);p.character="prisca";a.open(p);});
             Files.write(vtt.toPath(),f.getString("vtt").getBytes(StandardCharsets.UTF_8));
             document(a,a.t("editeur.importerSrt"),Intent.ACTION_OPEN_DOCUMENT,vtt);
             main(()->require(a.project.subtitles&&a.project.text.equals(f.optString("text")),"Import VTT via le menu"));
@@ -753,14 +758,14 @@ public final class DeviceChecks extends Instrumentation {
             main(()->a.launch(false));
             waitFor("Lecture sous-titrée",()->a.reading!=null&&a.reading.playing,10000);
             main(()->{
-                Reading r=a.reading;require(r.timeline.parts.get(0).from==500&&r.timeline.parts.get(1).from==2500,"Timecodes non appliqués au WAV");
+                Reading r=a.reading;require(r.aicha!=null&&r.aicha.envelope!=null,"Préparation du WAV pour Prisca");require(r.timeline.parts.get(0).from==500&&r.timeline.parts.get(1).from==2500,"Timecodes non appliqués au WAV");
                 require(r.timeline.charAt(499)==0&&r.timeline.charAt(1000)>0,"Révélation du texte selon les repères");
                 a.stop();
             });
             document(a,a.t("scene.capture"),Intent.ACTION_CREATE_DOCUMENT,png);
             BitmapFactory.Options image=new BitmapFactory.Options();image.inJustDecodeBounds=true;BitmapFactory.decodeFile(png.getPath(),image);
             require(image.outWidth==1080&&image.outHeight==1920,"PNG portrait absent ou invalide");
-            return "Import VTT et SRT, exports exacts, timecodes pris en compte sur le WAV, PNG 1080×1920";
+            return "Import VTT et SRT, exports exacts, timecodes pris en compte sur le WAV, capture de Prisca en PNG 1080×1920";
         }finally{input.delete();main(()->{a.db.audio(a.project).delete();a.finish();});}
     }
     private File tone(Context ctx,int seconds)throws Exception {
@@ -961,12 +966,12 @@ public final class DeviceChecks extends Instrumentation {
         MainActivity a=open(ctx);File wave=tone(ctx,6);File dir=wave.getParentFile();String title="verification-lectura-"+System.nanoTime();
         try{
             main(()->{
-                a.open(new Project(a.db.settings));a.project.title=title;
+                Project p=new Project(a.db.settings);p.character="monique";a.open(p);a.project.title=title;a.stage.aicha.reduced=false;
                 a.scene.edit.setText("Bonjour, ceci est une leçon. Deuxième phrase. Dernière phrase.");a.importAudio(Uri.fromFile(wave),"tonalité.wav");
             });
             waitFor("Import pour enregistrement",()->a.project.fileAudio,10000);
             main(()->{a.muted=true;a.launch(false);});
-            waitFor("Lecture initiale",()->a.reading!=null&&a.reading.pcm!=null&&a.reading.time()>300,10000);
+            waitFor("Lecture initiale",()->a.reading!=null&&a.reading.pcm!=null&&a.reading.aicha!=null&&a.reading.time()>300,10000);
             click(a,"Menu");click(a,"Vertical 9:16 (TikTok)");click(a,"Paysage 16:9 (YouTube)");
             main(()->require(a.db.settings.optString("formatVideo").equals("16:9"),"Format 16:9 indisponible"));
             click(a,"Paysage 16:9 (YouTube)");click(a,"Vertical 9:16 (TikTok)");
@@ -996,7 +1001,7 @@ public final class DeviceChecks extends Instrumentation {
                 },10000);
                 main(a::dismiss);
             }finally{lib.delete(movie);}
-            return "Menu : formats 16:9 / 9:16, enregistrement et arrêt, MP4 portrait avec son, téléchargement et lecture dans Mes vidéos";
+            return "Menu : formats 16:9 / 9:16, Monique animée, enregistrement et arrêt, MP4 portrait avec son, téléchargement et lecture dans Mes vidéos";
         }finally{
             wave.delete();main(()->{a.db.audio(a.project).delete();a.finish();});
             var catalog=android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY);
@@ -1014,7 +1019,7 @@ public final class DeviceChecks extends Instrumentation {
         MainActivity a=(MainActivity)startActivitySync(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         AtomicReference<Throwable> setup=new AtomicReference<>();
         runOnMainSync(()->{try{
-            a.dismiss();a.project.text=a.t("voix.exemple");a.render("scene");
+            a.dismiss();a.project.character="robot_lectura";a.project.text=a.t("voix.exemple");a.render("scene");
             var kw=new Script.Keywords(a.refs,"fr",new JSONObject());List<Script.Segment> p=Script.timing(a.project.text,2000,1);
             a.reading=new Reading(a.project.text,p,kw,true,null,a.talk,null,a.project,1,()->{},code->{});
             a.reading.performance=new Performance(p,new Mood(a.refs,"fr",kw,true),a.refs.rig);a.muted=true;a.reading.volume(0,true);a.reading.terminal.shown=a.project.text.length();

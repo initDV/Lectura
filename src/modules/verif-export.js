@@ -113,6 +113,18 @@ export function analyserImages(images) {
   return { noire, figee, ok: !noire && !figee, notes };
 }
 
+/** Signature de la vignette entière : un geste discret peut se situer loin des points centraux. */
+export function mesurerImage(px) {
+  let somme = 0, sommeCarres = 0, signature = '';
+  for (let i = 0; i < px.length; i += 4) {
+    const l = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+    somme += l; sommeCarres += l * l;
+    signature += String.fromCharCode(Math.round(l / 6));
+  }
+  const n = px.length / 4, moyenne = somme / n;
+  return { moyenne, variance: sommeCarres / n - moyenne * moyenne, signature };
+}
+
 /**
  * Prélève `n` images dans une vidéo et en tire des statistiques (moyenne, variance, signature).
  * Le décodage se fait dans le navigateur, sur une vignette de 64 pixels : inutile de lire
@@ -140,20 +152,7 @@ async function prelever(blob, dureeMs, n = 4) {
         try { v.currentTime = cible; } catch (err) { clearTimeout(t); non(err); }
       });
       ctx.drawImage(v, 0, 0, cv.width, cv.height);
-      const px = ctx.getImageData(0, 0, cv.width, cv.height).data;
-      let somme = 0, sommeCarres = 0, n2 = 0, signature = '';
-      for (let i = 0; i < px.length; i += 4) {
-        const l = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-        somme += l; sommeCarres += l * l; n2++;
-      }
-      const moyenne = somme / n2, variance = sommeCarres / n2 - moyenne * moyenne;
-      // Signature : 16 luminances réparties dans l'image, arrondies. Deux images identiques
-      // ont la même signature ; une image qui bouge ne l'a pas.
-      for (let i = 0; i < 16; i++) {
-        const o = Math.floor((i + 0.5) * (px.length / 4 / 16)) * 4;
-        signature += Math.round((0.299 * px[o] + 0.587 * px[o + 1] + 0.114 * px[o + 2]) / 8).toString(36);
-      }
-      stats.push({ moyenne, variance, signature });
+      stats.push(mesurerImage(ctx.getImageData(0, 0, cv.width, cv.height).data));
     }
   } catch (err) {
     return { ok: false, erreur: String(err?.message || err), stats };
@@ -331,7 +330,8 @@ export async function verifierExport(blob, attendu = {}) {
 export function resumerVerification(v) {
   if (v.ok) {
     const s = (v.dureeMs / 1000).toFixed(1);
-    const base = `Vérifié : ${s} s, image et son présents, lisible dans la galerie.`;
+    const contenu = v.sonAudible ? 'image et son présents' : 'image présente, vidéo sans son';
+    const base = `Vérifié : ${s} s, ${contenu}.`;
     return v.avertissements?.length ? `${base} ${v.avertissements.join(' ')}` : base;
   }
   return `Attention : ${[...v.problemes, ...(v.avertissements || [])].join(' ')}`;

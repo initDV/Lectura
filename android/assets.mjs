@@ -1,6 +1,8 @@
 // Build-time only. The APK contains drawings/data, never the web application or a JS runtime.
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { empaqueterPersonnages } from '../tools/character-catalogue.mjs';
 import fr from '../src/i18n/fr.js';
 import en from '../src/i18n/en.js';
 import { DEFAUTS } from '../src/modules/storage.js';
@@ -32,13 +34,12 @@ const voices = [
   ...piper.filter((v) => !['siwis', 'tom'].includes(v.id)),
 ];
 const versions = JSON.parse(await read('package.json'));
-// Both platforms expose the full catalogue. Keep the native asset schema unchanged.
 const defaults = { ...DEFAUTS, moteurVoix: 'auto', voixId: '' };
 const androidStrings = (labels, overrides) => ({ ...labels, ...overrides });
 await mkdir(output, { recursive: true });
 await mkdir(resolve(res, 'mipmap-xxxhdpi'), { recursive: true });
+empaqueterPersonnages(fileURLToPath(new URL('characters/', root)), resolve(output, 'characters'));
 await Promise.all([
-  cp(new URL('characters/', root), resolve(output, 'characters'), { recursive: true }),
   cp(new URL('data/', root), resolve(output, 'data'), { recursive: true }),
   cp(new URL('android/data/prononciation.json', root), resolve(output, 'prononciation.json')),
   cp(new URL('android/data/direction.json', root), resolve(output, 'direction.json')),

@@ -5,8 +5,11 @@ L’APK n’embarque ni navigateur ni copie du site : vues et dessin Android, vo
 l’appareil ou Pocket TTS, Kokoro/Sherpa-ONNX et Piper en natif, codecs Android pour la vidéo.
 
 Tous les parcours sont accessibles dès l’installation, sans compte, achat ni clé
-produit : 43 personnages, 38 poses, personnalisation du terminal et des mots-clés,
-sous-titres SRT/VTT, capture PNG et export vidéo avec « Mes vidéos ».
+produit : [sept personnages](../docs/AICHA-PWA.md), 38 poses, personnalisation du terminal et des mots-clés,
+sous-titres SRT/VTT, capture PNG et export vidéo avec « Mes vidéos ». Les cinq
+lectrices utilisent le dessin SVG commun et un rig natif ; les deux robots
+conservent leur rendu. Un personnage retiré est remplacé à l’écran par Robot
+Lectura, sans modifier le projet, son texte ou ses médias.
 
 ## Voix locales et animation
 

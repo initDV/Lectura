@@ -40,6 +40,7 @@ export class SpeechSource {
       code === 'non-demarree' ? t('voix.err.nonDemarree') : code === 'bloquee' ? t('voix.err.bloquee') : t('voix.err.lecture', { code })));
   }
   get playing() { return this.queue.playing; }
+  get speaking() { return this.queue.speaking; }
   charPos() { return this.queue.charPos(); }
   timeMs() { return (this.queue.charPos() / Math.max(1, this.queue.total)) * this.dureeMs; }
   play() { this.queue.play(); }

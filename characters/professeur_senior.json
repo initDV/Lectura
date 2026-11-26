@@ -1,5 +1,0 @@
-{"id": "professeur_senior", "nom": "Professeur senior", "svg": "professeur_senior.svg",
- "couleurContour": "#a76bff", "couleurRemplissage": "#1c1830", "couleurYeux": "#3ddc84", "couleurBouche": "#38bdf8",
- "pivots": {"epaule_g": [34, 224], "epaule_d": [208, 224]},
- "mouvements": {"vitesseIdle": 1, "amplitudeBras": 1, "style": "calme"},
- "voixSuggeree": {"hauteur": 0.8, "vitesse": 0.85}, "accessoires": ["barbe", "noeud_papillon"]}

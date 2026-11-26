@@ -1,6 +1,6 @@
 {
   "name": "lectura",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "PWA hors ligne : un personnage animé lit ton texte à côté d'un faux terminal.",
   "private": true,
   "type": "module",

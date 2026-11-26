@@ -8,7 +8,7 @@ import { creerDecor } from './scene-decor.js';
 export async function renderDecor(couleurs) {
   try {
     const svg = creerDecor(couleurs || {});
-    return await renderSvg(svg);
+    return await renderSvg(svg, 0);
   } catch { return null; }
 }
 import { renderSvg, drawSvgImage } from './svgframe.js';
@@ -97,21 +97,38 @@ function drawTerminal(ctx, box, s, sc, tMs) {
   ctx.strokeStyle = th.bord; ctx.lineWidth = Math.max(1, s); ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.stroke();
 }
 
-/**
- * Dessine toute la scène. sc = { projet, svg, persoImage, terminal, titreTerminal, texteMasque, figer }
- * Même composition qu'à l'écran, en paysage comme en vertical : robot à gauche (38 %), aligné en bas ; terminal à droite (62 %).
- */
+function cadrerPerso(svg, box, s) {
+  const vb = svg?.viewBox?.baseVal;
+  if (!vb?.width) return null;
+  const k = Math.min((box.w * .92) / vb.width, (box.h * .94) / vb.height);
+  const centre = svg.getAttribute('preserveAspectRatio') === 'xMidYMid meet';
+  const x = box.x + (box.w - vb.width * k) / 2 + (centre ? 0 : 6 * s);
+  const y = centre ? (box.h - vb.height * k) / 2 : box.h - vb.height * k - 10 * s;
+  return { vb, k, x, y };
+}
+
+/** Même composition qu'à l'écran : personnage à gauche (38 %), terminal à droite (62 %). */
 export function drawScene(ctx, W, H, sc, tMs = performance.now()) {
   ensureRoundRect();
   const s = Math.min(W, H) / 720;
   ctx.fillStyle = sc.projet.reglages.fond; ctx.fillRect(0, 0, W, H);
-  if (sc.decorImage) { try { ctx.drawImage(sc.decorImage, 0, 0, W, H); } catch { /* SVG défaillant, on garde le fond uni */ } }
   const cb = { x: 0, y: 0, w: W * 0.38, h: H }, tb = { x: W * 0.38, y: 0, w: W * 0.62, h: H };
-  const img = sc.persoImage, vb = sc.svg?.viewBox?.baseVal;
-  if (img && vb?.width) {
-    const k = Math.min((cb.w * 0.92) / vb.width, (cb.h * 0.94) / vb.height);
+  const cadre = cadrerPerso(sc.svg, cb, s), decor = sc.decorImage;
+  if (sc.peindreDecor && cadre) {
+    const { vb, k, x, y } = cadre;
+    sc.peindreDecor(ctx, cb, { x: x - vb.x * k, y: y - vb.y * k, k }, sc.avance);
+  } else if (decor?.width && decor.height) {
+    // Même cadrage que le SVG CSS : xMidYMax slice, derrière le personnage, sans marge transparente.
+    const k = Math.max(cb.w / decor.width, cb.h / decor.height), w = decor.width * k, h = decor.height * k;
     ctx.save(); ctx.beginPath(); ctx.rect(cb.x, cb.y, cb.w, cb.h); ctx.clip();
-    drawSvgImage(ctx, img, vb, cb.x + (cb.w - vb.width * k) / 2 + 6 * s, cb.h - vb.height * k - 10 * s, vb.width * k, vb.height * k);
+    try { ctx.drawImage(decor, cb.x + (cb.w - w) / 2, cb.h - h, w, h); }
+    catch { /* SVG défaillant, on garde le fond uni */ }
+    finally { ctx.restore(); }
+  }
+  if (sc.persoImage && cadre) {
+    const { vb, k, x, y } = cadre;
+    ctx.save(); ctx.beginPath(); ctx.rect(cb.x, cb.y, cb.w, cb.h); ctx.clip();
+    drawSvgImage(ctx, sc.persoImage, vb, x, y, vb.width * k, vb.height * k);
     ctx.restore();
   }
   drawTerminal(ctx, tb, s, sc, tMs);
@@ -123,9 +140,10 @@ export async function capturePng(sc, { w = 1280, h = 720, decorCouleurs = null }
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error("Capture impossible : ce navigateur refuse de créer l'image (mémoire insuffisante ?).");
-  await document.fonts?.ready;
-  const decorImage = decorCouleurs ? await renderDecor(decorCouleurs) : null;
-  drawScene(ctx, w, h, { ...sc, persoImage: await renderSvg(sc.svg), decorImage, figer: true });
+  const [persoImage, decorImage] = await Promise.all([
+    renderSvg(sc.svg), !sc.peindreDecor && decorCouleurs ? renderDecor(decorCouleurs) : null, document.fonts?.ready,
+  ]);
+  drawScene(ctx, w, h, { ...sc, persoImage, decorImage, figer: true });
   const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
   if (!blob) throw new Error('Capture impossible : le navigateur n\'a pas pu produire le fichier PNG.');
   return blob;

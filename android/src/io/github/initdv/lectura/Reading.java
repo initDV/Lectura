@@ -16,7 +16,9 @@ final class Reading implements AutoCloseable {
     final Script.Terminal terminal;
     final Pcm pcm;
     Performance performance;
+    AichaTrack aicha;
     RobotChoreo choreography;
+    private double aichaMs=-1,aichaLevel;
     final boolean silent;
     final double mediaDuration;
     double duration;
@@ -93,7 +95,7 @@ final class Reading implements AutoCloseable {
     private void pauseMedia(){if(queue!=null)queue.pause();if(player!=null)player.pause();if(lip!=null)lip.reset();}
     void seek(double ms){
         boolean wasOutro=outro;
-        position=Math.max(0,Math.min(duration-1,ms));ended=false;mark=SystemClock.uptimeMillis();
+        position=Math.max(0,Math.min(duration-1,ms));ended=false;mark=SystemClock.uptimeMillis();aichaMs=-1;
         outro=duration>mediaDuration&&position>=mediaDuration;
         if(outro){if(playing&&!wasOutro)pauseMedia();return;}
         if(queue!=null)queue.seek((int)(position/mediaDuration*text.length()));
@@ -132,6 +134,13 @@ final class Reading implements AutoCloseable {
     static int simulated(double ms,char c){
         if(Script.space(c)||".,;:!?…()«»\"-".indexOf(c)>=0)return 0;double t=ms/1000,hz=7.5+1.5*Math.sin(t*2.1);
         double a=Math.abs(Math.sin(Math.PI*hz*t))*(.65+.35*Math.sin(t*3.7+1));return a>.72?3:a>.4?2:a>.12?1:0;
+    }
+    double aichaMouthLevel(double ms,double chars){
+        if(aicha==null||ended)return 0;
+        if(silent)return 1;
+        if(aicha.envelope!=null)return aicha.envelope.level(ms);
+        if(playing){aichaLevel=viseme(ms,ms,chars)/3.;aichaMs=ms;}
+        return aichaMs==ms?aichaLevel:0;
     }
     int shape(){return lip==null?48:lip.shape;}
     @Override public void close(){playing=false;if(queue!=null)queue.stop();if(player!=null)player.release();if(pcm!=null)pcm.close();}

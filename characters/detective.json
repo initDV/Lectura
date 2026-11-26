@@ -1,5 +1,0 @@
-{"id": "detective", "nom": "Détective", "svg": "detective.svg",
- "couleurContour": "#ffb347", "couleurRemplissage": "#1c1830", "couleurYeux": "#3ddc84", "couleurBouche": "#38bdf8",
- "pivots": {"epaule_g": [34, 224], "epaule_d": [208, 224]},
- "mouvements": {"vitesseIdle": 1, "amplitudeBras": 1, "style": "fluide"},
- "voixSuggeree": {"hauteur": 0.85, "vitesse": 0.95}, "accessoires": ["chapeau", "loupe"]}

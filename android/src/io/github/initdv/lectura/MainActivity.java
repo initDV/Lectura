@@ -212,8 +212,8 @@ public final class MainActivity extends Activity {
                 if(!silent&&!cfg.fileAudio&&!choices.isEmpty()&&!choices.get(0).equals(voiceUsed)){
                     JSONObject fallback=hd.voice(voiceUsed);note(t("android.voice.fallback","nom",fallback==null?voiceUsed:fallback.optString("nom")),"warn",5000);
                 }
-                reading.performance=prepared.performance;
-                if(stage.sprite.robotStage!=null&&!stage.sprite.reduced&&cfg.emotions)
+                reading.performance=prepared.performance;reading.aicha=prepared.aicha;
+                if(stage.sprite!=null&&stage.sprite.robotStage!=null&&!stage.sprite.reduced&&cfg.emotions)
                     reading.choreograph(RobotChoreo.plan(prepared.segments,reading.mediaDuration));
                 preparing=false;sig=signature;clearOverlay();reading.volume(volume(),muted);reading.speed(project.speed);
                 if(silent)note(t("scene.apercuActif"),"info");if(isForeground)startPlaying();else playState();

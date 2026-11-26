@@ -27,6 +27,8 @@ import static io.github.initdv.lectura.Refs.*;
 /** Scene composition and clock-coupled sprite/terminal, shared with the capture renderer. */
 final class Stage extends FrameLayout {
     final MainActivity a; final Ui ui; final Project project; final Sprite sprite;final Decor decor;
+    final Svg artwork;
+    final AichaStage aicha;
     final JSONObject term;
     final String title;
     final boolean reduced;
@@ -50,8 +52,13 @@ final class Stage extends FrameLayout {
         JSONObject ts=object(a.refs.themes,"terminal");JSONObject t=ts.optJSONObject(project.terminalTheme);term=t==null?object(ts,"sombre"):t;
         termFont=project.font.equals("Système")?Typeface.MONOSPACE:ui.mono(400);
         title=a.db.settings.optString("titreTerminal");radius=Math.round(ui.radiusLg);
-        sprite=new Sprite(a.refs,def,true);sprite.reduced=reduced||a.db.settings.optBoolean("reduireAnimations");
-        sprite.gain=project.motion.equals("calme")?.6:project.motion.equals("vif")?1.3:1;
+        boolean reduce=reduced||a.db.settings.optBoolean("reduireAnimations");
+        double gain=project.motion.equals("calme")?.6:project.motion.equals("vif")?1.3:1;
+        if(AichaTrack.matches(def)){
+            sprite=null;artwork=a.svg(def.optString("svg"));aicha=new AichaStage(artwork,decor,gain,reduce);
+        }else{
+            aicha=null;sprite=new Sprite(a.refs,def,true);artwork=sprite.svg;sprite.reduced=reduce;sprite.gain=gain;
+        }
         face=new Face();screenText=new ScreenText();addView(face,ui.fp(Ui.MATCH,Ui.MATCH,Gravity.TOP));
         menu=ui.iconButton("menu",a.t("scene.menu"),ui.mutedText,20,a::menu);addView(menu,ui.fp(44,44,Gravity.TOP|Gravity.LEFT));
         settings=ui.iconButton("settings",a.t("reglages.themeApp"),ui.bg,22,()->a.go("reglages"));settings.setBackground(ui.touch(ui.accent,99,0,0));settings.setElevation(ui.f(4));
@@ -68,6 +75,11 @@ final class Stage extends FrameLayout {
         if(r!=lastReading){lastReading=r;screenText.reset();}
         if(r!=null&&!a.preparing){
             double ms=r.time(),cursor=r.chars(ms);r.terminal.shown=(int)cursor;
+            if(aicha!=null){
+                boolean idle=a.stopped&&!r.ended;
+                aicha.update(idle?null:r.aicha,ms,idle?0:r.aichaMouthLevel(ms,cursor),now,r.ended,a.forced);
+                return;
+            }
             Script.Segment seg=r.timeline.at(ms);
             long end=seg==null?0:seg.speechEnd<0?seg.to:seg.speechEnd;
             boolean voicing=r.playing&&seg!=null&&seg.type==Script.SPOKEN&&ms<end;
@@ -77,6 +89,7 @@ final class Stage extends FrameLayout {
             sprite.letter=voicing?Reading.letterAt(r.text,cursor):"";sprite.quietMouth=!voicing;
             sprite.talk=voicing?(sprite.viseme>0?1:.15)*RigPose.ease((ms-seg.from)/65)*RigPose.ease((end-ms)/85):0;
         }else{
+            if(aicha!=null){aicha.update(null,0,0,now,false,a.forced);return;}
             sprite.choreography=null;sprite.direct(null,-1,a.forced);sprite.quietMouth=false;sprite.viseme=0;sprite.shape=48;sprite.letter="";sprite.talk=0;
         }
         sprite.tick(now);
@@ -90,7 +103,8 @@ final class Stage extends FrameLayout {
             double now=SystemClock.uptimeMillis()-initial;Stage.this.updatePose(now);
             float w=getWidth()/ui.density,h=getHeight()/ui.density,left=w*.38f;
             c.save();c.scale(ui.density,ui.density);round(c,0,0,w,h,radius,background);
-            decor.screen(c,left,h);c.save();c.clipRect(0,0,left,h);sprite.svg.fit(c,2,0,left-4,h,true);c.restore();
+            if(aicha!=null)aicha.paint(c,left,h,false);
+            else{decor.screen(c,left,h);c.save();c.clipRect(0,0,left,h);sprite.svg.fit(c,2,0,left-4,h,true);c.restore();}
             drawWindow(c,left,0,w-left,h,now);
             if(recording){round(c,50,10,111,36,99,0xcc0d0d12);paint.setColor(ui.danger);c.drawCircle(65,23,5,paint);
                 style(ui.font(700),12.8f,0xffff8a8a);c.drawText("REC",76,baseline(paint,23),paint);}
@@ -132,10 +146,13 @@ final class Stage extends FrameLayout {
     }
     void exportDraw(Canvas c,int w,int h,boolean frozen,double now){
         float s=Math.min(w,h)/720f,left=w*.38f;
-        c.drawColor(background);decor.export(c,w,h);
-        float factor=Math.min(left*.92f/sprite.svg.box[2],h*.94f/sprite.svg.box[3]);
-        c.save();c.clipRect(0,0,left,h);
-        sprite.svg.draw(c,(left-sprite.svg.box[2]*factor)/2+6*s,h-sprite.svg.box[3]*factor-10*s,factor);c.restore();
+        c.drawColor(background);
+        if(aicha!=null)aicha.paint(c,left,h,true);
+        else{
+            decor.export(c,w,h);float factor=Math.min(left*.92f/sprite.svg.box[2],h*.94f/sprite.svg.box[3]);
+            c.save();c.clipRect(0,0,left,h);
+            sprite.svg.draw(c,(left-sprite.svg.box[2]*factor)/2+6*s,h-sprite.svg.box[3]*factor-10*s,factor);c.restore();
+        }
         Reading r=a.reading;
         if(r!=null)exportTerminal(c,r.terminal,left,0,w-left,h,s,frozen,now);
     }

@@ -7,8 +7,9 @@ import android.content.Intent;
 import android.os.Bundle;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.util.Arrays;
 
-/** This fixture uses API shared by v21 and the new APK; it never runs in the distributed app. */
+/** Seeds projects on the actual public APK, then checks them after an in-place update. */
 public final class UpgradeChecks extends Instrumentation {
     private boolean seed;
     private static final String TITLE="Épreuve de mise à jour";
@@ -27,12 +28,13 @@ public final class UpgradeChecks extends Instrumentation {
                 p.fileAudio=true;p.fileName="audio.wav";p.duration=6000;
                 try(InputStream in=getContext().getAssets().open("lips-reference.wav")){Files.copy(in,db.audio(p).toPath());}
                 db.save(p);
-                Project draft=new Project(db.settings);draft.text="Brouillon conservé";db.draft(draft);
+                Project draft=new Project(db.settings);draft.text="Brouillon conservé";draft.character="moussa";db.draft(draft);
                 check(ctx.getSharedPreferences("lectura",Context.MODE_PRIVATE).edit().putString("settings",db.settings.toString()).commit(),"Écriture des réglages du prédécesseur");
             }else{
                 MainActivity a=(MainActivity)startActivitySync(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
                 runOnMainSync(()->{
-                    check(a.project.text.equals("Brouillon conservé")&&a.modal==null,"Brouillon ou tutoriel perdu");
+                    check(a.project.text.equals("Brouillon conservé")&&a.project.character.equals("moussa")&&a.modal==null,"Brouillon ou tutoriel perdu");
+                    check(a.refs.character("moussa")==null&&a.stage.sprite!=null&&a.stage.sprite.robotStage!=null,"Repli du brouillon sur Robot Lectura");
                     check(a.db.locale().equals("en")&&Math.abs(a.volume()-.65)<.001,"Préférences perdues");
                     check(!a.db.settings.has("licence")&&!a.db.settings.has("idInstallation"),"Champs obsolètes conservés");
                     try{
@@ -40,14 +42,17 @@ public final class UpgradeChecks extends Instrumentation {
                         Script.Segment cue=p.recalc().get(0);
                         check(p.title.equals(TITLE)&&p.text.equals(TEXT)&&p.subtitles&&cue.from==1500&&cue.to==3000
                             &&cue.expression.equals("colere"),"Projet, pose ou sous-titres perdus");
-                        check(a.stage.sprite.svg.root.attr("aria-label").equals("Hacker")&&a.stage.term.optString("nom").equals("Matrix")
-                            &&p.cps==90,"Personnage ou terminal changé");
-                        check(p.fileAudio&&p.fileName.equals("audio.wav")&&a.db.audio(p).length()==576044,"Audio privé perdu");
+                        check(p.character.equals("hacker")&&a.refs.character("hacker")==null&&a.stage.sprite!=null&&a.stage.sprite.robotStage!=null,
+                            "Dessin retiré présent ou repli du projet incorrect");
+                        check(a.stage.term.optString("nom").equals("Matrix")&&p.cps==90,"Terminal changé");
+                        try(InputStream in=getContext().getAssets().open("lips-reference.wav")){
+                            check(p.fileAudio&&p.fileName.equals("audio.wav")&&Arrays.equals(Refs.read(in,1_000_000),Files.readAllBytes(a.db.audio(p).toPath())),"Audio privé perdu ou différent");
+                        }
                     }catch(Exception e){throw new AssertionError(e);}
                     a.finish();
                 });
             }
-            out.putString("stream","\nLECTURA_OK mise-a-jour : "+(seed?"données écrites sous l’ancienne version":"brouillon, projet, audio, pose, terminal et réglages conservés ; anciens champs retirés")+"\nLECTURA_COMPLETE\n");
+            out.putString("stream","\nLECTURA_OK mise-a-jour : "+(seed?"données écrites sous l’ancienne version":"brouillon et projet repliés sur Robot Lectura ; texte, audio à l’octet, pose, terminal et réglages conservés")+"\nLECTURA_COMPLETE\n");
         }catch(Throwable e){code=Activity.RESULT_CANCELED;out.putString("stream","\nLECTURA_ERROR mise-a-jour : "+android.util.Log.getStackTraceString(e)+"\n");}
         finish(code,out);
     }

@@ -1,5 +1,0 @@
-{"id": "hacker", "nom": "Hacker", "svg": "hacker.svg",
- "couleurContour": "#39ff14", "couleurRemplissage": "#1c1830", "couleurYeux": "#ff4d4d", "couleurBouche": "#38bdf8",
- "pivots": {"epaule_g": [34, 224], "epaule_d": [208, 224]},
- "mouvements": {"vitesseIdle": 1, "amplitudeBras": 1, "style": "frappe"},
- "voixSuggeree": {"hauteur": 0.9, "vitesse": 1.1}, "accessoires": ["capuche"]}

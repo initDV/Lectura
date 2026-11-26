@@ -1,8 +1,7 @@
 # Ajouter un personnage
 
 Aucun code à modifier : deux fichiers à créer, une commande à lancer.
-Tous les personnages partagent le même robot (mêmes proportions, mêmes articulations, même style « contour »).
-Seuls changent la couleur du contour et des yeux, et un ou deux accessoires en traits simples.
+Ce guide décrit le rig historique des robots. Les [cinq lectrices](AICHA-PWA.md) ont un rig différent (`rig: "aicha"`) et ne doivent pas être adaptées à ces calques. Seules les fiches de `characters/index.json` sont empaquetées par les deux builds.
 
 ## 1. Copier le robot de référence
 

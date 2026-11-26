@@ -126,10 +126,9 @@ Raccourcis clavier (hors zone de texte) : `Espace` lancer/pause · `←` `→` �
 
 ## Tout est gratuit, sur le Web et sur Android
 
-Le catalogue de 43 personnages, les 38 expressions et leurs mélanges, les lèvres avancées, les thèmes et les mots-clés
-personnalisés sont disponibles sans compte ni clé. Les imports et exports SRT/VTT, la capture PNG, les exports vidéo et
+La PWA et Android partagent [sept personnages](docs/AICHA-PWA.md) : Aïcha, Charlotte, Doriane, Monique, Prisca, Robot Lectura et Robot rouge. Les expressions, les thèmes et les mots-clés personnalisés sont disponibles sans compte ni clé. Les imports et exports SRT/VTT, la capture PNG, les exports vidéo et
 MP3 et la médiathèque locale sont également disponibles. Les formats proposés dépendent des codecs de l'appareil.
-La PWA 1.1.0 conserve les projets, le brouillon, les audios, les vidéos et les voix installées en mettant à jour une ancienne version.
+Un projet ancien utilisant un personnage retiré s’ouvre avec Robot Lectura sans perdre son texte ni ses médias.
 
 ### Essayer les quatre gestes
 

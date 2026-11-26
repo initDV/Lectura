@@ -19,7 +19,8 @@ final class Svg {
     private static final Pattern NUM = Pattern.compile(NUMBER);
     private static final Pattern TOKEN = Pattern.compile(NUMBER+"|[A-Za-z]");
     private static final Pattern TRANSFORM = Pattern.compile("([A-Za-z]+)\\(([^)]*)\\)");
-    private static final Set<String> SHAPES = Set.of("svg","g","rect","line","circle","ellipse","path","polyline","polygon");
+    private static final Set<String> SHAPES = Set.of("svg","g","rect","line","circle","ellipse","path","polyline","polygon","defs","clipPath","use");
+    private static final Pattern LOCAL_CLIP = Pattern.compile("url\\(#([\\w-]+)\\)");
     final Node root;
     final float[] box;
     final HashMap<String,Node> ids = new HashMap<>();
@@ -30,6 +31,7 @@ final class Svg {
             XmlPullParser xml = Xml.newPullParser();
             xml.setInput(in,"UTF-8"); xml.nextTag();
             root = read(xml);
+            connect(root);
             float[] vb = numbers(root.attr("viewBox"));
             box = vb.length == 4 ? vb : new float[]{0,0,240,600};
         } catch (Exception e) { throw new IllegalArgumentException("Dessin SVG invalide",e); }
@@ -51,6 +53,23 @@ final class Svg {
         n.original=n.geometry();
         return n;
     }
+    private void connect(Node n) {
+        // The bundled rigs use local shape references only; no URI is ever opened.
+        if (n.kind.equals("use")) {
+            String href=n.attr("href");
+            Node ref=href.startsWith("#")?get(href.substring(1)):null;
+            if(ref==null||ref.parent==null||!ref.parent.kind.equals("defs")||!ref.kind.equals("g"))
+                throw new IllegalArgumentException("Référence SVG invalide : "+href);
+            n.reference=ref;
+        }
+        if(!n.attr("clip-path").isEmpty()) {
+            Matcher url=LOCAL_CLIP.matcher(n.attr("clip-path"));Node ref=url.matches()?get(url.group(1)):null;
+            if(ref==null||!ref.kind.equals("clipPath")||ref.children.size()!=1||ref.children.get(0).original==null)
+                throw new IllegalArgumentException("Masque SVG invalide : "+n.attr("clip-path"));
+            n.mask=ref.children.get(0);
+        }
+        for(Node child:n.children)connect(child);
+    }
     Node get(String id) { return ids.get(id); }
     void fit(Canvas c,float left,float top,float width,float height,boolean bottom) {
         float scale=Math.min(width/box[2],height/box[3]);
@@ -58,29 +77,34 @@ final class Svg {
     }
     void draw(Canvas c,float x,float y,float scale) {
         c.save(); c.translate(x,y); c.scale(scale,scale); c.translate(-box[0],-box[1]);
-        drawNode(c, root, Style.DEFAULT); c.restore();
+        drawNode(c,root,Style.DEFAULT,false); c.restore();
     }
-    private void drawNode(Canvas c, Node n, Style parent) {
-        if (n.hidden || n.alpha==0 || n.attr("display").equals("none") || n.attr("style").matches("(?s).*display\\s*:\\s*none.*")) return;
+    private void drawNode(Canvas c, Node n, Style parent, boolean reference) {
+        if(n.kind.equals("defs")||n.kind.equals("clipPath")||n.hidden||n.alpha==0||n.attr("display").equals("none"))return;
+        String inline=n.attr("style");if(!inline.isEmpty()&&inline.matches("(?s).*display\\s*:\\s*none.*"))return;
         Style style = n.style;
         if (style==null || n.inherited!=parent) { n.inherited=parent; n.style=style=new Style(parent,n); }
         c.save();
         Matrix m=n.transform==null?n.staticTransform:n.transform;
         if (m != null) c.concat(m);
+        if(n.mask!=null)c.clipPath(n.mask.outline());
         float alpha=n.alpha<0?n.f("opacity",1):n.alpha;
         boolean layer=alpha<.999f;
         if (layer) c.saveLayerAlpha(null,Math.round(255*alpha));
-        Path p=n.current==null?n.original:n.current;
+        Path p=n.outline();
         if (p!=null) {
             if (style.fill!=0) {
                 paint.setStyle(Paint.Style.FILL); paint.setColor(style.fill); paint.setAlpha(Math.round(style.fillOpacity*255)); c.drawPath(p,paint);
             }
-            if (style.stroke!=0 && style.width>0) {
+            float width=n.strokeWidth<0?style.width:n.strokeWidth;
+            if (style.stroke!=0 && width>0) {
                 paint.setStyle(Paint.Style.STROKE); paint.setColor(style.stroke); paint.setAlpha(Math.round(style.strokeOpacity*255));
-                paint.setStrokeWidth(style.width); paint.setStrokeMiter(4); paint.setStrokeCap(style.cap); paint.setStrokeJoin(style.join); c.drawPath(p,paint);
+                paint.setStrokeWidth(width); paint.setStrokeMiter(4); paint.setStrokeCap(style.cap); paint.setStrokeJoin(style.join); c.drawPath(p,paint);
             }
         }
-        for (Node child:n.children) drawNode(c,child,style);
+        // The hand definition is a leaf reference (do not recurse through another <use>).
+        if(n.reference!=null&&!reference)drawNode(c,n.reference,style,true);
+        for (Node child:n.children) drawNode(c,child,style,reference);
         if (layer) c.restore();
         c.restore();
     }
@@ -103,14 +127,19 @@ final class Svg {
         final String kind;
         final HashMap<String,String> a=new HashMap<>();
         final ArrayList<Node> children=new ArrayList<>();
-        Node parent;
+        Node parent,reference,mask;
         Matrix staticTransform,transform;
         Path original,current;
         Style style,inherited;
         boolean hidden;
-        float alpha=-1;
+        float alpha=-1,strokeWidth=-1;
         Node(String kind) { this.kind=kind; }
         void add(Node child) { if (child.parent!=null) child.parent.children.remove(child); child.parent=this; children.add(child); }
+        void before(Node child,Node sibling) {
+            if(child.parent!=null)child.parent.children.remove(child);
+            child.parent=this;children.add(children.indexOf(sibling),child);
+        }
+        Path outline(){return current==null?original:current;}
         String attr(String name) { return a.getOrDefault(name,""); }
         float f(String name,float fallback) { try { return Float.parseFloat(attr(name)); } catch (NumberFormatException e) { return fallback; } }
         float f(String name) { return f(name,0); }

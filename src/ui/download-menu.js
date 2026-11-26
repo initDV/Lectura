@@ -27,9 +27,9 @@ async function partager(blob, nom, mime, fermer) {
   }
 }
 
-export function ouvrirMenuTelechargement({ videoBlob, mime, fileBase }) {
+export function ouvrirMenuTelechargement({ videoBlob, mime, fileBase, son = true }) {
   const estMp4 = mime.startsWith('video/mp4');
-  const tailleVideo = taille(videoBlob.size);
+  const tailleVideo = taille(videoBlob.size), sousVideo = t(son ? 'dl.formatVideo' : 'scene.apercuSansSon');
   const garder = h('input', { type: 'checkbox', checked: true, id: 'dl-garder' });
 
   const sauverSiDemande = async (blob, format) => {
@@ -42,6 +42,7 @@ export function ouvrirMenuTelechargement({ videoBlob, mime, fileBase }) {
     notify(t('dl.mp4.reparation'), 'info', 3000);
     const corrige = await remuxerMp4(videoBlob);
     const base = corrige || videoBlob;
+    if (!son) return base;
     // Conversion AAC : Chrome enregistre en Opus dans le MP4, qu'aucun reseau social
     // ne decode. On reencode l'audio seul (video H.264 recopiee) avant telechargement/partage.
     try {
@@ -115,11 +116,11 @@ export function ouvrirMenuTelechargement({ videoBlob, mime, fileBase }) {
       h('span', { text: t('dl.garder') })
     ),
     estMp4
-      ? ligne({ nom: 'MP4', sous: t('dl.formatVideo'), tailleTxt: tailleVideo, actif: true, onTelecharger: () => telechargerMp4(fermer), onPartager: () => partagerMp4(fermer) })
+      ? ligne({ nom: 'MP4', sous: sousVideo, tailleTxt: tailleVideo, actif: true, onTelecharger: () => telechargerMp4(fermer), onPartager: () => partagerMp4(fermer) })
       : ligne({ nom: 'MP4', sous: t('dl.mp4.indispo'), actif: false }),
     !estMp4
-      ? ligne({ nom: 'WebM', sous: t('dl.formatVideo'), tailleTxt: tailleVideo, actif: true, onTelecharger: () => telechargerWebm(fermer), onPartager: () => partagerWebm(fermer) })
+      ? ligne({ nom: 'WebM', sous: sousVideo, tailleTxt: tailleVideo, actif: true, onTelecharger: () => telechargerWebm(fermer), onPartager: () => partagerWebm(fermer) })
       : ligne({ nom: 'WebM', sous: t('dl.webm.indispo'), actif: false }),
-    ligne({ nom: 'MP3', sous: t('dl.mp3.genere'), actif: true, onTelecharger: () => genererMp3(fermer, false), onPartager: () => genererMp3(fermer, true) }),
+    son ? ligne({ nom: 'MP3', sous: t('dl.mp3.genere'), actif: true, onTelecharger: () => genererMp3(fermer, false), onPartager: () => genererMp3(fermer, true) }) : null,
   ]);
 }

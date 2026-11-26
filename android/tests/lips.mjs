@@ -3,8 +3,7 @@ import { LipSync } from '../../src/modules/lipsync.js';
 import { SpeechSource } from '../../src/modules/player.js';
 import { SpeechQueue } from '../../src/modules/voice/queue.js';
 import { autoTiming, estimateDurationMs, Timeline, typeLigne } from '../../src/modules/timeline.js';
-import { dessiner, formeDe } from '../../src/modules/mouth.js';
-import { poseDe } from '../../src/modules/expressions.js';
+import { enveloppeAudio } from '../../src/modules/aicha/mouth.js';
 
 const text = 'Bonjour, ouvre la porte ! Émile écoute.\n$ echo test\nVoilà.';
 const speed = 1.25, cps = 28;
@@ -69,14 +68,7 @@ export function lipsFixture() {
     const pos = timeline.charAt(ms), segment = timeline.segmentAtChar(pos);
     return [ms, pos, segment && typeLigne(segment.texte) === 'parle' ? lip.read().level : 0];
   });
-  const paths = ['', 'b', 'o', 'i', 'e', 'u', 'f', 'r'].map((letter, i) => {
-    const level = i % 4, expr = i < 4 ? 'neutre' : 'content';
-    const shape = letter ? formeDe(letter) : {};
-    const pose = poseDe(expr);
-    // Wend's original pivots and mouth size, with character.js's active (not unused Wend) model.
-    return { letter, level, expr, paths: dessiner(100 + pose.gx * .2, 84 + pose.my, 9.5 * pose.w / 48,
-      Math.max([5, 9, 14, 19][level], pose.h) * 8 / 19,
-      { arrondi: Math.max(pose.rond || 0, shape.arrondi || 0), etirement: shape.etirement || 0, courbure: pose.sourire || 0 }) };
-  });
-  return { data: { text, speed, cps, audio, paths, speech: [speechTrace(true), speechTrace(false)] }, wav };
+  const level = enveloppeAudio([Float32Array.from(pcm, s => s / 32768)], rate);
+  const envelope = [0, 10, 115, 250, 335, 540, 600, 698, 800, 1800, 5980, lengthMs].map(t => [t, level(t)]);
+  return { data: { text, speed, cps, audio, envelope, speech: [speechTrace(true), speechTrace(false)] }, wav };
 }

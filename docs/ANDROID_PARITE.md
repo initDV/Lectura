@@ -1,13 +1,13 @@
 # Lectura Android — référence, vérifications et limites
 
-Référence de départ : le déploiement de `initDV/Lectura` à [`39e4295`](https://github.com/initDV/Lectura/commit/39e429522cc715aeda6ce0db9d3eb5690ba1f2fd), build Pages `2026-11-16 · 76713dcd32`. Les captures de CI interrogent [Pages](https://initdv.github.io/Lectura/) directement et consignent le build effectivement servi. Le code de référence prime sur le README. Le port natif ne modifie ni la PWA ni son déploiement.
+Référence de départ : le déploiement de `initDV/Lectura` à [`39e4295`](https://github.com/initDV/Lectura/commit/39e429522cc715aeda6ce0db9d3eb5690ba1f2fd), build Pages `2026-11-16 · 76713dcd32`. Les captures de CI interrogent [Pages](https://initdv.github.io/Lectura/) directement et consignent le build effectivement servi. Le code de référence prime sur le README. Cette référence historique précède le [catalogue commun de sept personnages](AICHA-PWA.md).
 
 ## Correspondances
 
 | Référence web | Équivalent Android |
 |---|---|
 | Scène responsive 38/62, décor en perspective, FAB, filigrane Gratuit | Canvas et vues Android, à partir des mêmes ressources et constantes |
-| 43 personnages accessibles ; pivots, poses, gestes, lèvres et clignements | Ressources originales ; rendu et animation natifs, sans WebView |
+| Cinq lectrices et deux robots ; poses, gestes, lèvres et clignements | Le même catalogue de SVG ; rendu et animations Canvas natifs, sans WebView |
 | 38 expressions, détection FR/EN et réglage par phrase | Tables de poses et lexiques partagés ; sélections, mélanges et réactions en lecture |
 | Terminal `rhak_override@sentinel: ~/cours`, œil, 40 lignes, curseur, mots-clés, Markdown, `$ ` et `# ` silencieux | Dessin natif, coloration et horloges de lecture |
 | Présentation simple/double toucher, vitesse par paliers, lecture, muet, volume et raccourcis | Commandes natives ; clavier, plein écran et insets gérés par Android |
@@ -46,4 +46,4 @@ Mesures de cette campagne : scène **82,99 % / 1,60**, menu **92,27 % / 3,39**, 
 - Sur un téléphone réel, comparer le même projet à Pages en portrait et paysage, avec clavier et barres système. Tester également un appareil plus récent qu’Android 12.
 - Installer une voix Android locale FR et tester une lecture complète. Essayer les autres modèles HD, ainsi que plusieurs fichiers audio (MP3, WAV, Ogg, M4A/AAC, WebM) : le décodage dépend de l’appareil. Vérifier l’attribution de chaque modèle/corpus avant de publier de l’audio dérivé.
 - Enregistrer en 16:9 et en 9:16, modifier la vitesse, couper le son d’écoute, puis rouvrir le MP4 et contrôler image, piste audio et synchronisation. Tester « Mes vidéos », la galerie du téléphone et le partage vers un compte WhatsApp de test. WebM est une alternative de fichiers, sans garantie d’ouverture par le destinataire. Le repli de l’encodage essaie d’autres codecs à l’initialisation ; une défaillance plus tard n’est pas une conversion automatique du même enregistrement.
-- Le circuit signé vérifie le certificat de distribution permanent et peut tester une mise à jour depuis l’APK v1.0.0. Valider les [composants et leurs licences](../android/licenses/COMPOSANTS.md), notamment le cœur MP3 LGPL ; les notices et sources correspondantes ne modifient pas la liste de licences autorisées du projet. Voir [installation et recompilation](../android/README.md).
+- Le circuit signé vérifie le certificat de distribution permanent et teste la mise à jour depuis l’APK public de référence (1.1.1 pour le catalogue de sept personnages). Valider les [composants et leurs licences](../android/licenses/COMPOSANTS.md), notamment le cœur MP3 LGPL ; les notices et sources correspondantes ne modifient pas la liste de licences autorisées du projet. Voir [installation et recompilation](../android/README.md).

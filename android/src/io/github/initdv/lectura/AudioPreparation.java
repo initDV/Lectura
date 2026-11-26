@@ -35,10 +35,11 @@ final class AudioPreparation {
         final List<Script.Segment> segments;
         final Script.Keywords words;
         final Performance performance;
+        final AichaTrack aicha;
         final String voiceUsed;
 
-        Result(Pcm pcm,List<Script.Segment> segments,Script.Keywords words,Performance performance,String voiceUsed){
-            this.pcm=pcm;this.segments=segments;this.words=words;this.performance=performance;this.voiceUsed=voiceUsed;
+        Result(Pcm pcm,List<Script.Segment> segments,Script.Keywords words,Performance performance,AichaTrack aicha,String voiceUsed){
+            this.pcm=pcm;this.segments=segments;this.words=words;this.performance=performance;this.aicha=aicha;this.voiceUsed=voiceUsed;
         }
         @Override public void close(){if(pcm!=null)pcm.close();}
     }
@@ -79,8 +80,12 @@ final class AudioPreparation {
                 decoded=syn.pcm;segments=syn.segments;
             }
             Script.reportExpressions(text,segments,cfg.segments);if(segments.isEmpty())throw new IOException(labels.text("scene.err.texteVide"));
-            Performance performance=new Performance(segments,new Mood(refs,lang,words,cfg.emotions),refs.rig);
-            delivered=deliver.test(new Result(decoded,segments,words,performance,spokenBy));
+            Mood mood=new Mood(refs,lang,words,cfg.emotions);
+            boolean lectrice=AichaTrack.matches(refs.character(cfg.character));
+            double duration=decoded!=null?decoded.duration():Math.max(1,request.silent?text.length()*1000./cps:segments.get(segments.size()-1).to);
+            AichaTrack aicha=lectrice?new AichaTrack(refs,segments,duration,mood,cfg.emotions,lang,!cfg.fileAudio&&spokenBy.equals("siwis"),decoded):null;
+            Performance performance=lectrice?null:new Performance(segments,mood,refs.rig);
+            delivered=deliver.test(new Result(decoded,segments,words,performance,aicha,spokenBy));
         }catch(Exception e){fail.accept(e);}finally{if(!delivered&&decoded!=null)decoded.close();}
     }
 }
