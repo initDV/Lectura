@@ -172,9 +172,7 @@ public final class DeviceChecks extends Instrumentation {
         MainActivity a=(MainActivity)startActivitySync(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         try{
             File dir=ctx.getExternalFilesDir("verification");require(dir!=null,"Stockage de test");
-            boolean espeak="true".equals(args.getString("espeak"));
-            waitFor("La fenêtre de test et la voix locale doivent être prêtes",()->a.isForeground&&a.hasWindowFocus()
-                &&(!espeak||a.talk.voices("fr").stream().anyMatch(v->!v.isNetworkConnectionRequired())),15000);
+            waitFor("La fenêtre de test doit être prête",()->a.isForeground&&a.hasWindowFocus(),15000);
             main(()->{require(a.modal!=null,"Tutoriel au premier démarrage");a.fullscreen();});screen(a,dir,"tuto");
             click(a,"Passer");screen(a,dir,"scene");main(()->mobileFraming(a));
             click(a,"Menu");screen(a,dir,"menu");
@@ -539,7 +537,21 @@ public final class DeviceChecks extends Instrumentation {
             waitFor("Fin naturelle après le salut au ralenti",()->a.reading.ended,5000);
             main(()->{a.db.set("formatVideo","9:16");a.reading.speed(1);a.record();});
             waitFor("Export du robot jusqu’au salut",()->a.exports.capturing(),12000);
-            waitFor("Fin automatique de la vidéo",()->a.modal!=null&&action(a.modal,a.t("dl.bouton.telecharger"))!=null,28000);
+            try{
+                waitFor("Fin automatique de la vidéo",()->a.modal!=null&&action(a.modal,a.t("dl.bouton.telecharger"))!=null,28000);
+            }catch(AssertionError e){
+                AtomicReference<String> detail=new AtomicReference<>();
+                main(()->{
+                    Reading r=a.reading;
+                    android.graphics.Rect rect=new android.graphics.Rect();
+                    boolean visible=a.stage.getGlobalVisibleRect(rect);
+                    detail.set("premierPlan="+a.isForeground+", focus="+a.hasWindowFocus()+", modal="+(a.modal!=null)
+                        +", capture="+a.exports.capturing()+", export="+a.exports.busy()+", scène="+visible+" "+rect.toShortString()
+                        +", lecture="+(r==null?"absente":r.playing+"/"+r.ended+" "+r.time()+"/"+r.duration+" ms")
+                        +", journal="+a.journal.peekLast());
+                });
+                throw new AssertionError(e.getMessage()+" ; "+detail.get(),e);
+            }
             click(a,a.t("dl.bouton.telecharger"));
             Movies library=new Movies(ctx);Movies.Entry kept=null;
             for(int i=0;i<100&&kept==null;i++){

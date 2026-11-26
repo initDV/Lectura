@@ -1,4 +1,4 @@
-name: Lectura — diagnostic du rapport Android 43
+name: Lectura — diagnostic de fin automatique sur Android 12
 
 on:
   push:
@@ -6,38 +6,65 @@ on:
     paths: ['.github/workflows/lectura-diagnostic-android.yml']
 
 permissions:
-  actions: read
+  contents: read
 
 jobs:
   inspect:
     if: github.repository == 'initDV/Lectura'
     runs-on: ubuntu-24.04
-    timeout-minutes: 3
+    timeout-minutes: 8
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
         with:
-          name: Lectura-comparaison
-          run-id: '45887746924'
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/lectura-report
-      - name: Examiner les erreurs de l’émulateur
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Préparer une itération locale de la recette, sans clé de distribution
         run: |
-          python3 - "$RUNNER_TEMP/lectura-report" <<'PY'
+          if [[ ! -f "$ANDROID_HOME/platforms/android-37.0/android.jar" && ! -f "$ANDROID_HOME/platforms/android-37/android.jar" ]]; then
+            sdkmanager 'platforms;android-37.0'
+          fi
+          [[ -x "$ANDROID_HOME/build-tools/37.0.0/aapt2" ]] || sdkmanager 'build-tools;37.0.0'
+          python3 -m pip install --user fonttools brotli
+          python3 - <<'PY'
           from pathlib import Path
-          import sys
-
-          def notice(title, text):
-              print(f'::notice title={title}::' + text.replace('%','%25').replace('\n','%0A'))
-
-          report = Path(sys.argv[1]); errors = report / 'android-errors.txt'
-          lines = errors.read_text(errors='replace').splitlines() if errors.exists() else []
-          notice('Logcat', f'{len(lines)} lignes. Fichiers : ' + ', '.join(p.name for p in report.iterdir()))
-          useful = [line for line in lines if 'Lectura' in line or 'FATAL EXCEPTION' in line]
-          for i in range(0, min(len(useful), 80), 10):
-              notice(f'Lectura {i//10 + 1}', '\n'.join(useful[i:i+10])[:1900])
-          for p in [report/'android-installation-en-avion.txt']:
-              if not p.exists(): continue
-              raw = p.read_text(errors='replace').splitlines()
-              for i, line in enumerate(raw):
-                  if line.startswith('LECTURA_ERROR '): notice('Assertion', '\n'.join(raw[i:i+7])[:1500])
+          checks = Path('android/tests/java/io/github/initdv/lectura/DeviceChecks.java')
+          src = checks.read_text(); marker = '        switch(mode){'
+          assert src.count(marker) == 1
+          checks.write_text(src.replace(marker, marker + '''
+              case "mobile":
+                  check("surfaces",()->surfaces(ctx));
+                  check("quatre-gestes",()->robotChoreo(ctx,refs));
+                  break;
+              case "robot":
+                  check("quatre-gestes",()->robotChoreo(ctx,refs));
+                  break;'''))
+          runner = Path('android/tests/emulator.sh')
+          src = runner.read_text(); start = src.index('        instrument installation-en-avion DeviceChecks'); stop = src.index('        adb logcat -d -s', start)
+          runner.write_text(src[:start] + '''        instrument portrait DeviceChecks -e mode mobile || failures=1
+                  adb shell wm size 780x390
+                  instrument paysage DeviceChecks -e mode robot || failures=1
+          ''' + src[stop:])
           PY
+          export LECTURA_KEYSTORE="$RUNNER_TEMP/diagnostic.p12"
+          export LECTURA_STORE_PASS=$(openssl rand -hex 24)
+          trap 'rm -f "$LECTURA_KEYSTORE"' EXIT
+          keytool -genkeypair -keystore "$LECTURA_KEYSTORE" -storepass:env LECTURA_STORE_PASS \
+            -alias lectura -dname 'CN=Lectura diagnostic ephemeral' -keyalg RSA -keysize 2048 -validity 1
+          stamp=$(keytool -exportcert -keystore "$LECTURA_KEYSTORE" -storepass:env LECTURA_STORE_PASS -alias lectura | sha256sum)
+          export LECTURA_SIGNING_CERT_SHA256=${stamp%% *}
+          LECTURA_TEST_APK="$RUNNER_TEMP/LecturaTests.apk" bash android/build.sh "$RUNNER_TEMP/Lectura.apk"
+      - name: Autoriser KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Recette de lecture et fin automatique en portrait et en paysage
+        env:
+          LECTURA_REPORT: ${{ runner.temp }}/lectura-report
+        run: bash android/tests/emulator.sh "$RUNNER_TEMP/Lectura.apk" "$RUNNER_TEMP/LecturaTests.apk"
