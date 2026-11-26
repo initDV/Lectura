@@ -123,6 +123,12 @@ for ((i=0;i<150;i++)); do
         fi
         adb shell pm clear "$package" | tee -a "$log"
         instrument installation-en-avion DeviceChecks -e mode clean "${tts[@]}" || failures=1
+        # 1080 px at 288 dpi is 600 dp: a tall phone with modestly scaled display elements.
+        adb shell wm size 1080x2400
+        adb shell wm density 288
+        instrument portrait-allonge DeviceChecks -e mode portrait-allonge || failures=1
+        adb shell wm size 390x780
+        adb shell wm density 160
         adb shell cmd connectivity airplane-mode disable
         adb shell svc wifi enable
         adb shell svc data enable

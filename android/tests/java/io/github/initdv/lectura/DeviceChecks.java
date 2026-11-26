@@ -76,6 +76,9 @@ public final class DeviceChecks extends Instrumentation {
             case "offline-kokoro":
                 check("kokoro-en-avion",()->offlineNewVoice(ctx,"kokoro-siwis"));
                 break;
+            case "portrait-allonge":
+                check("portrait-allonge",()->tallPortrait(ctx));
+                break;
             default:
                 check("avion",()->airplane(ctx));
                 check("surfaces",()->surfaces(ctx));
@@ -154,12 +157,15 @@ public final class DeviceChecks extends Instrumentation {
         });
     }
     private void screen(MainActivity a,File dir,String name)throws Exception{
+        screen(a,dir,name,390,780,true);
+    }
+    private void screen(MainActivity a,File dir,String name,int width,int height,boolean fullscreen)throws Exception{
         Thread.sleep(250);
         CountDownLatch done=new CountDownLatch(1);AtomicReference<Integer> status=new AtomicReference<>();
-        Bitmap b=Bitmap.createBitmap(390,780,Bitmap.Config.ARGB_8888);
+        Bitmap b=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);
         try{
             main(()->{
-                require(a.root.getWidth()==390&&a.root.getHeight()==780&&a.viewportHeight()==780,
+                require(a.root.getWidth()==width&&a.root.getHeight()==height&&(!fullscreen||a.viewportHeight()==height/a.ui.density),
                     "Surface Android "+a.root.getWidth()+"×"+a.root.getHeight()+", hauteur utile "+a.viewportHeight());
                 PixelCopy.request(a.getWindow(),b,code->{status.set(code);done.countDown();},a.handler);
             });
@@ -217,6 +223,27 @@ public final class DeviceChecks extends Instrumentation {
             return "API 31 : scène portrait, sept dessins agrandis, terminal et œil en dessous ; tutoriel, menu, aperçu, pause/reprise/arrêt, vitesse et quatre destinations";
         }finally{main(a::finish);}
     }
+    private String tallPortrait(Context ctx)throws Exception {
+        MainActivity a=open(ctx);
+        try{
+            waitFor("Fenêtre du portrait allongé",()->a.isForeground&&a.hasWindowFocus(),10000);
+            main(()->{
+                Project p=new Project(a.db.settings);p.character="aicha";p.text="Bonjour, découvrons le nouveau cadrage.";a.open(p);
+            });
+            waitFor("Montage de la scène",()->a.stage.getWidth()>0&&a.stage.screenLayout().artWidth>0,6000);
+            main(()->{
+                float width=a.scene.scroll.getWidth()/a.ui.density;
+                require(Math.abs(width-600)<2&&a.stage.aicha!=null,"Portrait de 600 dp et Aïcha attendus : "+width+" dp");
+                mobileFraming(a);
+                android.graphics.Rect visible=new android.graphics.Rect();
+                require(a.scene.launch.getGlobalVisibleRect(visible)&&visible.height()==a.scene.launch.getHeight(),"Lancer doit rester à l’écran");
+            });
+            click(a,"Masquer le texte du terminal");main(()->require(a.stage.masked,"Œil du terminal en portrait allongé"));
+            click(a,"Afficher le texte du terminal");
+            screen(a,ctx.getExternalFilesDir("verification"),"portrait-allonge",1080,2400,false);
+            return "1080×2400 à 288 dpi (600 dp) : Aïcha en grand, terminal dessous, œil et Lancer accessibles";
+        }finally{main(a::finish);}
+    }
     private static void mobileFraming(MainActivity a){
         SceneLayout layout=a.stage.screenLayout();
         float width=a.stage.getWidth()/a.ui.density;
@@ -226,10 +253,11 @@ public final class DeviceChecks extends Instrumentation {
         View eye=named(a.stage,a.t("scene.oeil.masquer")),settings=named(a.stage,a.t("reglages.themeApp"));
         require(eye!=null&&eye.getY()>=a.ui.f(layout.termY)&&eye.getY()+eye.getHeight()<a.ui.f(layout.termY+54),"Œil dans la barre du terminal");
         require(settings!=null&&settings.getY()+settings.getHeight()<a.ui.f(layout.artHeight),"Réglages hors du texte");
-        require(!SceneLayout.stacked(480,false)&&!SceneLayout.stacked(600,true),"Paysage et écrans larges en colonnes");
+        require(SceneLayout.stacked(480,720,true)&&SceneLayout.stacked(600,1000,true)&&SceneLayout.stacked(720,1200,true),"Portrait étroit ou allongé");
+        require(!SceneLayout.stacked(600,1243,false)&&!SceneLayout.stacked(600,999,true)&&!SceneLayout.stacked(721,1500,true),"Paysage, tablette et limites du cadrage");
         for(JSONObject def:a.refs.characters){
             float[] box=a.svg(def.optString("svgScene",def.optString("svg"))).box;
-            for(int[] viewport:new int[][]{{320,568},{390,780},{430,932}}){
+            for(int[] viewport:new int[][]{{320,568},{390,780},{430,932},{600,1243},{720,1200}}){
                 float w=viewport[0]-2*SceneLayout.SIDE_PADDING;
                 float before=SceneLayout.height(viewport[0],viewport[1],false,false);
                 SceneLayout portrait=new SceneLayout(w,SceneLayout.height(viewport[0],viewport[1],false,true),true);

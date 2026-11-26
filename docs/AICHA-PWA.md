@@ -54,14 +54,24 @@ Après au moins 1,2 seconde de silence, et si elle est à l’arrêt, Aïcha ouv
 
 ## Cadrage sur téléphone
 
-En portrait, jusqu’à 480 px (480 dp sur Android), la scène donne toute la largeur aux personnages et place le terminal dessous. Les dessins ne sont pas rognés et les boutons de réglages et de masquage ne couvrent pas le texte. Sur un écran court, les commandes de lecture restent accessibles en faisant défiler la page. Les écrans larges et le paysage gardent les deux colonnes ; la composition des fichiers PNG et vidéo reste la même.
+En portrait, jusqu’à 480 px (480 dp sur Android), la scène donne toute la largeur aux personnages et place le terminal dessous. Elle utilise aussi ce cadrage jusqu’à 720 px/dp si le rapport largeur/hauteur est d’au plus 3:5, comme sur un téléphone allongé avec des éléments affichés en petit. Les boutons de réglages et de masquage ne couvrent pas le texte. Sur un écran court, les commandes de lecture restent accessibles en faisant défiler la page. Le paysage, les écrans larges et les tablettes moins allongées gardent les deux colonnes ; la composition des fichiers PNG et vidéo reste la même.
 
 ## Recette PWA et Android
 
 1. `npm run lint` et `npm test` ; les tests vérifient les appuis, les longueurs des membres, l’avance monotone, la projection des dalles, les visèmes et la réduction des animations. Sans lancer de lecture, vérifier le contact avec la monture vers 4 s, le talon et le soupir vers 7–8 s, puis le regard vers le terminal vers 10–11 s. Pour voir le redressement sans marche, faire précéder la toute première phrase d’un commentaire `#` d’environ deux secondes. Les pieds et le décor ne bougent pas pendant le regard ni le redressement.
 2. Essayer l’aperçu silencieux et Siwis avec le texte ci-dessus, puis avec une seule longue phrase sans ponctuation. Mettre en pause en pleine marche : le personnage et le décor doivent se figer ensemble. Hors des champs de saisie, faire **→** puis **←** (±5 s) et retrouver la même pose au même endroit. Essayer aussi un WAV importé et des sous-titres datés.
-3. Tester le portrait en 320–430 px (personnage entier et terminal en dessous), puis tourner en paysage et vérifier le retour aux deux colonnes. Tester aussi sur ordinateur et avec **Réduire les animations** dans Lectura et dans le système : pas de locomotion ni de défilement, mais les lèvres restent animées.
+3. Tester le portrait en 320–430 px puis en 600 × 1243 px (personnage entier et terminal en dessous), puis tourner en paysage et vérifier le retour aux deux colonnes. Tester aussi sur ordinateur et avec **Réduire les animations** dans Lectura et dans le système : pas de locomotion ni de défilement, mais les lèvres restent animées.
 4. Capturer un PNG et une vidéo depuis le menu. Le PNG doit garder la position du décor à la capture ; la vidéo repart du début, avec les deux pieds au sol. Vérifier que le sol se déplace au rythme de la marche, que le son est présent avec Siwis ou un fichier, et la lecture depuis **Mes vidéos**.
 5. Après une première visite complète, recharger hors ligne, retrouver Aïcha et relancer l’aperçu. Avec Siwis installé à l’avance, synthétiser un texte inédit hors ligne. Vérifier aussi le pas et le cadran du Robot Lectura, et le choix d’un autre personnage.
+
+Pour contrôler le cadrage des sept personnages dans Chromium, lancer `npm run build && npm run preview`, puis dans un second terminal :
+
+```sh
+recette=$(mktemp -d)
+npm install --prefix "$recette" --no-save playwright@1.57.0
+"$recette/node_modules/.bin/playwright" install chromium
+cp tests/manual/portrait.mjs "$recette/"
+node "$recette/portrait.mjs"
+```
 
 Pour Android, utiliser le [circuit signé](../android/README.md) et le test API 31 avant distribution. Un essai sur téléphone réel reste utile pour la voix système et les encodeurs disponibles.

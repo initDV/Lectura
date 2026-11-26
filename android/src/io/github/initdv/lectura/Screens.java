@@ -299,7 +299,7 @@ final class Screens {
     private String version(){return a.refs.json("version.json").optString("version");}
     private String build(){return a.refs.json("version.json").optString("native","android");}
     private void about(){
-        LinearLayout c=card("Lectura "+version(),0);para(c,t("apropos.description"),0);small(c,t("reglages.version")+" : "+version()+" ("+build()+")",12);
+        LinearLayout c=card("Lectura Android "+version(),0);para(c,t("apropos.description"),0);small(c,t("reglages.version")+" : "+version()+" ("+build()+")",12);
         addButton(c,t("apropos.revoirTuto"),null,false,()->{a.db.set("tutorielVu",false);a.tutorial(1);},12);
         c=card(t("apropos.confidentialite"),14);para(c,t("apropos.confidentialite.texte"),0);
         c=card(t("apropos.raccourcis"),14);String[] names={t("touche.espace"),"← →","P","S","R","M","F","E"},keys={"scene.lecture","aide.pm5","scene.presentation","scene.capture","scene.enregistrer","scene.muet","scene.pleinEcran","aide.expression"};

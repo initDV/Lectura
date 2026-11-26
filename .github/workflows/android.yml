@@ -162,8 +162,8 @@ jobs:
             # Test the actual public APK, with a bounded download and its pinned hash.
             mkdir -p "$(dirname "$previous")"
             curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 --max-time 85 --retry-max-time 170 \
-              'https://github.com/initDV/Lectura/releases/download/v1.1.2/Lectura.apk' -o "$previous"
-            printf '%s  %s\n' 'a3709407bef5f41808ed07b5c0f1c685796edafaac60b4c91d0319c84e3efee8' "$previous" | sha256sum -c -
+              'https://github.com/initDV/Lectura/releases/download/v1.1.3/Lectura.apk' -o "$previous"
+            printf '%s  %s\n' '4f3de23fb8fa2787835f9c75fd3d8dfa86cf80d27db03e243793073d4cf8c1c8' "$previous" | sha256sum -c -
           fi
           if [[ -f "$previous" ]]; then
             old=$(fingerprint "$previous")

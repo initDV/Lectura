@@ -8,8 +8,9 @@ final class SceneLayout {
     final boolean stacked;
     final float artWidth,artHeight,termX,termY,termWidth,termHeight;
 
-    static boolean stacked(float viewportWidth,boolean portrait){
-        return portrait&&viewportWidth<=480;
+    static boolean stacked(float viewportWidth,float windowHeight,boolean portrait){
+        // A tall phone can report 600 dp or more when its display size is set small.
+        return portrait&&(viewportWidth<=480||(viewportWidth<=720&&viewportWidth*5<=windowHeight*3));
     }
 
     private static float mobileTerminal(float viewportWidth){

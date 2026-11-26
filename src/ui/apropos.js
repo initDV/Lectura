@@ -21,7 +21,7 @@ export async function render(root) {
 
   add(root,
     h('h1', { text: t('nav.apropos') }),
-    h('section', { class: 'card' }, h('h2', { text: `Lectura ${VERSION}` }),
+    h('section', { class: 'card' }, h('h2', { text: `Lectura Web ${VERSION}` }),
       h('p', { text: t('apropos.description') }), h('p', { class: 'muted small', text: `${t('reglages.version')} : ${VERSION} (${BUILD})` }),
       h('button', { type: 'button', class: 'btn', text: t('apropos.revoirTuto'), onClick: async () => { await majReglages({ tutorielVu: false }); (await import('./tutoriel.js')).ouvrirTutoriel(); } })),
     h('section', { class: 'card' }, h('h2', { text: t('apropos.confidentialite') }), h('p', { text: t('apropos.confidentialite.texte') })),

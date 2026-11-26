@@ -45,8 +45,8 @@ export async function render(root) {
   let raf = 0, vivant = true, exprManuelle = '', derniereExpr = '', dernierSeg = null, dernierRang = 0, muet = false, clic = 0, arrete = true, signature = '', masque = false;
 
   const charPane = h('div', { class: 'char-pane' });
-  const portrait = matchMedia('(max-width: 480px) and (orientation: portrait)');
-  const cadrerDecor = () => charPane.querySelector('svg.decor')?.setAttribute('preserveAspectRatio', portrait.matches ? 'none' : 'xMidYMax slice');
+  const sceneEmpilee = matchMedia('(max-width: 480px) and (orientation: portrait), (max-width: 720px) and (max-aspect-ratio: 3/5)');
+  const cadrerDecor = () => charPane.querySelector('svg.decor')?.setAttribute('preserveAspectRatio', sceneEmpilee.matches ? 'none' : 'xMidYMax slice');
   const termBody = h('div', { class: 'term-body', 'aria-label': t('scene.terminal'), 'aria-live': 'off' });
   const oeil = h('button', { type: 'button', class: 'oeil', 'aria-pressed': 'false', onClick: basculerTexte });
   const fenetre = h('div', { class: 'term-window' }, h('div', { class: 'term-bar' }, h('i'), h('i'), h('i'), h('span', { text: store.settings.titreTerminal }), oeil), termBody);
@@ -371,7 +371,7 @@ export async function render(root) {
   };
   const visibilite = () => { if (document.hidden) annulerPrechauffage(); };
   document.addEventListener('visibilitychange', visibilite);
-  portrait.addEventListener('change', cadrerDecor);
+  sceneEmpilee.addEventListener('change', cadrerDecor);
   window.addEventListener('keydown', clavier);
   stage.addEventListener('click', toucherScene);
   const off = bus.on('app:state', majUi);
@@ -388,7 +388,7 @@ export async function render(root) {
     vivant = false; essaiLecture++;
     annulerPrechauffage(); preparation?.abort(); preparation = null;
     document.removeEventListener('visibilitychange', visibilite);
-    portrait.removeEventListener('change', cadrerDecor);
+    sceneEmpilee.removeEventListener('change', cadrerDecor);
     cancelAnimationFrame(raf); clearTimeout(clic); off();
     window.removeEventListener('keydown', clavier);
     exportScene.abandonner(); aicha?.decor.dispose();
