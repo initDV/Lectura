@@ -11,6 +11,7 @@ code=40
 cert=b6873c0f1a2f447163fb9af7e6f4181280b31fd1f5c45b0535993075b3dc7d8b
 version=1.1.1
 tag=v$version
+draft_id=459202701
 bundle="Lectura-$tag-android.zip"
 sources=Lectura-Android-sources.zip
 base="https://github.com/$repo/releases/download/$tag/"
@@ -30,9 +31,21 @@ api "actions/runs/$run" | jq -e --arg sha "$sha" --arg branch "$branch" --argjso
 api "actions/runs/$run/jobs" | jq -e '
   any(.jobs[]; .conclusion=="success" and any(.steps[]; .name=="Test Android 12" and .conclusion=="success"))
 ' >/dev/null
-phase='vérification que cette version n’existe pas déjà'
-api 'releases?per_page=100' --paginate | jq -es --arg tag "$tag" 'all(.[][]; .tag_name != $tag)' >/dev/null
+phase='identité du brouillon réservé à ce candidat'
+api "releases/$draft_id" | jq -e --arg tag "$tag" --arg sha "$sha" '
+  .tag_name==$tag and .target_commitish==$sha and .draft and (.prerelease|not) and (.assets|length)==0
+' >/dev/null
 [[ -z $(git ls-remote --tags "https://github.com/$repo.git" "refs/tags/$tag") ]]
+
+release_cmd() {
+  local result
+  if ! result=$(gh release "$@" --repo "$repo" 2>&1); then
+    result=${result//%/%25}; result=${result//$'\r'/%0D}; result=${result//$'\n'/%0A}
+    printf '::error title=Commande Release::%s\n' "${result:0:1200}" >&2
+    return 1
+  fi
+  printf '%s\n' "$result"
+}
 
 fetch_artifact() {
   local id=$1 name=$2 digest=$3 out=$4
@@ -100,25 +113,27 @@ APK d’origine du [run Android #$code](https://github.com/$repo/actions/runs/$r
 La 1.1.0 reste disponible. Cette publication GitHub ne change rien sur APKPure.
 EOF
 
-phase='création d’un brouillon et envoi des trois fichiers'
-gh release create "$tag" "$apk" "$work/$bundle" "$work/$sources" --repo "$repo" --target "$sha" \
-  --draft --title "Lectura Android $tag" --notes-file "$work/notes.md"
+phase='envoi des trois fichiers au brouillon réservé'
+release_cmd upload "$tag" "$apk" "$work/$bundle" "$work/$sources"
 phase='relecture des trois fichiers depuis le brouillon'
 mkdir "$work/relu"
-gh release download "$tag" --repo "$repo" --dir "$work/relu" \
-  --pattern Lectura.apk --pattern "$bundle" --pattern "$sources"
+release_cmd download "$tag" --dir "$work/relu" --pattern Lectura.apk --pattern "$bundle" --pattern "$sources"
 cmp "$apk" "$work/relu/Lectura.apk"
 cmp "$work/$bundle" "$work/relu/$bundle"
 cmp "$work/$sources" "$work/relu/$sources"
 verify_apk "$work/relu/Lectura.apk"
-gh release view "$tag" --repo "$repo" --json isDraft,targetCommitish --jq . | jq -e --arg sha "$sha" '.isDraft and .targetCommitish==$sha' >/dev/null
+api "releases/$draft_id" | jq -e --arg sha "$sha" --arg tag "$tag" '
+  .draft and .target_commitish==$sha and .tag_name==$tag and (.assets|length)==3
+' >/dev/null
+release_cmd edit "$tag" --notes-file "$work/notes.md"
+printf '::notice title=Brouillon Android %s vérifié::ID %s ; trois fichiers relus ; APK SHA-256 %s.\n' "$version" "$draft_id" "$apk_hash"
 
 phase='publication de la Release relue'
-gh release edit "$tag" --repo "$repo" --draft=false --latest
+release_cmd edit "$tag" --draft=false --latest
 phase='vérification du tag public et des empreintes des trois fichiers'
 api "git/ref/tags/$tag" | jq -e --arg sha "$sha" '.object.type=="commit" and .object.sha==$sha' >/dev/null
 api "releases/tags/$tag" > "$work/release.json"
-jq -e --arg tag "$tag" --arg sha "$sha" '.tag_name==$tag and .target_commitish==$sha and .draft==false and .prerelease==false' "$work/release.json" >/dev/null
+jq -e --arg tag "$tag" --arg sha "$sha" --argjson id "$draft_id" '.id==$id and .tag_name==$tag and .target_commitish==$sha and .draft==false and .prerelease==false' "$work/release.json" >/dev/null
 for file in "$apk" "$work/$bundle" "$work/$sources"; do
   name=$(basename "$file")
   jq -e --arg name "$name" --arg url "$base$name" --arg digest "sha256:$(sha256 "$file")" '
