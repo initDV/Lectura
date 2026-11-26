@@ -1,0 +1,38 @@
+name: Lectura — diagnostic ponctuel du run Android 43
+
+on:
+  push:
+    branches: ['arena/d2229c4f-lectura']
+    paths: ['.github/workflows/lectura-diagnostic-android.yml']
+
+permissions:
+  actions: read
+
+jobs:
+  inspect:
+    if: github.repository == 'initDV/Lectura'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Extraire le diagnostic du premier passage de la recette Android 12
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/jobs/140142598747/logs" > "$RUNNER_TEMP/android-attempt1.log"
+          python3 - "$RUNNER_TEMP/android-attempt1.log" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          lines = Path(sys.argv[1]).read_text(errors='replace').splitlines()
+          for line in lines:
+              if 'title=Contrôles natifs' in line:
+                  text = line.split('::', 2)[-1].replace('%0A', '\n').replace('%0D', '')
+                  print('::notice title=Erreurs natives détectées::' + text[:1850].replace('%', '%25').replace('\n', '%0A'))
+                  break
+          matches = [i for i, line in enumerate(lines) if re.search(r'^(?:\S+ )?LECTURA_ERROR quatre-gestes', line)]
+          for i in matches[:1]:
+              msg = '\n'.join(lines[i:i+10])
+              print('::notice title=Échec de la fin automatique::' + msg[:1700].replace('%','%25').replace('\n','%0A'))
+          print(f'::notice title=Rapport lu::{len(lines)} lignes ; échecs quatre-gestes trouvés : {len(matches)}.')
+          PY
