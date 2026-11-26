@@ -120,6 +120,7 @@ final class FramingChecks {
             d.screen(a,dir,"portrait-curseurs",1080,2400,false);
             d.click(a,"Fermer");
             d.screen(a,dir,"portrait-main-premier-plan",1080,2400,false);
+            int[] palmPixels=new int[1];d.main(()->palmPixels[0]=front(a.stage));
             d.main(()->a.go("reglages"));d.click(a,"Ajuster sur la scène");
             d.waitFor("Retour à la scène avec les curseurs",()->a.modal!=null&&a.stage!=null&&a.stage.screenLayout().width>0,6000);
             d.main(()->require(near(a.stage.screenLayout().termWidth,a.stage.screenLayout().width*.63f),"Cadrage retrouvé après navigation"));
@@ -135,7 +136,8 @@ final class FramingChecks {
                 a.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             });
             d.waitFor("Retour en portrait",()->a.root.getWidth()<a.root.getHeight()&&a.stage.screenLayout().closePortrait,10000);
-            return "1080×2400 à 288 dpi : terminal à droite, œil et défilement, cinq curseurs, main animée au premier plan, persistance, réinitialisation, paysage et exports stables";
+            return "1080×2400 à 288 dpi : terminal à droite, œil et défilement, cinq curseurs, "+palmPixels[0]
+                +" pixels de la main animée devant le terminal, persistance, réinitialisation, paysage et exports stables";
         }finally{d.main(a::finish);}
     }
 
@@ -169,7 +171,6 @@ final class FramingChecks {
                 float[] box=stage.artwork.box;
                 require(near(f.actorX+(box[2]*f.actorScale-old.width*.24f)/2,old.actorX+box[2]*old.actorScale/2)
                     &&near(f.actorY+(box[3]*f.actorScale+old.height*.14f)/2,old.actorY+box[3]*old.actorScale/2),"Déplacements horizontal et vertical");
-                front(stage);
                 sameExport(stage,portrait);sameExport(stage,landscape);
                 JSONObject saved=new Library(a.refs).settings.optJSONObject(SceneLayout.PREFERENCE);
                 require(saved!=null&&saved.optInt(Control.WIDTH.key)==63&&saved.optInt(Control.HEIGHT.key)==88&&saved.optInt(Control.SIZE.key)==118
@@ -218,7 +219,7 @@ final class FramingChecks {
         return down;
     }
 
-    private static void front(Stage stage){
+    private static int front(Stage stage){
         SceneLayout f=stage.screenLayout();Svg svg=stage.artwork;
         float[] point={0,5}; // Interior of the right palm, before the animated wrist and arm transforms.
         Svg.Node hand=svg.get("main-r");require(hand!=null,"Main droite d’Aïcha absente");
@@ -226,19 +227,27 @@ final class FramingChecks {
         int x=Math.round(f.actorX+(point[0]-svg.box[0])*f.actorScale);
         int y=Math.round(f.actorY+(point[1]-svg.box[1])*f.actorScale);
         require(f.terminalBodyAt(x-4,y-4)&&f.terminalBodyAt(x+4,y+4),"La main doit traverser le terminal pour ce contrôle : "+x+", "+y);
-        Bitmap composite=Bitmap.createBitmap((int)Math.ceil(f.width),(int)Math.ceil(f.height),Bitmap.Config.ARGB_8888);
-        Bitmap isolated=Bitmap.createBitmap(composite.getWidth(),composite.getHeight(),Bitmap.Config.ARGB_8888);
+        Bitmap composite=screen(stage),reference=null;
         try{
-            stage.drawScreen(new Canvas(composite),0);
-            svg.draw(new Canvas(isolated),f.actorX,f.actorY,f.actorScale);
-            require(composite.getPixel(composite.getWidth()-9,80)==Refs.color(stage.term,"bg"),"Le fond du terminal doit être dessiné");
+            // Use the same opaque background for both images: translucent paths in the palm
+            // must blend with the terminal, not with the transparent black of an isolated sprite.
+            svg.root.hidden=true;
+            try{reference=screen(stage);}finally{svg.root.hidden=false;}
+            require(reference.getPixel(reference.getWidth()-9,80)==Refs.color(stage.term,"bg"),"Le fond du terminal doit être dessiné");
+            int[] before=new int[49];reference.getPixels(before,0,7,x-3,y-3,7,7);
+            svg.draw(new Canvas(reference),f.actorX,f.actorY,f.actorScale);
             int pixels=0;
-            for(int dy=-3;dy<=3;dy++)for(int dx=-3;dx<=3;dx++){
-                int fg=isolated.getPixel(x+dx,y+dy);
-                if(Color.alpha(fg)!=255)continue;
-                require(composite.getPixel(x+dx,y+dy)==fg,"Main occultée par le terminal");pixels++;
+            for(int dy=0;dy<7;dy++)for(int dx=0;dx<7;dx++){
+                int expected=reference.getPixel(x-3+dx,y-3+dy),actual=composite.getPixel(x-3+dx,y-3+dy),bg=before[dy*7+dx];
+                if(colorDistance(expected,bg)<24)continue;
+                require(colorDistance(actual,expected)<=2,"Main différente du rendu au premier plan : "
+                    +Integer.toHexString(actual)+" / "+Integer.toHexString(expected)+" (fond "+Integer.toHexString(bg)+")");
+                pixels++;
             }
-            require(pixels>=12,"Échantillon de la main insuffisant : "+pixels);
-        }finally{isolated.recycle();composite.recycle();}
+            require(pixels>=12,"Échantillon de la main insuffisant : "+pixels);return pixels;
+        }finally{if(reference!=null)reference.recycle();composite.recycle();}
+    }
+    private static int colorDistance(int a,int b){
+        return Math.max(Math.abs(Color.red(a)-Color.red(b)),Math.max(Math.abs(Color.green(a)-Color.green(b)),Math.abs(Color.blue(a)-Color.blue(b))));
     }
 }
