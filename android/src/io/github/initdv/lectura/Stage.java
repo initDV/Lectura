@@ -45,6 +45,8 @@ final class Stage extends FrameLayout {
     final ScreenText screenText;
     private final int radius;
     private Reading lastReading;
+    private SceneLayout screen=new SceneLayout(0,0,false);
+    private boolean stacked;
 
     Stage(MainActivity a,JSONObject def){
         super(a);this.a=a;ui=a.ui;project=a.project;reduced=a.reduced();
@@ -64,6 +66,20 @@ final class Stage extends FrameLayout {
         settings=ui.iconButton("settings",a.t("reglages.themeApp"),ui.bg,22,()->a.go("reglages"));settings.setBackground(ui.touch(ui.accent,99,0,0));settings.setElevation(ui.f(4));
         FrameLayout.LayoutParams fab=ui.fp(48,48,Gravity.RIGHT|Gravity.BOTTOM);fab.rightMargin=fab.bottomMargin=ui.d(12);addView(settings,fab);
         eye=ui.iconButton("eye",a.t("scene.oeil.masquer"),ui.violet,20,()->mask(!masked));FrameLayout.LayoutParams ep=ui.fp(44,44,Gravity.RIGHT|Gravity.TOP);ep.topMargin=ui.d(5);ep.rightMargin=ui.d(7);addView(eye,ep);
+    }
+    void stackOnPhone(boolean yes){
+        if(stacked==yes)return;
+        stacked=yes;
+        FrameLayout.LayoutParams fab=(FrameLayout.LayoutParams)settings.getLayoutParams();
+        fab.gravity=Gravity.RIGHT|(yes?Gravity.TOP:Gravity.BOTTOM);
+        fab.topMargin=yes?ui.d(12):0;fab.bottomMargin=yes?0:ui.d(12);
+        settings.setLayoutParams(fab);
+    }
+    SceneLayout screenLayout(){return screen;}
+    @Override protected void onLayout(boolean changed,int left,int top,int right,int bottom){
+        super.onLayout(changed,left,top,right,bottom);
+        screen=new SceneLayout(getWidth()/ui.density,getHeight()/ui.density,stacked);
+        eye.setTranslationY(ui.f(screen.termY));face.invalidate();
     }
     void mask(boolean yes){masked=yes;eye.setSelected(yes);eye.setContentDescription(a.t(yes?"scene.oeil.afficher":"scene.oeil.masquer"));
         ((android.widget.ImageView)eye).setImageDrawable(ui.iconDrawable(yes?"eye-off":"eye",20,ui.violet));face.invalidate();}
@@ -95,17 +111,25 @@ final class Stage extends FrameLayout {
         sprite.tick(now);
     }
     private final class Face extends View {
-        private float startY,downX,origin;private boolean dragged,terminalTouch;
+        private float startY,origin;private boolean dragged,terminalTouch;
         Face(){super(a);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);setContentDescription(a.t("scene.terminal"));}
         @Override public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(info);
             Reading r=a.reading;if(r!=null&&!masked)info.setText(r.text.substring(Math.max(0,r.terminal.shown-700),r.terminal.shown));}
         @Override protected void onDraw(Canvas c){
             double now=SystemClock.uptimeMillis()-initial;Stage.this.updatePose(now);
-            float w=getWidth()/ui.density,h=getHeight()/ui.density,left=w*.38f;
-            c.save();c.scale(ui.density,ui.density);round(c,0,0,w,h,radius,background);
-            if(aicha!=null)aicha.paint(c,left,h,false);
-            else{decor.screen(c,left,h);c.save();c.clipRect(0,0,left,h);sprite.svg.fit(c,2,0,left-4,h,true);c.restore();}
-            drawWindow(c,left,0,w-left,h,now);
+            SceneLayout frame=screen;
+            c.save();c.scale(ui.density,ui.density);
+            if(frame.stacked){
+                c.save();clip.rewind();clip.addRoundRect(0,0,frame.artWidth,frame.artHeight,radius,radius,Path.Direction.CW);
+                c.clipPath(clip);c.drawColor(background);
+            }else round(c,0,0,frame.artWidth+frame.termWidth,frame.artHeight,radius,background);
+            if(aicha!=null)aicha.paint(c,frame.artWidth,frame.artHeight,false);
+            else{
+                decor.screen(c,frame.artWidth,frame.artHeight,frame.stacked);c.save();c.clipRect(0,0,frame.artWidth,frame.artHeight);
+                sprite.svg.fit(c,2,0,frame.artWidth-4,frame.artHeight,true);c.restore();
+            }
+            if(frame.stacked)c.restore();
+            drawWindow(c,frame.termX,frame.termY,frame.termWidth,frame.termHeight,now);
             if(recording){round(c,50,10,111,36,99,0xcc0d0d12);paint.setColor(ui.danger);c.drawCircle(65,23,5,paint);
                 style(ui.font(700),12.8f,0xffff8a8a);c.drawText("REC",76,baseline(paint,23),paint);}
             c.restore();
@@ -119,8 +143,8 @@ final class Stage extends FrameLayout {
             if(twice){clickAt=0;a.presentation(false);}else{clickAt=now;postDelayed(singleClick,280);}}return true;}
         @Override public boolean onTouchEvent(MotionEvent e){
             switch(e.getActionMasked()){
-                case MotionEvent.ACTION_DOWN: startY=e.getY();downX=e.getX();origin=screenText.scroll;dragged=false;
-                    terminalTouch=downX>=getWidth()*.38f&&startY>ui.f(54)&&screenText.maxScroll>0;
+                case MotionEvent.ACTION_DOWN: startY=e.getY();origin=screenText.scroll;dragged=false;
+                    terminalTouch=!masked&&screenText.maxScroll>0&&screen.terminalBodyAt(e.getX()/ui.density,startY/ui.density);
                     if(terminalTouch)getParent().requestDisallowInterceptTouchEvent(true);return terminalTouch||presenting;
                 case MotionEvent.ACTION_MOVE: if(Math.abs(e.getY()-startY)>ui.f(5))dragged=true;
                     if(terminalTouch){screenText.scroll=Refs.clamp(origin+(startY-e.getY())/ui.density,0,screenText.maxScroll);invalidate();}return true;
@@ -197,11 +221,12 @@ final class Stage extends FrameLayout {
         final TextPaint p=new TextPaint(Paint.ANTI_ALIAS_FLAG|Paint.SUBPIXEL_TEXT_FLAG);
         final ArrayList<StaticLayout> rows=new ArrayList<>();int shown=-1,cacheWidth=-1;float cacheSize,scroll,maxScroll,total;
         boolean cursor;
-        void reset(){shown=-1;rows.clear();}
+        void reset(){shown=-1;rows.clear();scroll=maxScroll=total=0;}
         void draw(Canvas c,Script.Terminal data,float x,float top,float right,float bottom,float size,double now){
             int width=(int)(right-x);if(width<=0)return;
             p.setTypeface(termFont);p.setTextSize(size);p.setColor(color(term,"fg"));float lh=size*1.55f;
-            if(data.shown!=shown||width!=cacheWidth||cacheSize!=size){shown=data.shown;cacheWidth=width;cacheSize=size;
+            boolean reflow=data.shown!=shown||width!=cacheWidth||cacheSize!=size;
+            if(reflow){shown=data.shown;cacheWidth=width;cacheSize=size;
                 rows.clear();total=0;int last=data.lineAt(shown);
                 for(int i=Math.max(0,last-39);i<=last;i++){
                     Script.Line line=data.lines.get(i);int count=Math.max(0,Math.min(line.text.length(),shown-line.start));
@@ -218,8 +243,9 @@ final class Stage extends FrameLayout {
                         .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE).setLineSpacing(lh-(p.descent()-p.ascent()),1).build();
                     rows.add(l);total+=l.getLineCount()*lh;
                 }
-                maxScroll=Math.max(0,total+24-(bottom-top));scroll=maxScroll;
             }
+            float limit=Math.max(0,total+24-(bottom-top));
+            if(reflow||limit!=maxScroll){maxScroll=limit;scroll=limit;}
             cursor=reduced||((long)(now/500))%2==0;float yy=top+12-scroll;
             c.save();c.clipRect(x-14,top,right+14,bottom);
             for(StaticLayout l:rows){float h=l.getLineCount()*lh;if(yy+h>top&&yy<bottom){c.save();c.translate(x,yy+(lh-(p.descent()-p.ascent()))*.5f);l.draw(c);c.restore();}yy+=h;}

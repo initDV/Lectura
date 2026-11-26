@@ -6,7 +6,7 @@ Référence de départ : le déploiement de `initDV/Lectura` à [`39e4295`](http
 
 | Référence web | Équivalent Android |
 |---|---|
-| Scène responsive 38/62, décor en perspective, FAB, filigrane Gratuit | Canvas et vues Android, à partir des mêmes ressources et constantes |
+| Scène 38/62 sur écran large ou paysage ; dessin au-dessus du terminal en portrait étroit | Canvas et vues Android, décor en perspective et réglages adaptés au cadre courant |
 | Cinq lectrices et deux robots ; poses, gestes, lèvres et clignements | Le même catalogue de SVG ; rendu et animations Canvas natifs, sans WebView |
 | 38 expressions, détection FR/EN et réglage par phrase | Tables de poses et lexiques partagés ; sélections, mélanges et réactions en lecture |
 | Terminal `rhak_override@sentinel: ~/cours`, œil, 40 lignes, curseur, mots-clés, Markdown, `$ ` et `# ` silencieux | Dessin natif, coloration et horloges de lecture |
@@ -24,7 +24,7 @@ L’inventaire des ressources et les dimensions de référence se trouvent dans 
 
 ## Mesures sur l’émulateur Android 12
 
-Les tests installent un APK de test signé et un APK d’instrumentation séparé. Le rapport `Lectura-comparaison` rassemble les captures non retouchées, les écarts RVB et le journal des contrôles. Les trois surfaces de départ sont comparées à 390 × 780, DPR 1, FR. La présence des paires est exigée, pas l’égalité des pixels. Les polices rasterisées, les animations et les surfaces système peuvent différer.
+Les tests installent un APK de test signé et un APK d’instrumentation séparé. Le rapport `Lectura-comparaison` rassemble les captures non retouchées, les écarts RVB et le journal des contrôles. Les trois surfaces de départ sont comparées à 390 × 780, DPR 1, FR. La présence des paires est contrôlée, pas l’égalité des pixels. Si Pages et le candidat ne partagent pas encore le même cadrage, l’écart de composition est attendu. Les polices rasterisées, les animations et les surfaces système peuvent différer.
 
 Campagne sur l’APK [`1aec807`](https://github.com/initDV/Lectura/commit/1aec807) : [exécution `44295570195`](https://github.com/initDV/Lectura/actions/runs/44295570195) réussie. Résultats API 31 :
 

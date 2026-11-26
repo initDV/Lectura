@@ -27,7 +27,12 @@ final class Decor {
     private static int channel(int n,double f){return (int)Math.round(f<0?n*(1+f):n+(255-n)*f);}
     static int alpha(int color,double a){return (color&0xffffff)|((int)Math.round(255*a)<<24);}
     private static LinearGradient grad(float y,float end,int[] c,float[] stops){return new LinearGradient(0,y,0,end,c,stops,Shader.TileMode.CLAMP);}
-    void screen(Canvas c,float w,float h){float s=Math.max(w/240,h/600);c.save();c.clipRect(0,0,w,h);c.translate((w-240*s)/2,h-600*s);c.scale(s,s);draw(c);c.restore();}
+    void screen(Canvas c,float w,float h,boolean stacked){
+        c.save();c.clipRect(0,0,w,h);
+        if(stacked)c.scale(w/240,h/600); // Keep the wall and horizon in the wider portrait stage.
+        else{float s=Math.max(w/240,h/600);c.translate((w-240*s)/2,h-600*s);c.scale(s,s);}
+        draw(c);c.restore();
+    }
     void export(Canvas c,float w,float h){c.save();c.scale(w/380,h/740);c.translate(70,70);draw(c);c.restore();}
     private void fill(Canvas c,float x,float y,float r,float b,Shader shader){p.setColor(Color.WHITE);p.setShader(shader);c.drawRect(x,y,r,b,p);p.setShader(null);}
     private void line(Canvas c,float x,float y,float r,float b,float width,int color,double opacity){p.setStrokeWidth(width);p.setColor(alpha(color,opacity));c.drawLine(x,y,r,b,p);}

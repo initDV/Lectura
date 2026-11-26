@@ -1,5 +1,6 @@
 package io.github.initdv.lectura;
 
+import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.view.Gravity;
@@ -20,7 +21,8 @@ final class ScenePage {
     final LinearLayout actions;
     ScenePage(MainActivity a,Stage stage){
         this.a=a;u=a.ui;this.stage=stage;scroll=u.scroll();scroll.setFillViewport(true);
-        LinearLayout box=u.col();box.setFocusableInTouchMode(true);box.setDescendantFocusability(LinearLayout.FOCUS_BEFORE_DESCENDANTS);u.pad(box,12,10,12,16);
+        LinearLayout box=u.col();box.setFocusableInTouchMode(true);box.setDescendantFocusability(LinearLayout.FOCUS_BEFORE_DESCENDANTS);
+        u.pad(box,SceneLayout.SIDE_PADDING,10,SceneLayout.SIDE_PADDING,16);
         scroll.addView(u.centered(box,1100),new ScrollView.LayoutParams(Ui.MATCH,Ui.WRAP));
         box.addView(stage,u.lp(Ui.MATCH,280));panel=u.col();u.add(box,panel,8);
         LinearLayout line=u.row();panel.addView(line,u.lp(Ui.MATCH,44));
@@ -58,7 +60,10 @@ final class ScenePage {
         r.setContentDescription(label);u.pad(r,12,0);u.setIcon(r,id,20,u.accentText,0);r.setBackground(u.touch(0,99,u.violet,2));return r;
     }
     void layout(){
-        float height=a.viewportHeight(),width=scroll.getWidth()/u.density;int h=u.d(stage.presenting?Math.max(80,height-20):Math.max(280,Math.min(.7f*height,height-306)));
+        float height=a.viewportHeight(),width=scroll.getWidth()/u.density;
+        boolean stacked=SceneLayout.stacked(width,a.getResources().getConfiguration().orientation==Configuration.ORIENTATION_PORTRAIT);
+        int h=u.d(SceneLayout.height(width,height,stage.presenting,stacked));
+        stage.stackOnPhone(stacked);
         if(stage.getLayoutParams().height!=h){stage.getLayoutParams().height=h;stage.requestLayout();}
         boolean small=width<=420;float pad=small?14:20;
         float nameW=(launch.getPaint().measureText(launch.getText().toString())+stop.getPaint().measureText(stop.getText().toString()))/u.density;

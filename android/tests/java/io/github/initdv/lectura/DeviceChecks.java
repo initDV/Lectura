@@ -176,7 +176,8 @@ public final class DeviceChecks extends Instrumentation {
             waitFor("La fenêtre de test et la voix locale doivent être prêtes",()->a.isForeground&&a.hasWindowFocus()
                 &&(!espeak||a.talk.voices("fr").stream().anyMatch(v->!v.isNetworkConnectionRequired())),15000);
             main(()->{require(a.modal!=null,"Tutoriel au premier démarrage");a.fullscreen();});screen(a,dir,"tuto");
-            click(a,"Passer");screen(a,dir,"scene");click(a,"Menu");screen(a,dir,"menu");
+            click(a,"Passer");screen(a,dir,"scene");main(()->mobileFraming(a));
+            click(a,"Menu");screen(a,dir,"menu");
             main(()->{
                 JSONObject boxes=new JSONObject();ViewGroup sheet=(ViewGroup)((ViewGroup)a.modal).getChildAt(0);
                 ViewGroup body=(ViewGroup)sheet.getChildAt(0);
@@ -215,8 +216,30 @@ public final class DeviceChecks extends Instrumentation {
                 click(a,"Menu");click(a,route[0]);main(()->require(a.route.equals(route[1]),route[0]));
                 click(a,"Retour à la scène");
             }
-            return "API 31, installation, tutoriel, scène, menu, aperçu, pause/reprise/arrêt, vitesse, œil, quatre destinations de base";
+            return "API 31 : scène portrait, sept dessins agrandis, terminal et œil en dessous ; tutoriel, menu, aperçu, pause/reprise/arrêt, vitesse et quatre destinations";
         }finally{main(a::finish);}
+    }
+    private static void mobileFraming(MainActivity a){
+        SceneLayout layout=a.stage.screenLayout();
+        float width=a.stage.getWidth()/a.ui.density;
+        require(layout.stacked&&layout.artWidth==width&&layout.artHeight>=width*.95f-1,"Cadre du téléphone en portrait");
+        require(layout.termX==0&&layout.termWidth==width&&layout.termY>=layout.artHeight+SceneLayout.GAP,"Terminal pleine largeur sous le dessin");
+        require(layout.terminalBodyAt(width/2,layout.termY+80)&&!layout.terminalBodyAt(width/2,layout.artHeight/2),"Défilement limité au terminal");
+        View eye=named(a.stage,a.t("scene.oeil.masquer")),settings=named(a.stage,a.t("reglages.themeApp"));
+        require(eye!=null&&eye.getY()>=a.ui.f(layout.termY)&&eye.getY()+eye.getHeight()<a.ui.f(layout.termY+54),"Œil dans la barre du terminal");
+        require(settings!=null&&settings.getY()+settings.getHeight()<a.ui.f(layout.artHeight),"Réglages hors du texte");
+        require(!SceneLayout.stacked(480,false)&&!SceneLayout.stacked(600,true),"Paysage et écrans larges en colonnes");
+        for(JSONObject def:a.refs.characters){
+            float[] box=a.svg(def.optString("svgScene",def.optString("svg"))).box;
+            for(int[] viewport:new int[][]{{320,568},{390,780},{430,932}}){
+                float w=viewport[0]-2*SceneLayout.SIDE_PADDING;
+                float before=SceneLayout.height(viewport[0],viewport[1],false,false);
+                SceneLayout portrait=new SceneLayout(w,SceneLayout.height(viewport[0],viewport[1],false,true),true);
+                float oldScale=Math.min((w*.38f-4)/box[2],before/box[3]);
+                float newScale=Math.min((portrait.artWidth-4)/box[2],portrait.artHeight/box[3]);
+                require(newScale>oldScale,def.optString("id")+" trop loin à "+viewport[0]+" dp");
+            }
+        }
     }
     void waitFor(String message,java.util.function.BooleanSupplier condition,long millis)throws Exception {
         long deadline=android.os.SystemClock.uptimeMillis()+millis;AtomicReference<Boolean> ready=new AtomicReference<>();

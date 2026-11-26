@@ -139,8 +139,8 @@ jobs:
         with:
           name: Lectura-Android-API31+
           github-token: ${{ github.token }}
-          # Last public APK: v1.1.1 (code 40), signed with the permanent certificate.
-          run-id: ${{ inputs.predecessor_run || '45719452193' }}
+          # Last public APK: v1.1.2 (code 42), signed with the permanent certificate.
+          run-id: ${{ inputs.predecessor_run || '45869559426' }}
           path: ${{ runner.temp }}/lectura-predecessor
       - name: Comparer les certificats de signature
         id: certificates
@@ -161,9 +161,9 @@ jobs:
             if [[ ! -f "$previous" ]]; then
               mkdir -p "$(dirname "$previous")"
               curl -fsSL --retry 3 --retry-all-errors --max-time 150 \
-                'https://github.com/initDV/Lectura/releases/download/v1.1.1/Lectura.apk' -o "$previous"
+                'https://github.com/initDV/Lectura/releases/download/v1.1.2/Lectura.apk' -o "$previous"
             fi
-            printf '%s  %s\n' '7bbba02e52612f611c95c6506f61f85c1c4871ea315fc188e4e43b506f1fb7ec' "$previous" | sha256sum -c -
+            printf '%s  %s\n' 'a3709407bef5f41808ed07b5c0f1c685796edafaac60b4c91d0319c84e3efee8' "$previous" | sha256sum -c -
           fi
           if [[ -f "$previous" ]]; then
             old=$(fingerprint "$previous")
