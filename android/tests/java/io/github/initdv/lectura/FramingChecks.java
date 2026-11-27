@@ -94,9 +94,10 @@ final class FramingChecks {
     }
 
     static String run(DeviceChecks d,Context ctx)throws Exception{
-        MainActivity a=d.open(ctx);
+        d.progress("Portrait allongé : ouverture");MainActivity a=d.open(ctx);
         try{
             d.waitFor("Fenêtre du portrait allongé",()->a.isForeground&&a.hasWindowFocus(),10000);
+            d.progress("Portrait allongé : préparation d’Aïcha");
             d.main(()->{
                 Project p=new Project(a.db.settings);p.character="aicha";p.emotions=true;
                 p.text="Je te présente le nouveau cadrage de Lectura. Le personnage apparaît devant le terminal.\n".repeat(36);
@@ -112,10 +113,12 @@ final class FramingChecks {
                 require(onScreen(a.scene.launch),"Commande Lancer/Reprendre visible");
                 a.seek((int)(a.reading.duration-3000-a.reading.time()));
             });
+            d.progress("Portrait allongé : terminal à droite et défilement");
             d.screen(a,dir,"portrait-terminal-droite",1080,2400,false);
             d.main(()->scrollTerminal(a));
             d.click(a,"Masquer le texte du terminal");d.main(()->require(a.stage.masked,"Œil du terminal en portrait allongé"));
             d.click(a,"Afficher le texte du terminal");
+            d.progress("Portrait allongé : réglages et premier plan");
             change(d,a);
             d.screen(a,dir,"portrait-curseurs",1080,2400,false);
             d.click(a,"Fermer");
@@ -123,7 +126,7 @@ final class FramingChecks {
                 // Use a marked right-hand gesture, not an arbitrary timestamp near the
                 // end: the reading plan now deliberately leaves the hands at rest there.
                 var cue=a.reading.aicha.plan.cues.stream().filter(c->c.hand>0&&c.kind.equals("presente")).findFirst().orElseThrow();
-                a.reading.seek((cue.start+(cue.end-cue.start)*.52)*1000);a.stage.updatePose(1200);
+                a.reading.seek((cue.start+(cue.end-cue.start)*.52)*1000);a.stage.updatePose(1200);a.stage.refresh();
             });
             d.screen(a,dir,"portrait-main-premier-plan",1080,2400,false);
             int[] palmPixels=new int[1];d.main(()->palmPixels[0]=front(a.stage));
@@ -131,6 +134,7 @@ final class FramingChecks {
             d.waitFor("Retour à la scène avec les curseurs",()->a.modal!=null&&a.stage!=null&&a.stage.screenLayout().width>0,6000);
             d.main(()->require(near(a.stage.screenLayout().termWidth,a.stage.screenLayout().width*.63f),"Cadrage retrouvé après navigation"));
             d.click(a,"Réinitialiser le cadrage");d.click(a,"Fermer");
+            d.progress("Portrait allongé : rotation et retour");
             d.main(()->{
                 defaults(a);
                 a.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);

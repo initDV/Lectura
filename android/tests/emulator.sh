@@ -124,17 +124,19 @@ for ((i=0;i<150;i++)); do
         adb shell pm clear "$package" | tee -a "$log"
         instrument installation-en-avion DeviceChecks -e mode clean "${tts[@]}" || failures=1
         instrument cadence DeviceChecks -e mode cadence || failures=1
-        instrument video-uhd DeviceChecks -e mode video-uhd || failures=1
-        # 1080 px at 288 dpi is 600 dp: a tall phone with modestly scaled display elements.
-        adb shell wm size 1080x2400
+        # Change display metrics with the app stopped; the next phase opens a new surface.
+        adb shell am force-stop "$package"
         adb shell wm density 288
+        adb shell wm size 1080x2400 # 600 dp, a tall portrait.
         instrument portrait-allonge DeviceChecks -e mode portrait-allonge || failures=1
         # At a shorter phone height, the touch controls must still be reachable by scrolling.
+        adb shell am force-stop "$package"
         adb shell wm density 160
         adb shell wm size 320x568
         instrument portrait-court DeviceChecks -e mode portrait-court || failures=1
+        adb shell am force-stop "$package"
         adb shell wm size 390x780
-        adb shell wm density 160
+        instrument video-uhd DeviceChecks -e mode video-uhd || failures=1
         adb shell cmd connectivity airplane-mode disable
         adb shell svc wifi enable
         adb shell svc data enable

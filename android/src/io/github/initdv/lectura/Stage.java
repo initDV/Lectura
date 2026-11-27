@@ -147,9 +147,6 @@ final class Stage extends FrameLayout {
             boolean animated=aicha!=null?!aicha.reduced:!sprite.reduced;
             boolean idle=animated&&!a.preparing&&(r==null||aicha!=null&&(a.stopped||r.ended));
             boolean settling=sprite!=null&&sprite.gliding(now);
-            if(animated&&!presenting&&!a.dimmedScene&&(playing||idle)){
-                float f=(float)((1-Math.cos(now*2*Math.PI/3500))*.5);settings.setScaleX(1+.05f*f);settings.setScaleY(1+.05f*f);
-            }
             // Leave room for vsync rounding on 60–120 Hz screens. The pose
             // always comes from the playback clock, never from a frame counter.
             long delay=recording||playing?26:idle||settling?60:0;

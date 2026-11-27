@@ -133,6 +133,9 @@ public final class DeviceChecks extends Instrumentation {
         catch(Throwable e){
             failed=true;message="LECTURA_ERROR "+name+" : "+e+"\n"+android.util.Log.getStackTraceString(e);
         }
+        progress(message);
+    }
+    void progress(String message){
         Bundle status=new Bundle();status.putString("stream","\n"+message+"\n");sendStatus(0,status);
     }
     interface MainAction { void run() throws Exception; }
