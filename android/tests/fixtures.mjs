@@ -41,5 +41,7 @@ const steps = robotStepCases.map((entry) => {
   return { ...entry, step, poses: sample.map((ms) => [ms, poseRobot(track, ms)]) };
 });
 fixtures.robot = { text: robotText, duration: robotDuration, segments: robotSegments, direction, poses: keys.map(ms => [ms, poseRobot(direction, ms)]), steps };
-await writeFile(process.argv[2], JSON.stringify(fixtures));
+const serialise = JSON.stringify(fixtures);
+if (Buffer.byteLength(serialise) > 2_000_000) throw new Error('Fixtures Android : plafond de 2 Mo de DeviceChecks dépassé.');
+await writeFile(process.argv[2], serialise);
 await writeFile(join(dirname(process.argv[2]), 'lips-reference.wav'), wav);

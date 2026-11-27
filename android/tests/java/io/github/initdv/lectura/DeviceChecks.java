@@ -601,10 +601,13 @@ public final class DeviceChecks extends Instrumentation {
         sprite.direct(directions,audio,"");sprite.quietMouth=true;sprite.tick(wall);
         Bitmap bitmap=Bitmap.createBitmap(240,380,Bitmap.Config.ARGB_8888);sprite.svg.fit(new Canvas(bitmap),0,0,240,380,true);return bitmap;
     }
+    private JSONObject testFixtures;
     private JSONObject fixtures()throws Exception{
-        try(InputStream in=getContext().getAssets().open("fixtures.json")){
-            return Refs.parse(new String(Refs.read(in,1000000),StandardCharsets.UTF_8));
+        if(testFixtures==null)try(InputStream in=getContext().getAssets().open("fixtures.json")){
+            // Asset d’instrumentation généré dans le dépôt, borné également par fixtures.mjs.
+            testFixtures=Refs.parse(new String(Refs.read(in,2_000_000),StandardCharsets.UTF_8));
         }
+        return testFixtures;
     }
     private File assetFile(Context ctx,String name)throws Exception{
         File target=File.createTempFile("fixture-",".wav",ctx.getCacheDir());

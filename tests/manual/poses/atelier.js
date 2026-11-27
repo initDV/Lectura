@@ -15,7 +15,7 @@ const demonstration = { paroles: [{ start: .36, end: 2.32 }], lips: planBouche([
 const texteVirage = 'J’ai cru que tu ne viendrais pas… mais te voilà !';
 const segsVirage = [{ texte: 'J’ai cru que tu ne viendrais pas…', debutMs: 0, finMs: 2440, speechEndMs: 2000 },
   { texte: 'mais te voilà !', debutMs: 2440, finMs: 4000, speechEndMs: 3770 }];
-const virage = { texte: texteVirage, nom: 'Inquiétude → joie', max: 4000, mark: 1220,
+const virage = { texte: texteVirage, nom: 'Inquiétude → joie', max: 4000, mark: 1420,
   desc: 'La lectrice commence inquiète. Au silence, elle relève les yeux ; le sourire arrive sur « te voilà ». Change de lectrice pour comparer au même repère.',
   lips: planBouche(segsVirage, 'fr'), plan: planAicha(new Timeline(texteVirage, segsVirage).segs, 4000, { texte: texteVirage }) };
 const vedettes = {
