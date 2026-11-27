@@ -149,8 +149,21 @@ for ((i=0;i<150;i++)); do
             failures=1
         fi
         adb logcat -d -s AndroidRuntime:E Lectura:E > "$LECTURA_REPORT/android-errors.txt"
-        adb pull /sdcard/Android/data/io.github.initdv.lectura/files/verification "$LECTURA_REPORT/device" || true
+        verification="/sdcard/Android/data/$package/files/verification"
+        adb pull "$verification" "$LECTURA_REPORT/device" || true
         mv "$LECTURA_REPORT"/device/android-*.png "$LECTURA_REPORT/" 2>/dev/null || true
+        if ((!failures)); then
+            mkdir -p "$LECTURA_REPORT/voix"
+            for file in texte.txt 01-siwis-douce.wav 02-estelle.wav 03-siwis-kokoro.wav 04-mls-1.wav 05-mls-4.wav; do
+                src="$LECTURA_REPORT/device/voix-$file"
+                dest="$LECTURA_REPORT/voix/$file"
+                if [[ -s $src ]]; then
+                    mv "$src" "$dest"
+                elif ! adb pull "$verification/voix-$file" "$dest"; then
+                    echo "::warning title=Comparatif vocal Android::Fichier non récupéré : $file"
+                fi
+            done
+        fi
         if ((failures)); then
             errors="$LECTURA_REPORT/android-errors.txt"
             logline=$(grep -m 10 -E 'FATAL EXCEPTION|Caused by:| E AndroidRuntime: java\.' "$errors" || true)

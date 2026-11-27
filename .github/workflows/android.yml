@@ -272,19 +272,24 @@ jobs:
           path: ${{ runner.temp }}/lectura-report
           if-no-files-found: warn
       - name: Préparer le comparatif des voix françaises
+        id: voice_samples
         if: steps.android_checks.outcome == 'success'
+        continue-on-error: true # The separately validated APK does not depend on transfer of the samples.
         env:
-          VOICE_SAMPLES: ${{ runner.temp }}/lectura-report/device/voix
+          VOICE_SAMPLES: ${{ runner.temp }}/lectura-report/voix
         run: |
-          for voice in 01-siwis-douce 02-estelle 03-siwis-kokoro 04-mls-1 05-mls-4; do
-            test -s "$VOICE_SAMPLES/$voice.wav"
+          for file in texte.txt 01-siwis-douce.wav 02-estelle.wav 03-siwis-kokoro.wav 04-mls-1.wav 05-mls-4.wav; do
+            if [[ ! -s "$VOICE_SAMPLES/$file" ]]; then
+              echo "::warning title=Comparatif vocal Android::Fichier manquant : $file"
+              exit 1
+            fi
           done
           cp android/tests/voix-lisez-moi.md "$VOICE_SAMPLES/Lisez-moi.md"
       - uses: actions/upload-artifact@v4
-        if: steps.android_checks.outcome == 'success'
+        if: steps.voice_samples.outcome == 'success'
         with:
           name: Lectura-voix-francaises
-          path: ${{ runner.temp }}/lectura-report/device/voix
+          path: ${{ runner.temp }}/lectura-report/voix
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: success() && steps.certificates.outcome == 'success' && steps.android_checks.outcome == 'success'

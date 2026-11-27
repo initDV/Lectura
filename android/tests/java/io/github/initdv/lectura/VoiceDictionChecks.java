@@ -62,9 +62,9 @@ final class VoiceDictionChecks {
     }
 
     static void sample(Refs refs,String name,Pcm audio)throws Exception {
-        File voices=Library.dir(refs.context.getExternalFilesDir("verification"),"voix");
-        Files.write(new File(voices,"texte.txt").toPath(),(SAMPLE+"\n").getBytes(StandardCharsets.UTF_8));
-        Files.copy(audio.file.toPath(),new File(voices,name+".wav").toPath(),StandardCopyOption.REPLACE_EXISTING);
+        File dir=refs.context.getExternalFilesDir("verification");
+        Files.write(new File(dir,"voix-texte.txt").toPath(),(SAMPLE+"\n").getBytes(StandardCharsets.UTF_8));
+        Files.copy(audio.file.toPath(),new File(dir,"voix-"+name+".wav").toPath(),StandardCopyOption.REPLACE_EXISTING);
     }
 
     private static void require(boolean ok,String message){if(!ok)throw new AssertionError(message);}
