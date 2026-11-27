@@ -276,15 +276,36 @@ jobs:
         if: steps.android_checks.outcome == 'success'
         continue-on-error: true # The separately validated APK does not depend on transfer of the samples.
         env:
-          VOICE_SAMPLES: ${{ runner.temp }}/lectura-report/voix
+          LECTURA_REPORT: ${{ runner.temp }}/lectura-report
         run: |
-          for file in texte.txt 01-siwis-douce.wav 02-estelle.wav 03-siwis-kokoro.wav 04-mls-1.wav 05-mls-4.wav; do
-            if [[ ! -s "$VOICE_SAMPLES/$file" ]]; then
-              echo "::warning title=Comparatif vocal Android::Fichier manquant : $file"
-              exit 1
-            fi
-          done
-          cp android/tests/voix-lisez-moi.md "$VOICE_SAMPLES/Lisez-moi.md"
+          grep -E '^LECTURA_OK (estelle-auto|kokoro|siwis-piper)-en-avion :' "$LECTURA_REPORT/android-checks.txt" |
+            while IFS= read -r check; do
+              printf '::notice title=Voix testée en mode avion::%s\n' "${check//%/%25}"
+            done || true
+          python3 - "$LECTURA_REPORT/voix" <<'PY'
+          from pathlib import Path
+          import sys
+          import wave
+
+          folder = Path(sys.argv[1])
+          try:
+              if not (folder / 'texte.txt').read_text(encoding='utf-8').strip():
+                  raise ValueError('texte.txt vide')
+              for i, name in enumerate(('siwis-douce', 'estelle', 'siwis-kokoro', 'mls-1', 'mls-4'), 1):
+                  path = folder / f'{i:02}-{name}.wav'
+                  with wave.open(str(path), 'rb') as f:
+                      rate = 24000 if i in (2, 3) else 22050
+                      frames = f.getnframes()
+                      if f.getparams()[:3] != (1, 2, rate) or not rate <= frames < 60 * rate:
+                          raise ValueError(f'{path.name} : format ou durée inattendus')
+                      if len(f.readframes(frames)) != 2 * frames:
+                          raise ValueError(f'{path.name} : données PCM incomplètes')
+                      print(f'{path.name} : {frames / rate:.2f} s, PCM mono 16 bits à {rate} Hz')
+          except (OSError, EOFError, wave.Error, ValueError) as error:
+              print(f'::warning title=Comparatif vocal Android::{error}')
+              raise SystemExit(1)
+          PY
+          cp android/tests/voix-lisez-moi.md "$LECTURA_REPORT/voix/Lisez-moi.md"
       - uses: actions/upload-artifact@v4
         if: steps.voice_samples.outcome == 'success'
         with:

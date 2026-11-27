@@ -1,9 +1,9 @@
 package io.github.initdv.lectura;
 
 import java.io.File;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.List;
 import org.json.JSONObject;
@@ -64,7 +64,10 @@ final class VoiceDictionChecks {
     static void sample(Refs refs,String name,Pcm audio)throws Exception {
         File dir=refs.context.getExternalFilesDir("verification");
         Files.write(new File(dir,"voix-texte.txt").toPath(),(SAMPLE+"\n").getBytes(StandardCharsets.UTF_8));
-        Files.copy(audio.file.toPath(),new File(dir,"voix-"+name+".wav").toPath(),StandardCopyOption.REPLACE_EXISTING);
+        // Transfer as opaque test data, not as an audio item in Android's shared storage.
+        File sample=new File(dir,"voix-"+name+".bin");
+        try(OutputStream out=Files.newOutputStream(sample.toPath())){Files.copy(audio.file.toPath(),out);}
+        require(Pcm.mono16Frames(sample,audio.rate)==audio.frames,"Copie de l’extrait vocal : "+name);
     }
 
     private static void require(boolean ok,String message){if(!ok)throw new AssertionError(message);}

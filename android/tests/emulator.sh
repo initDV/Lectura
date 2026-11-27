@@ -155,11 +155,13 @@ for ((i=0;i<150;i++)); do
         if ((!failures)); then
             mkdir -p "$LECTURA_REPORT/voix"
             for file in texte.txt 01-siwis-douce.wav 02-estelle.wav 03-siwis-kokoro.wav 04-mls-1.wav 05-mls-4.wav; do
-                src="$LECTURA_REPORT/device/voix-$file"
+                sent="voix-$file"
+                if [[ $file == *.wav ]]; then sent="voix-${file%.wav}.bin"; fi
+                src="$LECTURA_REPORT/device/$sent"
                 dest="$LECTURA_REPORT/voix/$file"
                 if [[ -s $src ]]; then
                     mv "$src" "$dest"
-                elif ! adb pull "$verification/voix-$file" "$dest"; then
+                elif ! adb pull "$verification/$sent" "$dest"; then
                     echo "::warning title=Comparatif vocal Android::Fichier non récupéré : $file"
                 fi
             done
