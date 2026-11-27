@@ -1,13 +1,14 @@
 # Prononciation et phrasé de Lectura
 
-La voix et les modèles sont les mêmes. Ce lot change les phonèmes envoyés à la synthèse, puis, dans certains cas, la petite portion de voyelle qui termine une question. Il ne change ni le texte du projet ni les téléchargements de voix. Il n'ajoute pas de profil, de filtre global ni de moteur.
+Les correctifs de diction ne changent ni le texte du projet ni les modèles déjà téléchargés. Les traitements sont propres à chaque moteur ; la voix choisie et la priorité du mode Automatique ne changent pas.
 
 | Source | Prononciation | Finale de question |
 | --- | --- | --- |
 | Piper Siwis, PWA et APK | Lexique commun, corrections de diction ciblées et pauses selon la ponctuation | Relèvement local et +70 ms à 1× si la finale est faible et suffisamment périodique |
 | Autres voix Piper | Même phonétisation ; repli de `/ɥ/` sur `/y/` si le modèle n'a pas le phonème | Pas de traitement ajouté sur le Web. Sur Android, traitement existant limité aux finales faibles, sans allongement |
-| Siwis Kokoro (APK) | Même phonétisation locale, vérification de `/ɥ/` dans les tokens du pack | Finale Android sans allongement |
-| Estelle et voix système Android | Heures écrites normalisées avant la lecture ; prononciation du moteur, pas de lexique IPA Piper | Finale Android sans allongement |
+| Siwis Kokoro (APK) | Phonétisation locale adaptée au vocabulaire du modèle (`/ɲ/`, `/ɥ/`, voyelles nasales), clauses gardées ensemble | Finale Android sans allongement |
+| Estelle (APK) | Heures normalisées, clauses gardées ensemble, vraies fins de phrase pour le modèle Pocket TTS | Finale Android sans allongement |
+| Voix système Android | Heures normalisées ; prononciation du moteur, pas de lexique IPA Piper | Finale Android sans allongement |
 | Web Speech, audio importé, aperçu silencieux | Inchangé | Inchangé |
 
 ## Cas retenus
@@ -19,6 +20,15 @@ La voix et les modèles sont les mêmes. Ce lot change les phonèmes envoyés à
 - `/jø/` reste intact seul ; « les yeux » et « deux yeux » reçoivent la liaison `/z/`. Pas de liaison introduite devant « yaourt », « héros » ou « haricot ».
 - « Vraiment ? » inclut bien `/ɑ̃/`, sans élargir aveuglément la règle de `-ent` aux verbes. « Fils », « couvent » et « président » ne changent de lecture qu'en présence d'un indice clair. Les formes isolées ambiguës gardent leur lecture par défaut.
 - Le traitement audio est sélectif : une question ouverte, un choix « … ou … ? », un signal non voisé/incertain, ou une montée naturelle ne sont pas remodelés. Il conserve le reste du signal et ne prolonge pas la pause après la question. Les tests `g2p`, `question-pitch` et l'instrumentation Android utilisent les mêmes cas de référence.
+
+## Estelle et Kokoro sur Android
+
+- Une phrase courte comme « À 8 h 30, les enfants longent la montagne sous la pluie. » n’est plus synthétisée en deux morceaux autour de la virgule. Les virgules, deux-points et points-virgules restent dans le texte donné au moteur. Pour une phrase longue, la coupure cherche d’abord une ponctuation, sinon un espace. Les fins de phrase, les retours à la ligne et les lignes de commande gardent leurs pauses ; le terminal garde le texte exact.
+- Estelle reçoit un point à la fin d’un fragment sans ponctuation forte. Comme dans [Pocket TTS](https://github.com/kyutai-labs/pocket-tts/blob/bc4d640c925a3782092a841e9bc7ba442a65a838/pocket_tts/models/tts_model.py), le premier signal de fin n’est pris en compte qu’après six trames pour éviter d’arrêter avant le premier mot.
+- Kokoro reçoit `/ɲ/` dans « montagne » et « oignon », sans remplacer le vrai `/nj/` de « panier ». Les tirets propres à Piper ne sont pas envoyés. `/ɥ/` (« pluie ») et les voyelles nasales sont gardés quand le pack peut les représenter. Ce profil ne reprend pas les exceptions propres à Siwis Piper. [La fiche de Kokoro](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md#french) ne propose qu’un locuteur français pour ce modèle : `ff_siwis`, le même corpus que le Piper doux, pas une nouvelle personne.
+- Aux bords des phrases Estelle et Kokoro, jusqu’à 40 ms de signal faible sont préservées pour ne pas rogner une consonne. Le traitement retire le silence net et atténue uniquement si le pic dépasserait −3 dBFS ; il ne compresse pas l’intérieur des phrases. Siwis Piper et les fichiers importés ne sont pas retouchés par ce changement.
+
+**Comparer à l’oreille.** L’artefact **Lectura-voix-francaises** du candidat Android contient le même texte lu à 1× par Siwis douce, Estelle, Siwis Kokoro, MLS 1 (féminine) et MLS 4 (masculine). MLS 1 et MLS 4 sont déjà proposées dans les voix Piper. Comme nouveau moteur hors ligne, [Supertonic 3](https://github.com/supertone-oss-archive/supertonic) mérite un essai en français avec ses voix préréglées. Il n’est pas intégré : les poids sont sous OpenRAIL-M, le projet amont est archivé et il faut comparer la diction et la latence sur téléphone avant de le retenir. Aucun test PCM ne désigne à lui seul une meilleure voix à l’écoute.
 
 ## Chargement et caches
 

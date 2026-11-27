@@ -14,7 +14,7 @@ import java.util.Random;
 /** Estelle, preset-only Pocket TTS FR. Uses the pinned Okuvia ONNX graph contract, no voice encoder or cloning. */
 final class Pocket implements AutoCloseable {
     static final int RATE=Mimi.RATE;
-    private static final int LATENT=Mimi.LATENT;
+    private static final int LATENT=Mimi.LATENT, MIN_EOS_FRAME=6;
     private static final int TEXT_DIM=1024,CACHE_SIZE=1000,HEADS=16,HEAD_DIM=64,STATES=18;
     private final OrtLocal ort;
     private final LocalUnigram tokenizer;
@@ -60,12 +60,17 @@ final class Pocket implements AutoCloseable {
         if(b.hasRemaining())throw new IOException("Préréglage Estelle inattendu.");
     }
     float[] generate(String raw)throws Exception{return decoder.decode(latents(raw));}
-    float[] latents(String raw)throws Exception {
-        String s=raw.replace('’','\'').replace(':',',').replace(";","").replace('…','.').trim();
+    static String prompt(String raw)throws IOException {
+        String s=raw.replace('’','\'').replace('‘','\'').replace(':',',').replace(';',',').replace('…','.')
+            .replaceAll("[\\s\\p{Z}]+"," ").trim().replaceFirst("[, -]+$", "");
         if(s.isEmpty())throw new IOException("Phrase Estelle vide.");
         int first=s.codePointAt(0);s=new String(Character.toChars(Character.toUpperCase(first)))+s.substring(Character.charCount(first));
-        if(Character.isLetterOrDigit(s.codePointBefore(s.length())))s+=".";
-        int words=s.split(" +").length,tail=words<=4?5:3;
+        // Like the Pocket reference, finish a cut-off clause as a sentence so the last word is not repeated or cut.
+        return ".!?".indexOf(s.charAt(s.length()-1))>=0?s:s+".";
+    }
+    float[] latents(String raw)throws Exception {
+        String s=prompt(raw);
+        int words=s.split(" ").length,tail=words<=4?5:3;
         long[] ids=tokenizer.encode(s);
         if(ids.length==0||ids.length>300)throw new IOException("Phrase Estelle trop longue.");
         int limit=Math.min(Mimi.MAX_FRAMES,Math.max(45,ids.length*6+28)),count=0,ending=-1;
@@ -88,7 +93,8 @@ final class Pocket implements AutoCloseable {
                 }
                 float eos=state.floats("eos_logit")[0];
                 if(!Float.isFinite(eos))throw new IOException("Estelle : état de synthèse non fini.");
-                if(ending<0&&eos>-4)ending=i;
+                // Some prompts cross the EOS threshold before speech has even started (Pocket's warm-up guard).
+                if(ending<0&&i>=MIN_EOS_FRAME&&eos>-4)ending=i;
                 if(ending>=0&&i-ending>=tail)break;
                 float[] noise=new float[LATENT];for(int j=0;j<LATENT;j++)noise[j]=(float)(random.nextGaussian()*Math.sqrt(.3));
                 try(AutoCloseable x=ort.floats(noise,1,LATENT);

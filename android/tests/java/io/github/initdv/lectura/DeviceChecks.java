@@ -96,6 +96,7 @@ public final class DeviceChecks extends Instrumentation {
                 check("surfaces",()->surfaces(ctx));
                 check("fixtures",()->refsAndModels(refs));
                 check("prosodie-pcm",()->prosody(refs));
+                check("diction-estelle-kokoro",()->VoiceDictionChecks.run(refs));
                 check("jeu-du-personnage",()->performance(refs));
                 check("quatre-gestes",()->robotChoreo(ctx,refs));
                 check("catalogue-et-reglages",()->fullAccess(ctx));
@@ -368,7 +369,7 @@ public final class DeviceChecks extends Instrumentation {
         try(Pcm wave=VoiceRender.render(refs.context.getCacheDir(),null,null,SpeechPlan.plan("Tu viens ?","fr",lex),rate,28,VoiceRender.Profile.ESTELLE,
                 ignored->hot,(n,total)->{}).pcm){
             require(wave.frames>=end-onset,"L’atténuation ne doit pas enlever d’échantillons");
-            int peak=estelleWave(wave);require(peak>21500,"Atténuation excessive : "+peak);
+            int peak=packWave(wave);require(peak>21500,"Atténuation excessive : "+peak);
         }
         return "8 durées exactes, 320 → 256 ms à 1,25×, montée faible corrigée et +70 ms sans silence en plus ; montée naturelle et source intactes ; WAV Estelle mono 24 kHz reconnu par Android, signal de test > 0 dBFS écrit avec 3 dB de marge";
     }
@@ -1162,13 +1163,14 @@ public final class DeviceChecks extends Instrumentation {
             h.remove("mls_f1");int retries=downloadWithRetry(h,"mls_f1",(n,total)->{});
             try {
                 require(h.installed(two),"Un seul téléchargement pour les locuteurs MLS");
-                String sentence="Bonjour, voici les voix de Lectura.";
+                String sentence=VoiceDictionChecks.SAMPLE;
                 try(Pcm a=h.synth(sentence,"mls_f1",28,(n,total)->{}).pcm;
                     Pcm b=h.synth(sentence,"mls_m1",28,(n,total)->{}).pcm){
                     short[] x=new short[a.rate],y=new short[b.rate];
                     int m=a.read(0,x,x.length),n=b.read(0,y,y.length);
                     require(a.duration()>700&&b.duration()>700&&peak(x,m)>1000&&peak(y,n)>1000
                         &&!java.util.Arrays.equals(x,y),"Deux sorties MLS audibles et distinctes");
+                    VoiceDictionChecks.sample(refs,"04-mls-1",a);VoiceDictionChecks.sample(refs,"05-mls-4",b);
                 }
             }finally{h.remove("mls_f1");}
             require(!h.installed(two),"Suppression du modèle commun MLS");
@@ -1239,7 +1241,9 @@ public final class DeviceChecks extends Instrumentation {
             downloadWithRetry(h,kokoro.id,(n,total)->{});
             require(store.installed(kokoro)&&h.autoVoice("fr").equals(estelle.id)&&h.autoVoice("en").isEmpty(),"Installation Kokoro sans changer la priorité FR");
             require(!new File(store.path(estelle),"models/mimi_encoder.onnx").exists()&&!new File(store.path(kokoro),"espeak-ng-data").exists(),"Données inutiles du pack installées");
-            return "Estelle reprise à partir de "+resumed+" octets présents, archives publiques vérifiées, deux installations intactes, Estelle prioritaire";
+            var tokens=Files.readAllLines(new File(store.path(kokoro),"tokens.txt").toPath());
+            for(String phone:List.of("ɲ","ɥ","̃"))require(tokens.stream().anyMatch(line->line.startsWith(phone+" ")||line.startsWith(phone+"\t")),"Le pack Kokoro ne contient pas "+phone);
+            return "Estelle reprise à partir de "+resumed+" octets présents, archives publiques vérifiées, ɲ/ɥ/̃ confirmés dans Kokoro, Estelle prioritaire";
         }
     }
     private String offlineNewVoice(Context ctx,String id)throws Exception {
@@ -1247,9 +1251,9 @@ public final class DeviceChecks extends Instrumentation {
         MainActivity a=open(ctx);File dir=ctx.getExternalFilesDir("verification");
         try {
             waitFor("Fenêtre voix native au premier plan",()->a.isForeground&&a.hasWindowFocus(),15000);
-            boolean automatic=id.equals("estelle");String text=automatic?"Tu veux venir ce soir ?\nBravo !":"Tu as aimé cette lecture ?\nMerci !";
+            boolean automatic=id.equals("estelle");String text=VoiceDictionChecks.SAMPLE;
             int cps=28;String label="Lectura HD · "+a.hd.voice(id).getString("nom");
-            if(automatic)seedPreviousEstelleCache(ctx,a.refs,text,cps);
+            seedPreviousPackCache(ctx,a.refs,id,text,cps);
             main(()->{
                 require(a.hd.installed(a.hd.voice(id)),"Pack absent après relance : "+id);
                 a.dismiss();Project p=new Project(a.db.settings);p.text=text;p.speed=automatic?1:1.25f;p.cps=cps;p.engine="auto";p.voice="";
@@ -1271,19 +1275,24 @@ public final class DeviceChecks extends Instrumentation {
             int[] peak={0};
             main(()->{
                 Reading r=a.reading;require(r.pcm!=null&&r.pcm.rate==24000&&r.rate==1.25&&r.ended&&r.text.equals(text)&&noNetwork(ctx),"Lecture native incomplète");
-                peak[0]=automatic?estelleWave(r.pcm):pcmPeak(r.pcm,0,(long)r.duration);
-                require(peak[0]>900,"Voix muette : "+id);
-                if(automatic)Files.copy(r.pcm.file.toPath(),new File(dir,"estelle-pcm24k.wav").toPath(),StandardCopyOption.REPLACE_EXISTING);
+                peak[0]=packWave(r.pcm);
                 List<Script.Segment> parts=r.timeline.parts;
-                require(parts.size()==2&&parts.get(0).to-parts.get(0).speechEnd==560&&parts.get(1).to-parts.get(1).speechEnd==400,"Pauses du vrai PCM");
+                require(parts.size()==3&&parts.get(0).text.equals(text.substring(0,text.indexOf('.')+1)),"Virgule coupée dans le vrai PCM");
+                int[] pauses={320,560,400};
+                for(int i=0;i<parts.size();i++){
+                    var p=parts.get(i);
+                    require(p.to-p.speechEnd==pauses[i]&&pcmPeak(r.pcm,p.from,p.speechEnd)>900
+                        &&pcmPeak(r.pcm,p.speechEnd+1,p.to-1)==0,"Voix ou silence du fragment : "+p.text);
+                }
+                VoiceDictionChecks.sample(a.refs,automatic?"02-estelle":"03-siwis-kokoro",r.pcm);
             });
             String cached=checkNewVoiceCache(ctx,id,text,cps);
             return id+" à froid en avion, "+(automatic?"1× puis ":"")+"1,25× (PCM 24 kHz), démarrage "+startup+" ms, "+observed.length()+" observations, pic "+peak[0]
-                +(automatic?"/32768, aucun écrêtage et anciens caches ignorés":"")+" ; "+cached;
+                +"/32768, trois phrases non muettes et anciens caches ignorés ; "+cached;
         }finally{main(a::finish);}
     }
-    private static int estelleWave(Pcm wav)throws Exception {
-        require(wav.channels==1&&wav.rate==Pocket.RATE&&Pcm.mono16Frames(wav.file,Pocket.RATE)==wav.frames,"En-tête WAV d’Estelle");
+    private static int packWave(Pcm wav)throws Exception {
+        require(wav.channels==1&&wav.rate==24000&&Pcm.mono16Frames(wav.file,24000)==wav.frames,"En-tête WAV du pack");
         MediaExtractor decoder=new MediaExtractor();
         try {
             decoder.setDataSource(wav.file.getPath());MediaFormat format=decoder.getTrackFormat(0);
@@ -1292,7 +1301,7 @@ public final class DeviceChecks extends Instrumentation {
                 &&Math.abs(format.getLong(MediaFormat.KEY_DURATION)-1000*wav.duration())<1000,"Android ne lit pas le format/durée attendus : "+format);
         }finally{decoder.release();}
         int peak=pcmPeak(wav,0,(long)Math.ceil(wav.duration()));
-        require(peak<=Math.round(32768*VoiceRender.ESTELLE_PEAK),"PCM Estelle hors marge : "+peak);
+        require(peak<=Math.round(32768*VoiceRender.PACK_PEAK),"PCM du pack hors marge : "+peak);
         return peak;
     }
     private static String oldKey(String algorithm,String input)throws Exception {
@@ -1301,18 +1310,22 @@ public final class DeviceChecks extends Instrumentation {
         for(byte b:digest)out.append(Character.forDigit((b&255)>>>4,16)).append(Character.forDigit(b&15,16));
         return out.toString();
     }
-    private static void seedPreviousEstelleCache(Context ctx,Refs refs,String text,int cps)throws Exception {
+    private static void seedPreviousPackCache(Context ctx,Refs refs,String id,String text,int cps)throws Exception {
         File phrases=Library.dir(ctx.getCacheDir(),"phrases"),whole=Library.dir(ctx.getCacheDir(),"synthese");
-        // Valid legacy cache keys and headers, but deliberately silent: neither layer may be reused.
-        for(var f:SpeechPlan.plan(text,"fr",Refs.object(refs.json("prononciation.json"),"fr"))){
-            String key=oldKey("SHA-1","phrase-3|estelle|"+f.spoken);
+        boolean estelle=id.equals("estelle");
+        // Matching legacy keys, valid headers and span count, but deliberately silent audio.
+        var plan=SpeechPlan.plan(text,"fr",Refs.object(refs.json("prononciation.json"),"fr"),true);
+        JSONArray spans=new JSONArray();
+        for(var f:plan){
+            String key=oldKey("SHA-1",(estelle?"phrase-mimi-4|":"phrase-4|")+id+"|"+f.spoken);
             Files.write(new File(phrases,key+".f32").toPath(),new byte[Mimi.SAMPLES_PER_LATENT*Float.BYTES]);
+            int from=spans.length()*1000;spans.put(new JSONArray().put(from).put(from+650).put(from+1000));
         }
-        String key=oldKey("SHA-256","rendu-3|estelle|"+cps+"|"+text);
+        String key=oldKey("SHA-256",(estelle?"rendu-mimi-7|":"rendu-7|")+id+"|"+cps+"|"+text);
         try(RandomAccessFile file=new RandomAccessFile(new File(whole,key+".wav"),"rw")){
-            int size=Pocket.RATE*2*2;Pcm.header(file,1,Pocket.RATE,size);file.setLength(44L+size);
+            int size=Pocket.RATE*plan.size()*2;Pcm.header(file,1,Pocket.RATE,size);file.setLength(44L+size);
         }
-        Library.writeJson(new File(whole,key+".json"),new JSONObject("{\"spans\":[[0,640,1200],[1200,1600,2000]]}"));
+        Library.writeJson(new File(whole,key+".json"),Refs.put(new JSONObject(),"spans",spans));
     }
     private String checkNewVoiceCache(Context ctx,String id,String text,int cps)throws Exception {
         File phraseDir=new File(ctx.getCacheDir(),"phrases");
@@ -1322,7 +1335,7 @@ public final class DeviceChecks extends Instrumentation {
             Hd.Synthesis whole=cached.synth(text,id,cps,(n,total)->require(n==1&&total==1,"WAV complet pas repris"));
             long full=android.os.SystemClock.elapsedRealtime()-start;
             // Only the final paragraph break changes. The WAV must change but neither spoken phrase should be resynthesized.
-            Hd.Synthesis phr=cached.synth(text+"\n",id,cps,(n,total)->require(total==2,"Le texte édité ne doit pas réutiliser le WAV complet"));
+            Hd.Synthesis phr=cached.synth(text+"\n",id,cps,(n,total)->require(total==3,"Le texte édité ne doit pas réutiliser le WAV complet"));
             long end=android.os.SystemClock.elapsedRealtime()-start;
             try(Pcm a=whole.pcm;Pcm b=phr.pcm){
                 require(!a.file.equals(b.file)&&b.frames-a.frames==3840,"Le WAV édité doit ajouter 160 ms au silence final");
@@ -1377,7 +1390,10 @@ public final class DeviceChecks extends Instrumentation {
                 }
                 Files.copy(wav.file.toPath(),new File(ctx.getExternalFilesDir("verification"),"android-siwis-dialogue-1.1.wav").toPath(),StandardCopyOption.REPLACE_EXISTING);
             }
-            return "Piper Siwis réel en avion ; démarrage à froid "+cold+" ms ; WAV 22 050 Hz, pause, saut, curseur et silence ; dialogue corrigé rendu en PCM";
+            try(Pcm sample=a.hd.synth(VoiceDictionChecks.SAMPLE,"siwis",28,(n,total)->{}).pcm){
+                VoiceDictionChecks.sample(a.refs,"01-siwis-douce",sample);
+            }
+            return "Piper Siwis réel en avion ; démarrage à froid "+cold+" ms ; WAV 22 050 Hz, pause, saut, curseur et silence ; dialogue corrigé et extrait comparatif rendus en PCM";
         }finally{main(a::finish);}
     }
     private String hd(Refs refs)throws Exception {

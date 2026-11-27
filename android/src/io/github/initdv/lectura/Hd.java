@@ -186,8 +186,9 @@ final class Hd implements AutoCloseable {
     private void remember(String key,float[] pcm){
         float[] prev=l1.put(key,pcm);l1Bytes+=4L*(pcm.length-(prev==null?0:prev.length));while(l1Bytes>8*1024*1024&&l1.size()>1){String first=l1.keySet().iterator().next();l1Bytes-=4L*l1.remove(first).length;}}
     private float[] phrase(JSONObject v,String text,JSONObject config)throws Exception {
-        boolean estelle=pack(v)==VoicePacks.ESTELLE;
-        String id=key("SHA-1",(estelle?"phrase-mimi-4|":pack(v)==null?"phrase-piper-fr-6|":"phrase-4|")+v.optString("id")+"|"+text);float[] out=l1.get(id);if(out!=null)return out;
+        VoicePacks.Spec spec=pack(v);boolean estelle=spec==VoicePacks.ESTELLE;
+        String revision=estelle?"phrase-mimi-5|":spec==VoicePacks.KOKORO?"phrase-kokoro-5|":"phrase-piper-fr-6|";
+        String id=key("SHA-1",revision+v.optString("id")+"|"+text);float[] out=l1.get(id);if(out!=null)return out;
         File f=new File(phrases,id+".f32");long bytes=f.length();
         int stride=estelle?Mimi.SAMPLES_PER_LATENT*4:4,limit=estelle?Mimi.MAX_FRAMES*stride:64*1024*1024;
         if(bytes>0&&bytes%stride==0&&bytes<=limit){try(InputStream in=new FileInputStream(f)){
@@ -231,11 +232,14 @@ final class Hd implements AutoCloseable {
         }catch(LinkageError e){close();throw new IOException("Runtime vocal indisponible sur ce processeur.",e);}
     }
     void preload(String id)throws Exception {JSONObject v=voice(id);if(installed(v))ensureLoaded(v);}
+    private List<SpeechPlan.Fragment> spokenPlan(String text,VoicePacks.Spec spec){
+        return SpeechPlan.plan(text,"fr",object(pronunciation,"fr"),spec!=null);
+    }
     void prewarm(String text,String id)throws Exception {
         JSONObject v=voice(id);if(!installed(v))return;
-        boolean piper=pack(v)==null;
+        VoicePacks.Spec spec=pack(v);boolean piper=spec==null;
         JSONObject config=piper?Library.readJson(cfg(v)):null;int n=0,chars=0;
-        for(SpeechPlan.Fragment p:SpeechPlan.plan(text,"fr",object(pronunciation,"fr"))){
+        for(SpeechPlan.Fragment p:spokenPlan(text,spec)){
             Pcm.interrupted();
             if(p.spoken.isEmpty())continue;
             if((chars+=p.spoken.length())>WARM_CHARS)break;
@@ -247,15 +251,16 @@ final class Hd implements AutoCloseable {
         if(text.length()>SpeechPlan.MAX_TEXT)throw new IOException("Texte trop long pour la synthèse.");
         JSONObject v=voice(id);if(!installed(v))throw new IOException("Voix HD non installée.");
         VoicePacks.Spec spec=pack(v);boolean estelle=spec==VoicePacks.ESTELLE;
-        String key=key("SHA-256",(estelle?"rendu-mimi-7|":"rendu-7|")+id+"|"+cps+"|"+text);
+        String revision=estelle?"rendu-mimi-8|":spec==VoicePacks.KOKORO?"rendu-kokoro-8|":"rendu-7|";
+        String key=key("SHA-256",revision+id+"|"+cps+"|"+text);
         File wav=new File(whole,key+".wav"),json=new File(whole,key+".json");
         JSONObject config=spec==null?Library.readJson(cfg(v)):null;
         int rate=estelle?Pocket.RATE:config==null?24000:object(config,"audio").optInt("sample_rate",22050);
-        List<SpeechPlan.Fragment> plan=SpeechPlan.plan(text,"fr",object(pronunciation,"fr"));
+        List<SpeechPlan.Fragment> plan=spokenPlan(text,spec);
         Synthesis saved=VoiceRender.cached(wav,json,plan,rate,progress);if(saved!=null)return saved;
-        Synthesis result=VoiceRender.render(whole,wav,json,plan,rate,cps,
-            estelle?VoiceRender.Profile.ESTELLE:id.equals("siwis")?VoiceRender.Profile.SIWIS:VoiceRender.Profile.STANDARD,
-            w->phrase(v,w,config),progress);
+        VoiceRender.Profile profile=estelle?VoiceRender.Profile.ESTELLE:spec==VoicePacks.KOKORO?VoiceRender.Profile.KOKORO:
+            id.equals("siwis")?VoiceRender.Profile.SIWIS:VoiceRender.Profile.STANDARD;
+        Synthesis result=VoiceRender.render(whole,wav,json,plan,rate,cps,profile,w->phrase(v,w,config),progress);
         prune(whole,".wav",6,Pcm.MAX_BYTES);return result;
     }
     @Override public void close(){

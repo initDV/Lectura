@@ -14,8 +14,12 @@ import java.util.List;
 
 /** Assemble every native engine's fragment PCM on the same presentation clock, at 1×. */
 final class VoiceRender {
-    static final float ESTELLE_PEAK=.70794576f; // -3 dBFS of headroom for output resampling; never amplify.
-    enum Profile { STANDARD, SIWIS, ESTELLE }
+    static final float PACK_PEAK=.70794576f; // -3 dBFS of headroom for output resampling; never amplify.
+    enum Profile {
+        STANDARD(false), SIWIS(false), ESTELLE(true), KOKORO(true);
+        final boolean keepEdges;
+        Profile(boolean keepEdges){this.keepEdges=keepEdges;}
+    }
     private VoiceRender(){}
     @FunctionalInterface interface Renderer {float[] generate(String text)throws Exception;}
 
@@ -59,11 +63,18 @@ final class VoiceRender {
                         float[] samples=renderer.generate(fragment.spoken);
                         int[] span=audible(samples,rate);
                         int begin=span[0],end=span[1];
+                        if(profile.keepEdges){
+                            // Preserve low-energy fricatives/releases next to the speech, without retaining silent model padding.
+                            int guard=rate*40/1000;
+                            begin=Math.max(0,begin-guard);end=Math.min(samples.length,end+guard);
+                            while(begin<span[0]&&Math.abs(samples[begin])<.00006f)begin++;
+                            while(end>span[1]&&Math.abs(samples[end-1])<.00006f)end--;
+                        }
                         if(fragment.closedQuestion){
-                            float[] prosody=QuestionPitch.adjust(samples,begin,end,rate,profile==Profile.SIWIS?70:0);
+                            float[] prosody=QuestionPitch.adjust(samples,span[0],span[1],rate,profile==Profile.SIWIS?70:0);
                             end+=prosody.length-samples.length;samples=prosody;
                         }
-                        float gain=profile==Profile.ESTELLE?headroom(samples,begin,end):1;
+                        float gain=profile.keepEdges?headroom(samples,begin,end):1;
                         if((frames+end-begin)*2>Pcm.MAX_BYTES)throw new IOException("Synthèse trop volumineuse.");
                         int fade=Math.max(1,rate/400); // 2.5 ms de raccord sans clic, sans allonger les silences.
                         pcm.clear();
@@ -107,7 +118,7 @@ final class VoiceRender {
             if(!Float.isFinite(a[i]))throw new IOException("Échantillon non fini après traitement de la voix.");
             peak=Math.max(peak,Math.abs(a[i]));
         }
-        return peak>ESTELLE_PEAK?ESTELLE_PEAK/peak:1;
+        return peak>PACK_PEAK?PACK_PEAK/peak:1;
     }
 
     static int[] audible(float[] a,int rate)throws IOException {

@@ -15,8 +15,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import static io.github.initdv.lectura.Refs.*;
 
-/** Port de g2p_fr.js et nombres.js : Lexique Lectura, jamais eSpeak ni une autre voix. */
+/** Port de g2p_fr.js et nombres.js : lexique Lectura, avec un profil de phonèmes pour Kokoro. */
 final class G2p {
+    enum Profile { PIPER, SIWIS, KOKORO }
     private static final String VOY="aeiouyàâäéèêëîïôöùûüœæ", PHON_VOY="aɑeɛəioɔuyøœ";
     private static final Set<String> ENT=new HashSet<>(List.of(("souvent différent récent content présent client agent argent accident talent urgent patient évident excellent vent dent lent " +
         "accent absent innocent fréquent prudent permanent équivalent violent parent apparent transparent incident président résident continent " +
@@ -40,7 +41,7 @@ final class G2p {
     private static boolean c(char c){return (c>='a'&&c<='z'||c=='ç')&&!v(c);}
     private static boolean nasal(String w,int i){char a=at(w,i),b=at(w,i+1);return (a=='n'||a=='m')&&!v(b)&&!has("nmh",b);}
     private static String cut(String s,int n){return s.substring(0,s.length()-n);}
-    private String rules(String mot){
+    private String rules(String mot,boolean kokoro){
         String w=mot;boolean muet=false,td=false;
         if(w.length()>3&&re("[^aeiouy]s$",w)&&!re("(us|is|as|os)$",w)||w.length()>2&&re("[aeéiou]s$",w))w=cut(w,1);
         if(!w.equals(mot)&&lex.has(w))return lex.optString(w);
@@ -83,7 +84,7 @@ final class G2p {
             else if(r.startsWith("ch")){ph="ʃ";k=2;}
             else if(r.startsWith("ph")){ph="f";k=2;}
             else if(r.startsWith("th")){ph="t";k=2;}
-            else if(r.startsWith("gn")){ph="nj";k=2;}
+            else if(r.startsWith("gn")){ph=kokoro?"ɲ":"nj";k=2;}
             else if(r.startsWith("qu")){ph="k";k=2;}
             else if(a=='q')ph="k";
             else if(r.startsWith("gu")&&has("eiyéèê",e)){ph="ɡ";k=2;}
@@ -129,14 +130,16 @@ final class G2p {
     }return new String(s).replace("\u0000","");}
     private static String accent(String p){int k=-1;for(int i=p.length()-1;i>=0;i--)if(has(PHON_VOY,p.charAt(i))&&(p.charAt(i)!='ə'||k<0)){k=i;if(p.charAt(i)!='ə')break;}
         return k<0?p:p.substring(0,k)+"ˈ"+p.substring(k);}
-    String word(String raw){String m=raw.toLowerCase(Locale.ROOT);boolean clitic=clitics.contains(m);
+    private String word(String raw,boolean kokoro){String m=raw.toLowerCase(Locale.ROOT);boolean clitic=clitics.contains(m);
+        // « panier » has /nj/, unlike « montagne » or « oignon ». Do not replace /nj/ after phonemizing.
+        if(kokoro&&(m.equals("oignon")||m.equals("oignons")))return accent("ɔɲɔ̃");
         String known=lex.optString(m,lex.optString(m.replace("oe","œ")));
         if(!known.isEmpty())return clitic?known:accent(known);
         boolean acronym=raw.length()>1&&raw.equals(raw.toUpperCase(Locale.ROOT))&&re("[A-Z]",raw)&&(!re("[aeiouy]",m)?raw.length()<=6:raw.length()<=3&&!SIGLE_NON.contains(m)&&!clitic);
         if(acronym||m.length()==1&&!"aày".contains(m)||m.length()>1&&!re("[aeiouyàâäéèêëîïôöùûüœ]",m)){
             List<String> s=new ArrayList<>();for(int i=0;i<m.length();i++){String l=letters.optString(m.substring(i,i+1));if(!l.isEmpty())s.add(accent(l));}return String.join(" ",s);
         }
-        String p=caduc(rules(m));return clitic?p:accent(p);
+        String p=caduc(rules(m,kokoro));return clitic?p:accent(p);
     }
     // Mêmes cas sûrs que le G2P Piper Web ; laisser le cas ambigu au lexique courant.
     private static String context(String word,String earlier,String before,String after,String next){
@@ -151,8 +154,10 @@ final class G2p {
             re("^[aeiouyhàâéèêîôûœ]",next)&&!re("^(h[aiou]|onze|oui|y[aeo]|héros$)",next);
     }
     private static String token(List<String> sequence,int i){return i<0||i>=sequence.size()?"":sequence.get(i).toLowerCase(Locale.ROOT);}
-    String phrase(String source){return phrase(source,false);}
-    String phrase(String source,boolean siwis){
+    String phrase(String source){return phrase(source,Profile.PIPER);}
+    String phrase(String source,boolean siwis){return phrase(source,siwis?Profile.SIWIS:Profile.PIPER);}
+    String phrase(String source,Profile profile){
+        boolean siwis=profile==Profile.SIWIS,kokoro=profile==Profile.KOKORO;
         String s=Normalizer.normalize(source,Normalizer.Form.NFC).replace('’','\'').replace('`','\'')
             .replaceAll("[«»“”\"()\\[\\]{}]"," ").replaceAll("\\.{3}|…",".").replaceAll("(?i)aujourd'hui","aujourdhui");
         s=numbers(ClockWords.normalize(s).replaceAll("([0-9])\\s*%","$1 pour cent"));
@@ -168,14 +173,15 @@ final class G2p {
             if(re("est[-‐‑]ce$",lower)){out.add(lower.startsWith("qu'")?"kɛs ":lower.startsWith("n'")?"nˈɛs ":"ɛs ");continue;}
             if(lower.endsWith("'")&&ELIDE.containsKey(cut(lower,1))){out.add(ELIDE.get(cut(lower,1)));continue;}
             String variant=context(lower,token(tokens,i-2),token(tokens,i-1),token(tokens,i+1),token(tokens,i+2));
-            String ph=variant==null?word(bare):accent(variant);
+            String ph=variant==null?word(bare,kokoro):accent(variant);
             if(siwisHours.contains(offsets.get(i)))ph="yˈit";
             if(siwis&&lower.equals("nuit"))ph="nyˈi";
-            if(tiret.contains(lower))ph+="-";
+            if(!kokoro&&tiret.contains(lower))ph+="-";
             if(liaisons.has(lower)&&liaison(token(tokens,i+1)))ph+=liaisons.optString(lower);
             out.add(ph+" ");
         }
-        return String.join("",out).trim().replaceAll("\\s+"," ").replace('g','ɡ').replace("ɲ","nj");
+        String phrase=String.join("",out).trim().replaceAll("\\s+"," ").replace('g','ɡ');
+        return kokoro?phrase:phrase.replace("ɲ","nj");
     }
     static long[] ids(String p,JSONObject table){
         List<Long> out=new ArrayList<>();JSONArray pad=array(table,"_");append(out,array(table,"^"));append(out,pad);

@@ -33,6 +33,12 @@ final class SpeechPlan {
     }
 
     static List<Fragment> plan(String source,String lang,JSONObject lexicon) {
+        return plan(source,lang,lexicon,false);
+    }
+
+    // Estelle and Kokoro can phrase several clauses together. Keep the original
+    // offsets and let the model handle soft punctuation within a bounded sentence.
+    static List<Fragment> plan(String source,String lang,JSONObject lexicon,boolean keepClauses) {
         List<Fragment> result=new ArrayList<>();
         for(int start=0;start<source.length();) {
             int end=start;while(end<source.length()&&source.charAt(end)!='\n'&&source.charAt(end)!='\r')end++;
@@ -46,17 +52,18 @@ final class SpeechPlan {
             } else if(!line.isEmpty()) {
                 boolean[] ignore=new boolean[line.length()], literal=new boolean[line.length()];
                 mark(line,ignore,literal);
-                int from=0,lastWord=0,sentenceStart=0;
+                int from=0,lastWord=0,sentenceStart=0,clauseEnd=0,clauseGap=0;
                 for(int i=0;i<line.length();) {
-                    char c=line.charAt(i);
+                    char c=line.charAt(i);int gap=boundary(line,i,ignore,literal);
                     if(Script.space(c)&&!ignore[i]&&!literal[i])lastWord=i+1;
-                    if(i-from>=CHUNK&&!ignore[i]&&!literal[i]) {
-                        int mid=lastWord>from+CHUNK/2?lastWord:i;
+                    if(i-from>=CHUNK&&!ignore[i]&&!literal[i]&&(!keepClauses||gap<320)) {
+                        boolean atClause=keepClauses&&clauseEnd>from+CHUNK/2;
+                        int mid=atClause?clauseEnd:lastWord>from+CHUNK/2?lastWord:i;
                         if(mid>from&&mid<line.length()&&Character.isLowSurrogate(line.charAt(mid)))mid--;
-                        if(mid>from){emit(result,line,start,from,mid,ignore,literal,lang,lexicon,0,false,false);from=mid;}
+                        if(mid>from){emit(result,line,start,from,mid,ignore,literal,lang,lexicon,atClause?clauseGap:0,false,false);from=mid;}
                     }
-                    int gap=boundary(line,i,ignore,literal);
                     if(gap==0){i++;continue;}
+                    if(keepClauses&&gap<320){clauseEnd=++i;clauseGap=gap;continue;}
                     boolean question=c=='?';int last=i+1;
                     while(last<line.length()) {
                         int m=boundary(line,last,ignore,literal);char tail=line.charAt(last);
@@ -69,7 +76,8 @@ final class SpeechPlan {
                     if(gap>=320)sentenceStart=last;
                     from=i=last;
                 }
-                emit(result,line,start,from,line.length(),ignore,literal,lang,lexicon,0,false,false);
+                int trailing=clauseEnd>from&&line.substring(clauseEnd).chars().allMatch(c->Script.space((char)c))?clauseGap:0;
+                emit(result,line,start,from,line.length(),ignore,literal,lang,lexicon,trailing,false,false);
             }
             if(next>end) {
                 if(result.size()>before||!result.isEmpty()) {

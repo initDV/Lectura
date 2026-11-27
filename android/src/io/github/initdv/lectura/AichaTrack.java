@@ -14,14 +14,14 @@ final class AichaTrack {
     final Envelope envelope;
 
     static boolean matches(JSONObject def){return def!=null&&def.optString("rig").equals("aicha");}
-    AichaTrack(Refs refs,List<Script.Segment> segments,double duration,Mood mood,boolean emotions,String lang,boolean siwis,Pcm pcm){
+    AichaTrack(Refs refs,List<Script.Segment> segments,double duration,Mood mood,boolean emotions,String lang,G2p.Profile phonesProfile,Pcm pcm){
         var parts=new ArrayList<Part>(segments.size());lips=new AichaMouth();
         G2p french=lang.equals("en")?null:new G2p(refs.json("g2p.json"));
         for(Script.Segment s:segments){
             Pcm.interrupted();boolean spoken=s.type==Script.SPOKEN;
             Mood.Analysis a=mood.summary(s);double end=s.speechEnd<0?s.to:min(s.to,s.speechEnd);
             parts.add(new Part(s.text,s.from,s.to,end,spoken,a.expr,a.force));
-            if(spoken&&end>s.from){String phones=french==null?AichaMouth.english(s.text):french.phrase(s.text,siwis);lips.add(phones,s.from,end);}
+            if(spoken&&end>s.from){String phones=french==null?AichaMouth.english(s.text):french.phrase(s.text,phonesProfile);lips.add(phones,s.from,end);}
         }
         plan=AichaMotion.plan(parts,duration,emotions);
         Envelope e=null;
