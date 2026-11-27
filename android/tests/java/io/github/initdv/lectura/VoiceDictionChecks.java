@@ -43,7 +43,8 @@ final class VoiceDictionChecks {
             &&(new String(chunks[0],0,chunks[0].length)+" "+new String(chunks[1],0,chunks[1].length)).equals(longIpa),"Borne Kokoro sans coupe de mot");
         quietEdges(refs,lex);
         estellePresence(refs,lex);
-        return "Clauses, question, pauses, texte et curseurs ; ɲ ≠ nj, liaison et ɥ dans les entrées Kokoro ; bords faibles conservés ; Estelle +5 % à 3 kHz, durée et silences identiques";
+        estelleProjection(refs,lex);
+        return "Clauses, questions, texte et curseurs ; ɲ ≠ nj ; Estelle : +5 % à 3 kHz conservé, soutien plus fort en fin de phrase faible, niveau de fond et silences inchangés";
     }
 
     private static void quietEdges(Refs refs,JSONObject lex)throws Exception {
@@ -72,29 +73,51 @@ final class VoiceDictionChecks {
             var wetPlan=SpeechPlan.plan("Bonjour.","fr",lex,true);
             File dir=refs.context.getCacheDir();
             try(Pcm dry=VoiceRender.render(dir,null,null,dryPlan,rate,28,VoiceRender.Profile.PACK,s->tone,(n,total)->{}).pcm;
-                Pcm wet=VoiceRender.render(dir,null,null,wetPlan,rate,28,VoiceRender.Profile.ESTELLE,s->tone,(n,total)->{}).pcm){
+                Pcm wet=VoiceRender.render(dir,null,null,wetPlan,rate,28,VoiceRender.Profile.ESTELLE_PRESENCE,s->tone,(n,total)->{}).pcm){
                 var a=dryPlan.get(0).original;var b=wetPlan.get(0).original;
                 require(dry.frames==wet.frames&&a.speechEnd==b.speechEnd&&a.to==b.to&&b.to-b.speechEnd==320
                     &&DeviceChecks.pcmPeak(wet,b.speechEnd+1,b.to-1)==0,"Renfort Estelle : modification de la durée ou du silence");
                 require(Arrays.equals(original,tone),"Renfort Estelle : modification du PCM source en cache");
-                double gain=rms(wet)/rms(dry);
+                double gain=rms(wet,rate/4)/rms(dry,rate/4);
                 require(hz==3000?Math.abs(gain-1.05)<.001:Math.abs(gain-1)<.005,"Renfort Estelle à "+hz+" Hz : "+gain);
             }
         }
     }
 
-    private static double rms(Pcm pcm)throws Exception {
+    private static void estelleProjection(Refs refs,JSONObject lex)throws Exception {
+        int rate=24000;float[] input=new float[rate*2];
+        for(int i=0;i<input.length;i++){
+            double level=i<rate*3/4?.30:i<rate*5/4?.002:.055;
+            input[i]=(float)(level*Math.sin(2*Math.PI*220*i/rate));
+        }
+        var baseline=SpeechPlan.plan("Je suis prête.","fr",lex,true);
+        var projected=SpeechPlan.plan("Je suis prête.","fr",lex,true);
+        File dir=refs.context.getCacheDir();
+        try(Pcm dry=VoiceRender.render(dir,null,null,baseline,rate,28,VoiceRender.Profile.ESTELLE_PRESENCE,s->input,(n,total)->{}).pcm;
+            Pcm wet=VoiceRender.render(dir,null,null,projected,rate,28,VoiceRender.Profile.ESTELLE,s->input,(n,total)->{}).pcm){
+            var a=baseline.get(0).original;var b=projected.get(0).original;
+            require(dry.frames==wet.frames&&a.speechEnd==b.speechEnd&&a.to==b.to&&b.to-b.speechEnd==320
+                &&DeviceChecks.pcmPeak(wet,b.speechEnd+1,b.to-1)==0,"Projection Estelle : pauses ou chronologie modifiées");
+            int strong=rate/4,background=rate*7/8,soft=rate*3/2;
+            require(Math.abs(rms(wet,strong)/rms(dry,strong)-1.18)<.002,"Projection Estelle : syllabe forte");
+            require(Math.abs(rms(wet,background)/rms(dry,background)-1)<.002,"Projection Estelle : fond amplifié");
+            double lift=rms(wet,soft)/rms(dry,soft);
+            require(lift>1.27&&lift<=1.301,"Projection Estelle : la finale faible doit recevoir plus d’appui : "+lift);
+        }
+    }
+
+    private static double rms(Pcm pcm,int from)throws Exception {
         short[] buffer=new short[pcm.rate/4];
-        int n=pcm.read(pcm.rate/4,buffer,buffer.length);require(n==buffer.length,"Fenêtre de mesure PCM incomplète");
+        int n=pcm.read(from,buffer,buffer.length);require(n==buffer.length,"Fenêtre de mesure PCM incomplète");
         double sum=0;for(short value:buffer)sum+=(double)value*value;
         return Math.sqrt(sum/n);
     }
 
     static void estelleComparison(Refs refs,Hd.Synthesis after,int cps,VoiceRender.Renderer raw)throws Exception {
         var plan=SpeechPlan.plan(SAMPLE,"fr",Refs.object(refs.json("prononciation.json"),"fr"),true);
-        // Reassemble the very same model output as #57 would, without the new presence stage.
+        // Reassemble the very same model output as #58 would, with presence but without projection.
         var before=VoiceRender.render(refs.context.getCacheDir(),null,null,plan,Pocket.RATE,cps,
-            VoiceRender.Profile.PACK,raw,(n,total)->{});
+            VoiceRender.Profile.ESTELLE_PRESENCE,raw,(n,total)->{});
         try(Pcm old=before.pcm){
             require(old.frames==after.pcm.frames&&before.segments.size()==after.segments.size(),"Durée du comparatif Estelle");
             for(int i=0;i<before.segments.size();i++){
@@ -102,7 +125,7 @@ final class VoiceDictionChecks {
                 require(a.from==b.from&&a.speechEnd==b.speechEnd&&a.to==b.to&&a.text.equals(b.text),"Repère modifié dans le comparatif Estelle");
             }
             sample(refs,"02-estelle-avant",old);
-            sample(refs,"03-estelle-plus5",after.pcm);
+            sample(refs,"03-estelle-projetee",after.pcm);
         }
     }
 

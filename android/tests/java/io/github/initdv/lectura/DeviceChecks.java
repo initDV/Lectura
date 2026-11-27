@@ -1321,7 +1321,7 @@ public final class DeviceChecks extends Instrumentation {
             Files.write(new File(phrases,key+".f32").toPath(),new byte[Mimi.SAMPLES_PER_LATENT*Float.BYTES]);
             int from=spans.length()*1000;spans.put(new JSONArray().put(from).put(from+650).put(from+1000));
         }
-        String key=oldKey("SHA-256",(estelle?"rendu-mimi-8|":"rendu-7|")+id+"|"+cps+"|"+text);
+        String key=oldKey("SHA-256",(estelle?"rendu-mimi-9|":"rendu-7|")+id+"|"+cps+"|"+text);
         try(RandomAccessFile file=new RandomAccessFile(new File(whole,key+".wav"),"rw")){
             int size=Pocket.RATE*plan.size()*2;Pcm.header(file,1,Pocket.RATE,size);file.setLength(44L+size);
         }

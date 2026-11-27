@@ -251,8 +251,8 @@ final class Hd implements AutoCloseable {
         if(text.length()>SpeechPlan.MAX_TEXT)throw new IOException("Texte trop long pour la synthèse.");
         JSONObject v=voice(id);if(!installed(v))throw new IOException("Voix HD non installée.");
         VoicePacks.Spec spec=pack(v);boolean estelle=spec==VoicePacks.ESTELLE;
-        // Estelle's presence filter changes only the assembled WAV, not the raw inference cache.
-        String revision=estelle?"rendu-mimi-9|":spec==VoicePacks.KOKORO?"rendu-kokoro-8|":"rendu-7|";
+        // Estelle's projection changes only the assembled WAV, not the raw inference cache.
+        String revision=estelle?"rendu-mimi-10|":spec==VoicePacks.KOKORO?"rendu-kokoro-8|":"rendu-7|";
         String key=key("SHA-256",revision+id+"|"+cps+"|"+text);
         File wav=new File(whole,key+".wav"),json=new File(whole,key+".json");
         JSONObject config=spec==null?Library.readJson(cfg(v)):null;

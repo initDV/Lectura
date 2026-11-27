@@ -1,13 +1,13 @@
-# Écouter Estelle avant et après le réglage de présence
+# Écouter Estelle avec plus d’appui
 
-Les trois WAV ont été produits hors ligne par Lectura Android à **1×**, avec le même texte (`texte.txt`). Compare d’abord les deux pistes Estelle au même volume : écoute « les enfants », « montagne », « pluie » et le « Oui ! » isolé.
+Les trois WAV ont été produits hors ligne par Lectura Android à **1×**, avec le même texte (`texte.txt`). Écoute les deux pistes Estelle l’une après l’autre sans toucher au volume. Compare l’appui sur « sous la pluie », la fin de la question et le « Oui ! » isolé.
 
 | Fichier | Voix et réglage |
 | --- | --- |
 | `01-siwis-douce.wav` | Siwis · F · douce (Piper, référence inchangée) |
-| `02-estelle-avant.wav` | Estelle · F · Pocket TTS, réglage du candidat #57 |
-| `03-estelle-plus5.wav` | La même prise d’Estelle, avec le renfort de présence |
+| `02-estelle-avant.wav` | Estelle · F · Pocket TTS, réglage du candidat #58 |
+| `03-estelle-projetee.wav` | La même prise d’Estelle, avec plus d’appui sur la parole |
 
-**Les deux Estelle partent exactement de la même synthèse.** La seconde piste renforce légèrement la zone des consonnes autour de 3 kHz (+5 % d’amplitude au centre, soit environ +0,42 dB). La vitesse, le nombre d’échantillons, les pauses et les repères sont identiques. Ce pourcentage est celui du traitement, pas une note de clarté mesurée à l’oreille.
+**Les deux Estelle partent de la même synthèse** et conservent le renfort des consonnes du #58. Le nouveau rendu soutient surtout les syllabes audibles qui ressortent moins. Le gain varie doucement et reste plafonné ; le fond très faible n’est pas remonté. Pas de changement de hauteur, de débit, de durée ou de pauses. Les mesures du PCM ne disent pas si la voix paraît plus assurée à l’écoute.
 
 **Attributions.** Siwis : *SIWIS French Speech Synthesis Database*, Université d’Édimbourg ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)), [modèle Piper](https://huggingface.co/rhasspy/piper-voices/tree/main/fr/fr_FR/siwis/medium). Estelle : Kyutai Pocket TTS et préréglage Estelle (CC BY 4.0), [conversion ONNX d’Okuvia](https://github.com/ByBrawe/Okuvia-models/releases/tag/pocket-multilingual-preset-20261026).

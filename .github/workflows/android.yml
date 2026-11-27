@@ -283,16 +283,24 @@ jobs:
               printf '::notice title=Voix testée en mode avion::%s\n' "${check//%/%25}"
             done || true
           python3 - "$LECTURA_REPORT/voix" <<'PY'
+          from array import array
           from pathlib import Path
+          from math import log10
           import sys
           import wave
+
+          def energy(pcm):
+              samples = array('h', pcm)
+              if sys.byteorder != 'little':
+                  samples.byteswap()
+              return sum(n * n for n in samples)
 
           folder = Path(sys.argv[1])
           try:
               if not (folder / 'texte.txt').read_text(encoding='utf-8').strip():
                   raise ValueError('texte.txt vide')
               estelle = []
-              for i, name in enumerate(('siwis-douce', 'estelle-avant', 'estelle-plus5'), 1):
+              for i, name in enumerate(('siwis-douce', 'estelle-avant', 'estelle-projetee'), 1):
                   path = folder / f'{i:02}-{name}.wav'
                   with wave.open(str(path), 'rb') as f:
                       rate = 22050 if i == 1 else 24000
@@ -308,7 +316,8 @@ jobs:
               dry, wet = estelle
               if len(dry) != len(wet) or dry == wet:
                   raise ValueError('Estelle : les deux pistes doivent différer sans changer de durée')
-              print(f'::notice title=Comparatif Estelle::Durée commune : {len(dry) // 2} échantillons ; piste corrigée distincte.')
+              lift = 10 * log10(energy(wet) / energy(dry))
+              print(f'::notice title=Comparatif Estelle::Durée commune : {len(dry) // 2} échantillons ; différence de niveau RMS : {lift:+.2f} dB.')
           except (OSError, EOFError, wave.Error, ValueError) as error:
               print(f'::warning title=Comparatif vocal Android::{error}')
               raise SystemExit(1)

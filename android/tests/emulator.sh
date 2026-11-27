@@ -154,7 +154,7 @@ for ((i=0;i<150;i++)); do
         mv "$LECTURA_REPORT"/device/android-*.png "$LECTURA_REPORT/" 2>/dev/null || true
         if ((!failures)); then
             mkdir -p "$LECTURA_REPORT/voix"
-            for file in texte.txt 01-siwis-douce.wav 02-estelle-avant.wav 03-estelle-plus5.wav; do
+            for file in texte.txt 01-siwis-douce.wav 02-estelle-avant.wav 03-estelle-projetee.wav; do
                 sent="voix-$file"
                 if [[ $file == *.wav ]]; then sent="voix-${file%.wav}.bin"; fi
                 src="$LECTURA_REPORT/device/$sent"

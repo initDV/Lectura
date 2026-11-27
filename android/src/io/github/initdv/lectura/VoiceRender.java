@@ -16,7 +16,7 @@ import java.util.List;
 final class VoiceRender {
     static final float PACK_PEAK=.70794576f; // -3 dBFS of headroom for output resampling.
     enum Profile {
-        STANDARD(false), SIWIS(false), PACK(true), ESTELLE(true);
+        STANDARD(false), SIWIS(false), PACK(true), ESTELLE_PRESENCE(true), ESTELLE(true);
         final boolean keepEdges;
         Profile(boolean keepEdges){this.keepEdges=keepEdges;}
     }
@@ -75,8 +75,9 @@ final class VoiceRender {
                             end+=prosody.length-samples.length;samples=prosody;
                         }
                         if((frames+end-begin)*2>Pcm.MAX_BYTES)throw new IOException("Synthèse trop volumineuse.");
-                        if(profile==Profile.ESTELLE){
+                        if(profile==Profile.ESTELLE||profile==Profile.ESTELLE_PRESENCE){
                             samples=estellePresence(samples,begin,end,rate);
+                            if(profile==Profile.ESTELLE)estelleProjection(samples,rate);
                             begin=0;end=samples.length;
                         }
                         float gain=profile.keepEdges?headroom(samples,begin,end):1;
@@ -117,7 +118,7 @@ final class VoiceRender {
     private static long ms(long frames,int rate){return Math.round(frames*1000./rate);}
 
     // Mix +5% of a unity-gain band-pass around 3 kHz into Estelle, not +5% of the whole signal.
-    // No resampling, dynamics or change to the cached phrase; this is done before the existing peak guard.
+    // No resampling or change to the cached phrase; the result is a private working buffer.
     private static float[] estellePresence(float[] samples,int begin,int end,int rate){
         double omega=2*Math.PI*3000/rate,alpha=Math.sin(omega)/(2*.95),norm=1/(1+alpha);
         double b=alpha*norm,a1=-2*Math.cos(omega)*norm,a2=(1-alpha)*norm;
@@ -130,6 +131,30 @@ final class VoiceRender {
             x2=x1;x1=x;y2=y1;y1=band;
         }
         return out;
+    }
+
+    // Support soft but audible speech a little more than already strong syllables. Do not lift
+    // the lowest-level breaths/padding. Interpolate the RMS-based gains over 40 ms to avoid pumping.
+    private static void estelleProjection(float[] speech,int rate){
+        int step=rate*40/1000,center=step/2;
+        float[] gains=new float[(speech.length+step-1)/step];
+        for(int i=0;i<gains.length;i++){
+            Pcm.interrupted();int begin=i*step;
+            double level=rms(speech,begin,Math.min(begin+step,speech.length));
+            double audible=smoothRange(level,.006,.025),strong=smoothRange(level,.025,.14);
+            gains[i]=(float)(1+audible*(.18+.12*(1-strong))); // At most +2.28 dB before peak protection.
+        }
+        int pos=0;
+        for(;pos<Math.min(center,speech.length);pos++)speech[pos]*=gains[0];
+        for(int i=0;i+1<gains.length;i++){
+            Pcm.interrupted();int end=Math.min(center+(i+1)*step,speech.length);
+            float gain=gains[i],delta=(gains[i+1]-gain)/step;
+            for(;pos<end;pos++){speech[pos]*=gain;gain+=delta;}
+        }
+        for(;pos<speech.length;pos++)speech[pos]*=gains[gains.length-1];
+    }
+    private static double smoothRange(double value,double min,double max){
+        double t=Math.max(0,Math.min(1,(value-min)/(max-min)));return t*t*(3-2*t);
     }
 
     static float headroom(float[] a,int start,int end)throws IOException {
