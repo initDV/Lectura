@@ -14,6 +14,7 @@ final class AichaStage {
     private static final float[] STOPS={0,.48f,1};
     private final AichaRig rig;
     private final Decor colors;
+    private final Visages visages;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
     private LinearGradient fog;
     private float fogTop,fogBottom;
@@ -24,7 +25,9 @@ final class AichaStage {
     boolean reduced;
     final double gain;
 
-    AichaStage(Svg svg,Decor colors,double gain,boolean reduced){rig=new AichaRig(svg);this.colors=colors;this.gain=gain;this.reduced=reduced;}
+    AichaStage(Svg svg,Decor colors,double gain,boolean reduced,Visages visages,AichaGeometry.HipAnchor anchor){
+        rig=new AichaRig(svg,anchor);this.colors=colors;this.gain=gain;this.reduced=reduced;this.visages=visages;
+    }
     void update(AichaTrack track,double ms,double level,double wall,boolean finished,String expression){
         Plan plan=track==null?REST:track.plan;
         double wait=0;
@@ -35,7 +38,7 @@ final class AichaStage {
         }else idleStart=Double.NaN;
         if(last==plan&&lastMs==ms&&lastWait==wait&&lastLevel==level&&lastReduced==reduced&&expression.equals(lastExpression))return;
         double[] mouth=track==null||finished?REST_MOUTH:track.lips.atTime(ms,level);
-        Pose pose=pose(plan,ms,gain,reduced,expression,mouth,wait,rig.glasses);
+        Pose pose=pose(plan,ms,gain,reduced,expression,mouth,wait,rig.glasses,visages);
         rig.draw(pose,reduced?0:(ms+wait)/1000);advance=pose.avance;
         last=plan;lastMs=ms;lastWait=wait;lastLevel=level;lastReduced=reduced;lastExpression=expression;
     }

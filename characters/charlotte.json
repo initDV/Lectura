@@ -3,6 +3,7 @@
   "nom": "Charlotte",
   "svg": "charlotte.svg",
   "rig": "aicha",
+  "appuiHanche": [19.1, 77.15],
   "mouvements": { "style": "fluide" },
   "voixSuggeree": { "hauteur": 1, "vitesse": 1 }
 }

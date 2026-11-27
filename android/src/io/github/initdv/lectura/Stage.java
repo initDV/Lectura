@@ -68,7 +68,8 @@ final class Stage extends FrameLayout {
         boolean reduce=reduced||a.db.settings.optBoolean("reduireAnimations");
         double gain=project.motion.equals("calme")?.6:project.motion.equals("vif")?1.3:1;
         if(AichaTrack.matches(def)){
-            sprite=null;artwork=a.svg(def.optString("svg"));aicha=new AichaStage(artwork,decor,gain,reduce);
+            sprite=null;artwork=a.svg(def.optString("svg"));
+            aicha=new AichaStage(artwork,decor,gain,reduce,a.refs.visages,AichaGeometry.HipAnchor.read(def.optJSONArray("appuiHanche")));
         }else{
             aicha=null;sprite=new Sprite(a.refs,def,true);artwork=sprite.svg;sprite.reduced=reduce;sprite.gain=gain;
         }

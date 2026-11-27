@@ -120,7 +120,7 @@ export async function render(root) {
       if (p.def.rig === RIG_AICHA) {
         const { creerAicha } = await import('../modules/aicha/stage.js');
         if (!vivant) return;
-        aicha = creerAicha(p.svg, { reduireAnimations: store.settings.reduireAnimations, gain, couleurs: store.settings.decor });
+        aicha = creerAicha(p.svg, { reduireAnimations: store.settings.reduireAnimations, gain, couleurs: store.settings.decor, appuiHanche: p.def.appuiHanche });
         aicha.repos();
       } else {
         character = new Character(p.svg, p.def);
@@ -290,7 +290,7 @@ export async function render(root) {
       // Web Speech fournit un curseur réel/estimé par mot ; sa projection dans la timeline respecte les plages parlées.
       const sceneMs = s.kind === 'voix-systeme' && ms < (s.finAudio ?? s.dureeMs) ? prep.timeline.timeAt(chars) : ms;
       if (aicha) {
-        if (arrete && store.etat !== 'FIN') aicha.repos(now);
+        if (arrete && store.etat !== 'FIN') aicha.repos(now, exprManuelle);
         else aicha.image(prep, { ms, sceneMs, lecture, fin: store.etat === 'FIN', expression: exprManuelle, now: exportScene.actif ? undefined : now });
         if (lecture) bus.emit('timeline:tick', { ms, chars });
         exportScene.image(now);
@@ -320,7 +320,7 @@ export async function render(root) {
       const cadre = !lecture && robot ? `${ms}|${exprManuelle}|${store.etat}` : null;
       if (cadre !== null && cadre === pausedFrame) { exportScene.image(now); return; }
       pausedFrame = cadre;
-    } else if (aicha) { aicha.repos(now); return; }
+    } else if (aicha) { aicha.repos(now, exprManuelle); return; }
     else { pausedFrame = null; character.setViseme(0); character.setTalking(0); character.setMouthShape('normal'); }
     character.tick(now, robot, quietMouth);
     robotRig?.paint(robot);

@@ -22,17 +22,15 @@ try {
     await page.getByRole('link', { name: 'Personnages', exact: true }).click();
     await btn(nom).click();
     await page.locator('#app').getByRole('link', { name: 'Retour à la scène', exact: true }).click();
-    await page.waitForFunction(({ svg, nom }) => document.querySelector(svg)?.getAttribute('aria-label') === nom, { svg, nom });
+    await page.locator(`${svg}[aria-label="${nom}"]`).waitFor();
+    const decorSvg = await page.locator('.char-pane > .decor').evaluate(el => el.localName === 'svg');
     for (const [width, height, empilee] of cas) {
       const label = `${nom} ${width}×${height}`;
       await page.setViewportSize({ width, height });
-      const aspect = empilee ? 'none' : 'xMidYMax slice';
       // Le changement de matchMedia peut arriver une image après le redimensionnement.
-      await page.waitForFunction(({ width, height, aspect }) => {
-        const decor = document.querySelector('.char-pane > svg.decor');
-        return window.innerWidth === width && window.innerHeight === height
-          && (!decor || decor.getAttribute('preserveAspectRatio') === aspect);
-      }, { width, height, aspect }).catch((cause) => { throw new Error(`${label} : cadrage du décor`, { cause }); });
+      const aspect = empilee ? 'none' : 'xMidYMax slice';
+      if (decorSvg) await page.locator(`.char-pane > svg.decor[preserveAspectRatio="${aspect}"]`).waitFor();
+      await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
       const rects = await page.evaluate((svg) => {
         const pane = document.querySelector('.char-pane');
         const r = (sel) => document.querySelector(sel).getBoundingClientRect().toJSON();

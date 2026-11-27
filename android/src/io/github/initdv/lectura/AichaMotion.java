@@ -3,6 +3,7 @@ package io.github.initdv.lectura;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.json.JSONObject;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import static java.lang.Math.*;
@@ -12,14 +13,17 @@ final class AichaMotion {
     static final double FOCALE=186, HORIZON=134, SOL=231;
     static final double[] REST_MOUTH={1,0,0,0,0,0};
     private static final double MIN_WALK=2.05;
-    private static final double[] GLASSES={2.62,3.52,3.94,4.88}, FATIGUE={5.64,6.74,7.18,7.99}, TERMINAL={9.62,10.24,10.73,11.46};
+    private static final double[] GLASSES={2.62,3.52,3.94,4.88}, FATIGUE={5.64,6.74,7.18,7.99}, TERMINAL={9.62,10.24,10.73,11.46}, HIP_REST={12.08,13.15,15.54,16.86};
     private static final double[] BLINKS={1.19,4.02,7.15,10.76};
-    private static final List<String> TURNS=List.of("presente","confie","marque","ouvre","hoche","presente","nuance","confie");
+    private static final List<String> TURNS=List.of("presente","confie","marque","ouvre","hoche","presente","nuance","confie"), FIGURES=List.of("illustre","compare","rejouit");
     private static final int CASE=Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE;
     private static final Pattern HELLO=Pattern.compile("(?:^|[^\\p{L}])(?:bonjour|bonsoir|salut|coucou|hello|hi|hey)(?!\\p{L})",CASE);
     private static final Pattern WALK=Pattern.compile("(?:\\b(?:avance|marchons)\\b|marche vers|walk forward|come closer|pas de côté|step aside|sidestep)",CASE);
     private static final Pattern CONTRAST=Pattern.compile("(?:^|[^\\p{L}])(?:non|pourtant|mais|but)(?!\\p{L})",CASE);
     private static final Pattern YES=Pattern.compile("^\\P{L}*(?:oui|exactement|yes|exactly)(?!\\p{L})",CASE);
+    private static final Pattern EXPLAINS=Pattern.compile("(?:^|[^\\p{L}])(?:voici|par exemple|en clair|for example|let me show you)(?!\\p{L})",CASE);
+    private static final Pattern COMPARES=Pattern.compile("(?:^|[^\\p{L}])(?:d['’]un côté|de l['’]autre côté|deux (?:choix|options)|two (?:choices|options)|on (?:the )?(?:one|other) hand)(?!\\p{L})",CASE);
+    private static final Pattern CHEERS=Pattern.compile("^\\P{L}*(?:bravo|youpi|hourra|ta[- ]?da|hooray|hurray|et voilà)(?!\\p{L})",CASE);
     // Android's Pattern rejects UNICODE_CHARACTER_CLASS. Match the Web's \s explicitly
     // (including NBSP and BOM, but not NEL) for cue boundaries and final punctuation.
     private static final String SPACE="\\x09-\\x0d\\p{Z}\\uFEFF";
@@ -46,13 +50,19 @@ final class AichaMotion {
     }
     static final class Part extends Interval {
         final String text, face;
-        final boolean spoken;
+        final boolean spoken,manual,linked;
         final double speechEnd,force;
-        Part(String text,double start,double end,double speechEnd,boolean spoken,String face,double force){
-            super(start,end); this.text=text;this.speechEnd=speechEnd<0?end:speechEnd;
-            this.spoken=spoken;this.face=face;this.force=force;
+        final int offset;
+        final int[] cursor;
+        final List<AichaFaces.Index> indices;
+        Part(String text,double start,double end,double speechEnd,boolean spoken,String face,double force,
+             boolean manual,boolean linked,List<AichaFaces.Index> indices,int offset,int[] cursor){
+            super(start,end);this.text=text;this.speechEnd=speechEnd<0?end:speechEnd;
+            this.spoken=spoken;this.face=face;this.force=force;this.manual=manual;this.linked=linked;
+            this.indices=indices;this.offset=offset;this.cursor=cursor;
         }
     }
+
     static final class Cue extends Interval {
         final String kind,face;final int side;final double force;
         int hand; // 0: eyes/head only; -1/+1: leading hand
@@ -69,6 +79,7 @@ final class AichaMotion {
         final double duration;
         final List<Cue> cues=new ArrayList<>();final List<Walk> walks=new ArrayList<>();
         final List<Interval> speech=new ArrayList<>(),returns=new ArrayList<>();
+        final List<AichaFaces.Window> moods=new ArrayList<>();
         Plan(double ms){duration=max(0,ms/1000);}
     }
     static final Plan REST=new Plan(0);
@@ -94,18 +105,22 @@ final class AichaMotion {
         p.cues.add(new Cue(start,min(start+2.4,end),"ecoute",1,"concentre",.55));
         return quiet==null&&voiced>0&&start>=1.35&&end-start>=MIN_WALK?new Walk(start,end,35,0,1):quiet;
     }
-    private static Walk spokenWalk(Plan p,double after,double stride,double depart,int foot){
+    private static Walk spokenWalk(Plan p,List<Cue> figures,double after,double stride,double depart,int foot){
         double end=p.duration-.48;
-        for(Cue c:p.cues)if(c.start>=after&&c.start+MIN_WALK<=end&&TURNS.contains(c.kind))return new Walk(c.start,end,stride,depart,foot);
+        for(Cue c:p.cues)if(c.start>=after&&c.start+MIN_WALK<=end&&TURNS.contains(c.kind)&&at(figures,min(end,c.start+3.08),c.start)==null)
+            return new Walk(c.start,end,stride,depart,foot);
         return null;
     }
+    private static String figure(String text){return COMPARES.matcher(text).find()?"compare":EXPLAINS.matcher(text).find()?"illustre":"";}
     private static void cue(Plan p,Part seg,String kind,double a,double b,int side){
         if(b-a>=.14)p.cues.add(new Cue(a,b,kind,side,seg.face,seg.force));
     }
     static Plan plan(List<Part> segments,double duration,boolean emotions){
         Plan p=new Plan(duration);double past=0,voiced=0,salutEnd=0;int spoken=0,tour=0;
-        boolean waved=false;Walk explicit=null,quiet=null;
+        boolean waved=false,previousVoice=false;Walk explicit=null,quiet=null;
+        var faces=new ArrayList<AichaFaces.Phrase>();
         for(Part s:segments){
+            boolean linked=previousVoice&&s.linked;previousVoice=false;
             double start=bound(s.start/1000,past,p.duration),end=bound(s.end/1000,start,p.duration);
             if(end<=start)continue;
             quiet=gap(p,past,start,voiced,quiet);past=end;
@@ -113,20 +128,23 @@ final class AichaMotion {
             double speechEnd=bound(s.speechEnd/1000,start,end),span=speechEnd-start,last=min(end,speechEnd+.12);
             if(span>0)p.speech.add(new Interval(start,last));
             if(span<.1){quiet=gap(p,start,end,voiced,quiet);continue;}
+            faces.add(new AichaFaces.Phrase(s,start,last,speechEnd,linked));previousVoice=true;
             double from=start+min(.09,.08*span);String text=s.text;Matcher m=END.matcher(text);
             String punctuation=emotions&&m.find()?m.group(1):"";
             boolean wave=emotions&&!waved&&spoken<3&&span>=.68&&HELLO.matcher(text.substring(0,min(44,text.length()))).find();
             if(wave){salutEnd=min(last,from+1.86);cue(p,s,"salut",from,salutEnd,-1);from=salutEnd;waved=true;}
-            String accent=punctuation.isEmpty()||last-from<.26?"":punctuation.equals("?")?"question":"accent";
-            double fin=accent.isEmpty()?last:max(from,last-1.16);
+            String accent=last-from<.26?"":punctuation.equals("?")?"question":emotions&&CHEERS.matcher(text).find()?"rejouit":punctuation.isEmpty()?"":"accent";
+            double fin=accent.isEmpty()?last:max(from,last-(accent.equals("rejouit")?1.64:1.16));
             if(!accent.isEmpty()&&fin-from<.61)fin=from;
+            if(accent.equals("accent")&&fin==from&&!wave){String f=figure(text);if(!f.isEmpty())accent=f;}
             if(fin-from>=.14){
                 double[] cuts=groups(text,start,span,from,fin);
                 for(int i=1;i<cuts.length;i++,tour++){
                     double a=cuts[i-1],b=cuts[i];int lo=i==1&&!wave?0:(int)round(text.length()*(a-start)/span);
                     int hi=min(text.length(),(int)ceil(text.length()*(b-start)/span));
                     String group=text.substring(min(lo,hi),hi);
-                    String k=emotions&&CONTRAST.matcher(group).find()?"nuance":emotions&&YES.matcher(group).find()?"hoche":TURNS.get(tour%TURNS.size());
+                    String k=emotions?figure(group):"";
+                    if(k.isEmpty())k=emotions&&CONTRAST.matcher(group).find()?"nuance":emotions&&YES.matcher(group).find()?"hoche":TURNS.get(tour%TURNS.size());
                     cue(p,s,k,a,b,tour%2==0?1:-1);
                 }
             }
@@ -135,71 +153,92 @@ final class AichaMotion {
             voiced+=span;quiet=gap(p,last,end,voiced,quiet);spoken++;
         }
         quiet=gap(p,past,p.duration,voiced,quiet);
+        List<Cue> figures=new ArrayList<>();for(Cue c:p.cues)if(FIGURES.contains(c.kind))figures.add(c);
         if(emotions&&voiced>0){
             Walk first=explicit!=null?explicit:quiet;
-            if(first==null&&voiced>=6.2&&p.duration>=7.3)first=spokenWalk(p,max(3.3,salutEnd),33,0,1);
-            if(first!=null){p.walks.add(first);Walk next=spokenWalk(p,max(salutEnd,first.end+5.5),first.stride,first.distance,0);if(next!=null)p.walks.add(next);}
+            if(first==null&&voiced>=6.2&&p.duration>=7.3)first=spokenWalk(p,figures,max(3.3,salutEnd),33,0,1);
+            if(first!=null){p.walks.add(first);Walk next=spokenWalk(p,figures,max(salutEnd,first.end+5.5),first.stride,first.distance,0);if(next!=null)p.walks.add(next);}
         }
         double end=0;
         for(Interval w:p.speech){if(w.start-end>=1.2&&at(p.walks,w.start,w.start-.9)==null)p.returns.add(new Interval(w.start-.82,w.start));end=w.end;}
-        // The gaze still marks each phrase; leave space between hand gestures.
-        double rest=0;int side=1;
+        // Leave room for semantic figures, but do not let them compete with a walk.
+        double rest=0;int side=1,next=0;
         for(Cue c:p.cues){
-            c.hand=c.kind.equals("salut")?-1:!c.kind.equals("ecoute")&&!c.kind.equals("hoche")&&c.end-c.start>=.56&&c.start>=rest?side:0;
-            if(c.hand!=0){rest=max(c.end+.28,c.start+1.65);side=-c.hand;}
+            while(next<figures.size()&&figures.get(next).start<c.end)next++;
+            boolean figure=FIGURES.contains(c.kind),walking=false;
+            double free=max(c.end+.28,c.start+1.65);
+            boolean reserved=!figure&&next<figures.size()&&figures.get(next).start<free;
+            if(figure)for(Walk w:p.walks)if(w.start<c.end&&c.start<w.end){walking=true;break;}
+            c.hand=c.kind.equals("salut")?-1:!reserved&&!walking&&!c.kind.equals("ecoute")&&!c.kind.equals("hoche")
+                &&c.end-c.start>=(c.kind.equals("rejouit")?.46:.56)&&c.start>=rest?side:0;
+            if(c.hand!=0){rest=free;side=-c.hand;}
         }
+        AichaFaces.plan(p.moods,faces);
         return p;
     }
 
-    private static final String[] FAMILIES={
-        "content|enthousiaste|rire|fier|soulage|malicieu|reconnaissant|amuse|rassurant|excite|apaise|tendre",
-        "surpris|emerveille|curieux", "sceptique|confus|provocateur|degoute|jaloux", "concentre|determine|colere|impatient",
-        "triste|fatigue|gene|inquiet|peur|ennuye|nostalgique|intimide|compatissant|pensif|resigne|honteux|contemplatif"
-    };
-    private static final double[][] EXPRESSIONS={{.61,.21,.24,.15,0,-.21},{.18,.72,.69,.13,0,-.19},{.05,.23,.53,.72,.34,.11},
-        {0,.02,.10,-.12,.7,.26},{.03,.43,.08,.19,.25,.54},{0,0,0,0,0,0}};
-    private static final Map<String,double[]> FACES=faces();
-    private static Map<String,double[]> faces(){Map<String,double[]> f=new java.util.HashMap<>();
-        for(int i=0;i<FAMILIES.length;i++)for(String n:FAMILIES[i].split("\\|"))f.put(n,EXPRESSIONS[i]);return f;}
-    private static final Map<String,double[][]> GESTURES=Map.of(
-        "salut",new double[][]{{16,78,.94,6,0,0,0},{7.2,3.1,-2.1,.17},{.69,.29,.45,0,.10}},
-        "presente",new double[][]{{5,37,.84,3,0,0,0},{11.3,4.1,3.2,.55},{.33,.28,.31,.03,.22}},
-        "confie",new double[][]{{0,41,.66,-3,.77,0,0},{3.3,5.1,5.5,.11},{.29,.48,.17,.12,-.23}},
-        "marque",new double[][]{{5,34,.82,3,0,0,.9},{6.5,2.7,3.6,.18},{.19,.39,.48,.12,.30}},
-        "ouvre",new double[][]{{5,37,.84,3,0,.62,0},{5.5,-3.9,-5.3,-.37},{.53,.41,.52,0,.12}},
-        "hoche",new double[][]{{},{3.2,2.2,11.8,.26},{.32,.22,.17,.03,.10}},
-        "nuance",new double[][]{{0,34,.67,-3,.66,.12,0},{12,4.2,-2.7,-.32},{.07,.21,.62,.30,.53}},
-        "question",new double[][]{{4,28,.68,3,0,.15,0},{9.9,7.1,-6.7,-.36},{.21,.76,.64,.08,.36}},
-        "accent",new double[][]{{5,36,.80,3,0,.22,0},{7.2,-3.9,7.1,.18},{.49,.51,.54,0,.21}},
-        "ecoute",new double[][]{{},{15.2,5.8,6.6,.78},{.06,.32,.24,.45,.18}});
+    static final class Visages {
+        private static final double[] NEUTRE=new double[10];
+        private final Map<String,double[]> profils=new java.util.HashMap<>();
+        Visages(JSONObject table){table.keys().forEachRemaining(n->{
+            var row=table.optJSONArray(n);if(row==null||row.length()!=10)return;
+            double[] v=new double[10];for(int i=0;i<v.length;i++)v[i]=row.optDouble(i,0);
+            profils.put(n,v);
+        });}
+        double[] get(String nom){return profils.getOrDefault(nom,NEUTRE);}
+    }
+    private static final Map<String,double[][]> GESTURES=Map.ofEntries(
+        Map.entry("salut",new double[][]{{16,78,.94,6,0,0,0},{7.2,3.1,-2.1,.17},{.69,.29,.45,0,.10}}),
+        Map.entry("presente",new double[][]{{5,37,.84,3,0,0,0},{11.3,4.1,3.2,.55},{.33,.28,.31,.03,.22}}),
+        Map.entry("confie",new double[][]{{0,41,.66,-3,.77,0,0},{3.3,5.1,5.5,.11},{.29,.48,.17,.12,-.23}}),
+        Map.entry("marque",new double[][]{{5,34,.82,3,0,0,.9},{6.5,2.7,3.6,.18},{.19,.39,.48,.12,.30}}),
+        Map.entry("ouvre",new double[][]{{5,37,.84,3,0,.62,0},{5.5,-3.9,-5.3,-.37},{.53,.41,.52,0,.12}}),
+        Map.entry("hoche",new double[][]{{},{3.2,2.2,11.8,.26},{.32,.22,.17,.03,.10}}),
+        Map.entry("nuance",new double[][]{{0,34,.67,-3,.66,.12,0},{12,4.2,-2.7,-.32},{.07,.21,.62,.30,.53}}),
+        Map.entry("question",new double[][]{{4,28,.68,3,0,.15,0},{9.9,7.1,-6.7,-.36},{.21,.76,.64,.08,.36}}),
+        Map.entry("accent",new double[][]{{5,36,.80,3,0,.22,0},{7.2,-3.9,7.1,.18},{.49,.51,.54,0,.21}}),
+        Map.entry("illustre",new double[][]{{8,52,.98,17,.10,0,0},{13,3.6,3,.53},{.37,.34,.32,.04,.32},{27,-4.4}}),
+        Map.entry("compare",new double[][]{{8,60,.96,17,.09,.98,0},{15,4.2,4.4,.46},{.28,.48,.44,.09,.34},{23,5.0}}),
+        Map.entry("rejouit",new double[][]{{17,77,.98,11,.05,1,0},{9,-6.4,-8.3,-.48},{.90,.56,.79,0,.39},{19,3.5}}),
+        Map.entry("ecoute",new double[][]{{},{15.2,5.8,6.6,.78},{.06,.32,.24,.45,.18}}));
     private static final class Acting {
-        Cue cue;double face,gazeX,gazeY,neck,tilt,yaw,pitch,weight,hip,chest,smile,inner,outer,focus,asym;
+        Cue cue;double face,gazeX,gazeY,neck,tilt,yaw,pitch,weight,hip,chest,torse,appui,ressort,smile,inner,outer,focus,asym;
         double phase(){return tilt+neck*1.65+yaw*.21+pitch*.25;}
     }
     private static Acting acting(Plan p,double t,double gain){
         Acting a=new Acting();Cue c=a.cue=at(p.cues,t);double span=c==null?1:c.end-c.start,u=c==null?-1:(t-c.start)/span;
-        int side=c==null?1:c.side;String kind=c==null?"":c.kind;
-        double[][] g=GESTURES.getOrDefault(kind,GESTURES.get("ecoute"));double[] head=g[1],face=g[2];
+        String kind=c==null?"":c.kind;boolean compare=kind.equals("compare");
+        double[][] g=GESTURES.getOrDefault(kind,GESTURES.get("ecoute"));double[] head=g[1],face=g[2],body=g.length>3?g[3]:null;
+        int side=c==null?1:body!=null&&c.hand!=0?c.hand:c.side;
         double intensity=gain*(.22+.78*smooth(.14,.91,span)),look=intensity*pulse(u,0,.155,.66,.95);
         double neck=intensity*pulse(u,min(.18,.068/span),.32,.61,.96),skull=intensity*pulse(u,min(.25,.105/span),.39,.65,1);
-        double support=intensity*pulse(u,.015,.305,.65,.98),turn=kind.equals("nuance")?2*smooth(.24,.63,u)-1:1;
+        double support=a.appui=intensity*pulse(u,.015,.305,.65,.98);
+        double turn=compare?1-2*smooth(.49,.76,u):kind.equals("nuance")?2*smooth(.24,.63,u)-1:1;
+        double eyes=compare?1-2*smooth(.38,.63,u):turn;
         double nod=kind.equals("hoche")?skull*(1-.69*pulse(u,.40,.58,.60,.77))-intensity*1.9/11.8*pulse(u,.13,.26,.29,.39):skull;
         boolean listen=kind.equals("ecoute");a.face=pulse(u,.04,.255,.68,1);
-        a.gazeX=bound(side*look*(listen?1.8:1.35)*turn,-1.8,1.8);a.gazeY=look*head[3];
-        a.neck=side*neck*(listen?1.94:1.41)*turn;a.tilt=side*skull*head[1];a.yaw=bound(side*skull*head[0]*turn,-19,19);a.pitch=nod*head[2];
-        a.weight=side*2.66*support;a.hip=-.93*side*support;a.chest=(g[0].length>4&&g[0][4]>.4?-1.33:1.25)*side*support;
+        a.gazeX=bound(side*look*(listen?1.8:1.35)*eyes,-1.8,1.8);a.gazeY=look*head[3];
+        a.neck=side*neck*(listen?1.94:1.41)*turn;a.tilt=side*skull*head[1]*turn;a.yaw=bound(side*skull*head[0]*turn,-19,19);a.pitch=nod*head[2];
+        a.weight=side*support*(compare?turn:1)*(body==null?2.66:body[1]);a.hip=-.35*a.weight;
+        a.chest=body!=null?.42*a.weight:(g[0].length>4&&g[0][4]>.4?-1.33:1.25)*side*support;
+        a.torse=(body==null?10:body[0])*side*support*turn;
+        a.ressort=kind.equals("rejouit")?intensity*(2.7*pulse(u,.025,.21,.31,.53)+3.15*pulse(u,.02,.24,.69,.99)):0;
         a.smile=a.face*face[0];a.inner=a.face*face[1];a.outer=a.face*face[2];a.focus=a.face*face[3];a.asym=side*a.face*face[4];return a;
     }
     private static double[][] hands(Cue c,double t,double gain){
-        double[][] hands=new double[2][6];
+        double[][] hands=new double[2][7];
         if(c==null||c.hand==0||gain==0)return hands;
         double[] v=GESTURES.get(c.kind)[0];double span=c.end-c.start,u=(t-c.start)/span;
-        double force=min(gain,1.12)*smooth(.34,.91,span),open=bound(force),h=open*pulse(u,.16,.46,.65,1);
-        double late=force*v[5]*pulse(u,.29,.61,.70,1);int side=c.hand<0?0:1;
+        boolean play=c.kind.equals("rejouit"),compare=c.kind.equals("compare");
+        double force=min(gain,1.12)*smooth(.34,play?.80:.91,span),open=bound(force),h=open*pulse(u,.16,.46,.65,1);
+        double late=force*v[5]*pulse(u,play?.13:.29,play?.49:.64,.72,1);int side=c.hand<0?0:1;
         double[] m=hands[side],o=hands[1-side];
-        m[0]=v[0]*force*pulse(u,.025,.33,.55,1);m[1]=v[1]*force*pulse(u,.07,.42+.05*v[4],.63,1);m[2]=v[2]*h;
+        m[0]=v[0]*force*pulse(u,.025,.33,.55,1);m[1]=v[1]*force*pulse(u,.07,.42+.05*v[4],compare?.51:.63,1)*(compare?1-.30*smooth(.49,.73,u):1);
+        m[2]=v[2]*h*(compare?1-.30*smooth(.48,.72,u):1);
         m[3]=v[3]*h*(c.kind.equals("salut")?sin((u-.4)*PI*6):1);m[4]=v[4]*smooth(0,.6,force)*pulse(u,0,.26,.72,1);
-        m[5]=v[6]*open*pulse(u,.32,.48,.58,.78);o[0]=3*late;o[1]=27*late;o[2]=.67*late;o[3]=-3*late;
+        m[5]=v[6]*open*pulse(u,.32,.48,.58,.78);o[0]=(play?8:compare?5:3)*late;o[1]=(play?40:compare?33+20*smooth(.52,.76,u):27)*late;
+        o[2]=(play||compare?.88:.67)*late;o[3]=(play?10:compare?17:-3)*late;o[4]=(play?.12:compare?.16:0)*late;
+        if(c.kind.equals("illustre"))o[6]=bound(force*1.25)*pulse(u,.015,.33,.69,.96);
         return hands;
     }
     static final class Foot {
@@ -207,6 +246,7 @@ final class AichaMotion {
         Foot(double x,double z,double lift,double pitch,double roll,boolean grounded){this.x=x;this.z=z;this.lift=lift;this.pitch=pitch;this.roll=roll;this.grounded=grounded;}
     }
     private static final Foot CONTACT=new Foot(0,0,0,0,0,true);
+    private static Foot anchor(Foot f,double offset){return offset==0?f:new Foot(f.x+2.2*offset,f.z+5.2*offset,f.lift,f.pitch,f.roll,f.grounded);}
     private static final class Support {
         Foot left=CONTACT,right=CONTACT;double avance,mix,weight,hip,settle,turn;
     }
@@ -240,42 +280,56 @@ final class AichaMotion {
         return u!=0&&at(p.speech,b,a)==null&&at(p.walks,b,a)==null&&at(p.returns,b,a)==null?u:0;
     }
     static final class Pose {
-        double avance,breath,weight,settle,hip,chest,buste,neck,tilt,yaw,pitch,gazeX,gazeY,hairL,hairR,lag,marche,balancier,lacet;
-        double armL,armR,flexL,flexR,wristL,wristR,openL,openR,foldL,foldR,indexL,indexR,lunettes,ajuste,blinkL,blinkR,smile,inner,outer,asym,focus;
+        double avance,breath,weight,settle,hip,chest,buste,torse,neck,tilt,yaw,pitch,gazeX,gazeY,hairL,hairR,lag,marche,balancier,lacet;
+        double armL,armR,flexL,flexR,wristL,wristR,openL,openR,foldL,foldR,indexL,indexR,hancheL,hancheR,reposHanche,ourlet,lunettes,ajuste,blinkL,blinkR,smile,inner,outer,asym,focus,lids,levres;
         Foot stepL,stepR;double[] mouth;
     }
-    static Pose pose(Plan p,double ms,double gain,boolean reduced,String expression,double[] mouth,double wait,boolean glasses){
+    static Pose pose(Plan p,double ms,double gain,boolean reduced,String expression,double[] mouth,double wait,boolean glasses,Visages visages){
         double t=bound(ms/1000,0,p.duration),k=reduced?0:bound(gain,0,1.3);
         Acting a=acting(p,t,k);Support s=supports(p,t,k);
         double vie=t+(reduced?0:wait/1000),activity=k*smooth(0,.32,vie),foyer=sin(vie*.91-.32)+.27*sin(vie*1.63);
         Interval enter=at(p.returns,t);double redresse=enter==null?0:k*pulse(t-enter.end,-.82,-.42,-.25,0);
         double libres=(1-.83*s.mix)*(1-.76*redresse),main=1-.94*s.mix,balancier=11.9*(.97*s.turn+.055*s.weight);
         double inertia=bound((acting(p,t-.158,k).phase()-a.phase())*.94,-5.1,5.1);boolean forced=!expression.isEmpty();
-        double[] face=FACES.getOrDefault(forced?expression:a.cue==null?"neutre":a.cue.face,EXPRESSIONS[5]);
-        double env=forced?1:a.face*(a.cue==null?0:a.cue.force),accent=forced||reduced?0:1;
+        AichaFaces.Window mood=at(p.moods,t);
+        AichaFaces.Frame played=AichaFaces.sample(mood,t,expression,a.cue,visages);double[] face=played.face;
+        double env=forced?1:bound(played.force*(mood!=null?mood.envelope(t):a.face),0,1.1);
+        double accent=forced||reduced||mood!=null&&mood.manual?0:1-(played.name.equals("neutre")?0:.92*bound(env)),jeu=reduced?0:env;
+        Interval phrase=at(p.speech,t);double silence=1;
+        if(phrase!=null){double span=phrase.end-phrase.start;
+            silence-=pulse(t,phrase.start,phrase.start+min(.045,.30*span),phrase.end-min(.065,.38*span),phrase.end);
+        }
         double[][] hands=hands(a.cue,t,k);double[] l=hands[0],r=hands[1];
         double q=vie%17.4,cycle=vie-q,coup=activity*square(1-s.mix)*(1-bound(redresse))*pulse(q,.74,1,1.58,2.07),tete=square(coup);
-        double lunettes=glasses?free(p,k,q,cycle,GLASSES):0,appui=free(p,k,q,cycle,FATIGUE),fatigue=k*appui,talon=k*smooth(.28,1,appui);
+        double attire=free(p,k,q,cycle,GLASSES),lunettes=glasses?attire:0,ourlet=glasses?0:bound(.88*k)*attire;
+        double hanche=bound(1.34*k)*free(p,k,q,cycle,HIP_REST),appui=free(p,k,q,cycle,FATIGUE),fatigue=k*appui,talon=k*smooth(.28,1,appui);
         double relache=q>FATIGUE[2]?bound(fatigue-talon):0,regard=k*free(p,k,q,cycle,TERMINAL),tourne=regard*smooth(9.85,10.42,q),bassin=s.hip+1.95*fatigue;
+        double repos=activity*(.64+.36*cos(.51*vie-.23))*(1-.84*bound(a.appui)),dehanche=2.35*repos*(1-appui)+4.4*hanche;
+        double torse=bound((a.torse+13*repos-27*hanche)*(1-s.mix)*(1-lunettes)*(1-.64*bound(redresse)),-33,33);
         double lids=max(.58*talon,.62*relache);Pose v=new Pose();
         v.avance=s.avance;v.breath=activity*libres*(.52*sin(1.83*vie-.29)+.16*sin(2.43*vie+.30))+5.2*talon-8*relache+4.6*redresse;
-        v.weight=s.weight+(a.weight+activity*1.26*foyer)*libres-.5*lunettes-4.6*fatigue;v.settle=s.settle+.26*activity*(1-cos(vie*1.19))+1.9*fatigue;
-        v.hip=(a.hip-activity*.58*foyer)*libres+bassin;v.chest=(a.chest+activity*.74*foyer)*libres-.83*bassin;v.buste=-.30*s.weight;
-        v.neck=a.neck*libres+.64*tete+1.35*tourne;v.tilt=a.tilt*libres+activity*libres*.56*sin(vie*1.51)+1.15*tete-.75*lunettes;
-        v.yaw=bound(a.yaw*libres+1.25*s.turn+2.4*tete+14.6*tourne,-19,19);
-        v.pitch=bound(a.pitch*libres+.29*s.settle-.96*s.mix+1.4*lunettes+3.4*fatigue-6.6*redresse,-13,13);
-        v.gazeX=bound(a.gazeX*libres+coup+1.72*regard,-1.8,1.8);
-        v.gazeY=a.gazeY*libres+env*face[5]*(reduced?0:.66)+.75*talon+1.3*relache+.45*regard-.55*redresse;
+        v.weight=s.weight+(a.weight+activity*.88*foyer+dehanche)*libres-.5*lunettes-4.6*fatigue;
+        v.settle=s.settle+.26*activity*(1-cos(vie*1.19))+1.9*fatigue+(1.1*activity+1.2*hanche+a.ressort)*(1-s.mix);
+        v.hip=(a.hip-activity*.46*foyer-.45*dehanche)*libres+bassin;v.chest=(a.chest+activity*.62*foyer+.56*dehanche)*libres-.83*bassin;
+        v.buste=-.30*s.weight;v.torse=torse;
+        v.neck=a.neck*libres+.64*tete+1.35*tourne;v.tilt=a.tilt*libres+activity*libres*.56*sin(vie*1.51)+1.15*tete-.75*lunettes+2.15*hanche;
+        v.yaw=bound(a.yaw*libres+1.25*s.turn+2.4*tete+14.6*tourne-6.4*hanche,-19,19);
+        v.pitch=bound(a.pitch*libres+.29*s.settle-.96*s.mix+1.4*lunettes+3.4*fatigue-6.6*redresse+jeu*(face[9]-1.7*played.lift)*(1-bound(redresse)),-13,13);
+        v.gazeX=bound(a.gazeX*libres+coup+1.72*regard+jeu*face[6],-1.8,1.8);
+        v.gazeY=a.gazeY*libres+jeu*(face[7]-.52*played.lift)+.75*talon+1.3*relache+.45*regard-.55*redresse;
         v.hairL=inertia*libres+activity*.24*sin(vie*2.3)+1.4*s.turn;v.hairR=.79*inertia*libres+activity*.29*sin(vie*2.11+.5)+1.2*s.turn;
-        v.lag=-.73*s.turn-.12*a.weight*libres;v.marche=s.mix;v.balancier=balancier;v.lacet=5.2*s.turn;
+        v.lag=-.73*s.turn-.12*a.weight*libres;v.marche=s.mix;v.balancier=balancier;v.lacet=5.2*s.turn-.42*torse;
+        v.hancheL=l[6]*main;v.hancheR=max(r[6]*main,hanche);v.reposHanche=hanche;v.ourlet=ourlet;
         v.armL=.55+l[0]*main-1.4*s.mix-.16*s.weight;v.armR=.25+r[0]*main-s.mix+.16*s.weight;
         v.flexL=bound(2.4+l[1]*main+7.1*s.mix+2.7*s.turn,0,112);v.flexR=bound(2.5+r[1]*main+6.7*s.mix-2.7*s.turn,0,99);
-        v.wristL=bound(-.9+l[3]*main-1.2*s.mix+.43*s.weight,-14,14);v.wristR=bound(.3+r[3]*main-1.5*s.mix-.41*s.weight,-14,14);
+        v.wristL=bound(-.9+l[3]*main-1.2*s.mix+.43*s.weight+5*ourlet,-19,19);v.wristR=bound(.3+r[3]*main-1.5*s.mix-.41*s.weight,-19,19);
         v.openL=l[2]*main;v.openR=r[2]*main;v.foldL=l[4]*main;v.foldR=r[4]*main;v.indexL=l[5]*main;v.indexR=r[5]*main;
         v.lunettes=lunettes;v.ajuste=-.9*lunettes*pulse(q,GLASSES[1],3.78,GLASSES[2],4.23);
         v.blinkL=reduced?0:max(lids,blink(vie));v.blinkR=reduced?0:max(lids,blink(vie-.009));
-        v.stepL=s.left;v.stepR=talon!=0?new Foot(0,0,0,22*talon,-10*talon,true):s.right;
-        v.smile=bound(env*face[0]+accent*a.smile,0,.94);v.inner=bound(env*face[1]+accent*a.inner,0,1.06);v.outer=bound(env*face[2]+accent*a.outer,0,1.05);
-        v.asym=bound(env*face[3]+accent*a.asym,-.84,.84);v.focus=bound(env*face[4]+accent*a.focus);v.mouth=mouth;return v;
+        double spread=min(k,1.1);
+        v.stepL=anchor(s.left,-spread);v.stepR=anchor(talon!=0?new Foot(0,0,0,22*talon,-10*talon,true):s.right,spread);
+        v.smile=bound(env*face[0]+accent*a.smile,-1,1);v.inner=bound(env*face[1]+accent*a.inner,-1.12,1.16);v.outer=bound(env*face[2]+accent*a.outer,-1.02,1.22);
+        v.asym=bound(env*face[5]+accent*a.asym,-.98,.98);v.focus=bound(env*face[4]+accent*a.focus);
+        v.lids=bound(env*face[3],-1,1);v.levres=silence*env*face[8];v.mouth=mouth;return v;
     }
 }

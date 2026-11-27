@@ -1,5 +1,5 @@
 import { ecrire } from '../svg.js';
-import { bound, focale, HORIZON, interp, smooth, SOL } from './math.js';
+import { bound, FOCALE, focale, HORIZON, interp, smooth, SOL } from './math.js';
 
 const rad = (a) => (a * Math.PI) / 180;
 const f = (n) => Number(n.toFixed(3));
@@ -141,13 +141,34 @@ function solveLeg(side, ground, hipToWorld) {
     map: (p) => blend(camera(hipToWorld(p)), leg(p), smooth(88, 132, p.y)),
   };
 }
-export function jambesAicha(p) {
+const translationBassin = p => pt(p.weight, p.settle);
+const translationBuste = p => pt(p.buste, .8 * p.settle);
+function bassinAicha(p) {
   const yaw = rad(p.lacet), c = Math.cos(yaw), s = Math.sin(yaw);
-  const hipToWorld = (v) => {
+  return (v) => {
     const { x, y } = rot(v, p.hip, hipPivot);
     return pt(p.weight + x * c, p.settle + y, x * s);
   };
+}
+export function jambesAicha(p) {
+  const hipToWorld = bassinAicha(p);
   return [solveLeg('l', p.stepL, hipToWorld), solveLeg('r', p.stepR, hipToWorld)];
+}
+
+// Pantalon → repère de la manche.
+const APPUI_HANCHE = [19.3, 79];
+function priseHanche(p, cote, angle, cage, [x, y, veste]) {
+  const v = pt(-x * cote, y);
+  let local;
+  if (veste) {
+    const u = v.x * (1 + .0086 * p.breath);
+    local = pt(cage.c * u, 72 + (y - 72) * (1 + .0105 * p.breath) + cage.pente * u);
+  } else {
+    const tissu = camera(bassinAicha(p)(v));
+    const bassin = rot(sub(tissu, translationBassin(p)), -p.hip, hipPivot);
+    local = rot(sub(bassin, translationBuste(p)), -p.chest, chestPivot);
+  }
+  return sub(pt(cote * local.x, local.y), rot(pt(0, 5.7), angle));
 }
 
 const couAu = (p, v) => add(rot(v, p.neck, neckBase), pt(.015 * p.yaw, -.31 * p.breath));
@@ -164,11 +185,36 @@ function repereTete(p, contact) {
   return { origine, angle, haut, sx, sy, visage, rx, ry };
 }
 
-export function brasAicha(p, side) {
-  const touche = side === 'L' ? p.lunettes : 0, pincement = -135;
-  const angle = p['arm' + side], palm = p['open' + side], flex = rad(p['flex' + side]);
+// La cage est un dessin 2D. L’affine suit la ligne des épaules ; les manches suivent leurs propres os en profondeur.
+export function cageAicha(p) {
+  const a = rad(p.torse), c = Math.cos(a), s = Math.sin(a);
+  return { c, s, pente: .38 * s };
+}
+
+// Auriculaire → index, puis pouce.
+const phalanges = [[-2.9, 7.1, 5.9, -.30], [-1, 7.8, 7.7, -.105], [1, 7.8, 8.1, .09], [2.7, 7, 6.8, .27], [2.8, 3.25, 6.1, 1.12]];
+export function doigtAicha({ ouvert, index, prise }, i) {
+  const [x, y, l, ecart] = phalanges[i], pouce = i === 4;
+  const courbure = .08 + (.23 + .052 * (3 - i)) * (1 - ouvert) + prise * (.72 - .16 * i);
+  const pli = pouce ? .25 + .24 * (1 - ouvert) + .49 * prise : interp(courbure, i === 3 ? .02 : 1.16, index);
+  const axe = pouce ? ecart * (.64 + .36 * ouvert) + .37 * prise : ecart * (.45 + .67 * ouvert);
+  const pas = pli * (pouce ? -.57 : .26 - .64 * prise), points = [pt(x, y)];
+  [.46, .31, .23].forEach((fraction, j) => {
+    const a = axe + j * pas, b = pli * (.2 + .66 * j), r = l * fraction, q = r * Math.cos(b);
+    points.push(add(points[j], pt(q * Math.sin(a), q * Math.cos(a), r * Math.sin(b))));
+  });
+  return points;
+}
+
+export function brasAicha(p, side, cage = cageAicha(p), ancre = APPUI_HANCHE) {
+  const gauche = side === 'L', cote = gauche ? 1 : -1, touche = gauche ? p.lunettes : 0, pincement = -135;
+  const hanche = smooth(0, .74, p['hanche' + side]), ourlet = gauche ? p.ourlet : 0, poignet = p['wrist' + side];
+  const angle = p['arm' + side], palm = p['open' + side], flex = rad(p['flex' + side] + (gauche ? 2.1 * p.reposHanche : 0));
+  const ouvert = bound(palm + touche), index = bound(p['index' + side] + smooth(.54, 1, touche));
+  const prise = Math.max(smooth(.54, 1, hanche), .48 * ourlet, gauche ? .26 * p.reposHanche : 0), mainPose = { ouvert, index, prise };
+  const face = smooth(.18, .77, ouvert), largeur = .68 + .32 * Math.max(face, .78 * hanche, .48 * ourlet);
   const plane = Math.PI * p['fold' + side], balancier = side === 'L' ? p.balancier : -p.balancier;
-  const S = add(shoulder, pt(-.74 * smooth(5, 43, angle), -1.75 * smooth(4, 39, angle) - .38 * p.breath, .1 * balancier));
+  const S = add(shoulder, pt(-.74 * smooth(5, 43, angle), -1.75 * smooth(4, 39, angle) - .38 * p.breath + (gauche ? .65 : 2) * p.reposHanche, .1 * balancier));
   const upper = rot(sub(elbow, shoulder), angle), lower = rot(sub(wrist, elbow), angle);
   const project = (v, k, l) => pt(v.x * k, v.y * k, Math.sqrt(Math.max(0, l ** 2 - (v.x ** 2 + v.y ** 2) * k ** 2)));
   const swing = pitch(-balancier);
@@ -178,7 +224,8 @@ export function brasAicha(p, side) {
   const k = 1 - .12 * palm - .17 * smooth(16, 34, -v.x);
   let W = add(E, swing(project(v, k, s)));
   if (touche) {
-    const bout = rot(pt(3.569, 13.489), pincement + p.wristL);
+    const index = doigtAicha(mainPose, 3)[3];
+    const bout = rot(pt(index.x * largeur, index.y), pincement + poignet);
     const cible = { ...sub(repereTete(p, true), bout), z: 29 };
     const coude = articulation(S, cible, pt(-.85, .22, 1), l, s);
     const a = sub(W, E), b = sub(cible, coude);
@@ -188,14 +235,31 @@ export function brasAicha(p, side) {
     const h = Math.sqrt(s * s - x * x);
     W = add(E, pt(x, h * Math.cos(pli), h * Math.sin(pli)));
   }
-  const vue = (q) => camera(pt(q.x, q.y, q.z * p.marche));
+  // Le poignet se pose avant les doigts.
+  const appui = smooth(0, .82, hanche), contact = Math.max(appui, ourlet);
+  const relief = p.marche + (1 - p.marche) * (1 - p.lunettes) * (.21 * palm + .17 * contact);
+  const sin = cage.s * cote, cos = cage.c, angleHanche = -34 - cote * p.chest - (gauche ? 0 : 2 * p.reposHanche);
+  if (contact) {
+    let cible = pt(-27.3, 87.5, 9.6);
+    if (appui) {
+      const aim = priseHanche(p, cote, angleHanche, cage, ancre), z = 7.2 * relief;
+      // Inverse de vue() à z fixé.
+      const x = (aim.x * (1 - cos * z / FOCALE) - sin * z) / (cos - aim.x * sin / FOCALE);
+      cible = pt(x, HORIZON + (aim.y - HORIZON) / focale(-sin * x + cos * z), 7.2);
+    }
+    const guide = appui ? pt(-1, .4, .05 + (gauche ? 0 : .31 * p.reposHanche)) : pt(-.63, .44, -.55);
+    W = blend(W, cible, contact);
+    E = articulation(S, W, blend(sub(E, S), scale(guide, l), contact), l, s);
+  }
+  const vue = ({ x, y, z }) => camera(pt(cos * x + sin * z * relief, y, -sin * x + cos * z * relief));
   const e = vue(E), main = vue(W);
-  const angleMain = Math.atan2(e.x - main.x, main.y - e.y) / rad(1);
-  return { S, E, W, main, map: bend(shoulder, elbow, wrist, vue(S), e, main, 5.9, .82), rot: interp(angleMain, pincement, smooth(.64, 1, touche)) };
+  const avantBras = Math.atan2(e.x - main.x, main.y - e.y) / rad(1);
+  const anglePoignet = interp(avantBras, pincement, smooth(.64, 1, touche));
+  return { S, E, W, main, avantBras, largeur, appui, face: face * (1 - hanche), ...mainPose,
+    map: bend(shoulder, elbow, wrist, vue(S), e, main, 5.9, .82), rot: interp(anglePoignet, angleHanche - poignet, appui) };
 }
-const knuckles = [[-2.78, 7.15, 12.25, -4.2], [-.98, 7.73, 14.82, -1.65], [.84, 7.66, 15.33, .92], [2.5, 6.77, 13.54, 3.26]];
 const strands = [pt(-10, -12), pt(-12, -8), pt(-13.5, -3)];
-export function rigAicha(svg) {
+export function rigAicha(svg, ancre = APPUI_HANCHE) {
   const nodes = new Map([...svg.querySelectorAll('[id]')].map((n) => [n.id, n]));
   const get = (id) => nodes.get(id);
   const set = (id, attr) => attrs(get(id), attr);
@@ -212,13 +276,23 @@ export function rigAicha(svg) {
   const sleeves = { l: forMap('bras-l'), r: forMap('bras-r') };
   const light = { l: get('bras-l').querySelector('ellipse'), r: get('bras-r').querySelector('ellipse') };
   set('aicha-sol', { display: 'inline', 'aria-hidden': 'true' });
-  const head = get('tete'), mancheG = get('bras-l'), mainG = get('poignet-l');
+  const buste = get('buste'), pommettes = get('joues').querySelectorAll('ellipse');
+  limbs.forEach(side => {
+    const ombre = svg.ownerDocument.createElementNS(svg.namespaceURI, 'ellipse'), paume = get('paume-' + side);
+    attrs(ombre, { id: 'ombre-main-' + side, cx: .28, cy: 9.65, rx: 4.25, ry: 3.75, fill: '#130d18', display: 'none' });
+    paume.insertBefore(ombre, paume.firstElementChild);
+    nodes.set(ombre.id, ombre);
+    set('profil-' + side, { display: 'none' });
+    set('paume-' + side, { opacity: 1 });
+  });
 
   function drawEye(side, p) {
     const m = side === 'l' ? 1 : -1,
       b = side === 'l' ? p.blinkL : p.blinkR;
-    const raise = p.inner * .57 + p.outer * .22 - p.focus * .24;
-    const lower = p.smile * .68 + p.focus * .25;
+    const inclinaison = bound(5.6 * (p.outer - p.inner) * (p.focus + .65 * Math.max(0, -p.smile)), -7, 8);
+    transform('oeil-' + side, resize(m, 1), turn(inclinaison, pt(-6.5, -.8)));
+    const raise = 2 * p.lids + .43 * p.inner + .23 * p.outer - .54 * p.focus + .38 * p.asym * m;
+    const lower = Math.max(0, p.smile) * 1.05 + .41 * p.focus - .58 * p.lids;
     const topA = interp(-5.2 - raise, -1.14, b),
       topB = interp(-5 - raise, -.4, b),
       topC = interp(-4.8 - raise, .03, b);
@@ -246,24 +320,28 @@ export function rigAicha(svg) {
     path('cil-' + side, `M-10.9 -1.8 L-11.9 ${f(-2.5 + .37 * b)}`);
     path('paupiere-basse-' + side, `M-9.8 -.4 Q-7 ${f(lowA + .37)} -3.4 ${f(.6 - .32 * lower)}`);
     set('paupiere-basse-' + side, { opacity: 1 - smooth(.46, .93, b) });
-    const liftOut = p.outer + .54 * p.asym * m,
-      liftIn = p.inner + .21 * p.asym * m;
+    const liftOut = p.outer + .86 * p.asym * m,
+      liftIn = p.inner + .57 * p.asym * m;
     const pull = .68 * p.focus;
     path(
       'sourcil-' + side,
-      `M${f(-12 + .2 * pull)} ${f(-9 - 1.53 * liftOut + .2 * p.focus)} Q-7.22 ${f(-12 - 1.51 * liftOut - 1.42 * liftIn - .19 * p.focus)} ${f(-2.2 + pull)} ${f(-9.4 - 1.95 * liftIn + 1.19 * p.focus)}`,
+      `M${f(-12 + .2 * pull)} ${f(-9 - 1.53 * liftOut + .2 * p.focus)} Q-7.22 ${f(-11.9 - 1.32 * liftOut - 1.33 * liftIn + 1.15 * p.focus)} ${f(-2.2 + pull)} ${f(-9.4 - 1.95 * liftIn + 1.19 * p.focus)}`,
     );
   }
 
   function drawMouth(p) {
-    const [w, o, round, jaw, bite, tongue] = p.mouth;
-    const joy = p.smile;
-    const b = 4.78 * w + .61 * joy * (1 - round),
+    const [w, articulation, rond, machoire, bite, tongue] = p.mouth;
+    // La forme expressive s’efface devant un phonème, y compris une fermeture M/B/P.
+    const calme = 1 - smooth(.012, .14, Math.max(articulation, machoire, bite, rond, 3.4 * Math.abs(1 - w)));
+    const ouverture = calme * Math.abs(p.levres), cercle = calme * smooth(0, 3.4, p.levres);
+    const o = articulation + ouverture, round = bound(rond + .8 * cercle), jaw = machoire + .29 * ouverture;
+    const joy = Math.max(0, p.smile), down = Math.max(0, -p.smile), serre = 1 - .46 * calme * p.focus;
+    const b = 4.78 * w + (1.06 * joy - .69 * down + .38 * p.focus) * (1 - round) - 2.32 * cercle,
       lx = -b,
       rx = b;
     const core = 10.99 + jaw * .41 + .23 * round;
-    const L = core - 1.04 * joy + .12 * p.focus + .32 * p.asym;
-    const R = core - 1.15 * joy + .04 * p.focus - .46 * p.asym;
+    const coin = core - 1.87 * joy + 1.85 * down * serre;
+    const L = coin + .51 * p.asym, R = coin - .57 * p.asym;
     const U = core - .43 * o,
       D = core + .62 * o;
     const b0 = interp(.55, .82, round),
@@ -276,11 +354,11 @@ export function rigAicha(svg) {
     set('cavite', { opacity: .6 + .4 * smooth(.01, .32, o) });
     path(
       'levre-haute',
-      `M${f(rx)} ${f(R)} Q${f(rx * .61)} ${f(U - 1.02)} ${f(rx * .29)} ${f(U - .8)} Q0 ${f(U - 1.57 - .28 * round)} ${f(lx * .29)} ${f(U - .8)} Q${f(lx * .64)} ${f(U - .97)} ${f(lx)} ${f(L)} ${top}Z`,
+      `M${f(rx)} ${f(R)} Q${f(rx * .61)} ${f(U - 1.02 * serre)} ${f(rx * .29)} ${f(U - .8 * serre)} Q0 ${f(U - (1.57 + .28 * round) * serre)} ${f(lx * .29)} ${f(U - .8 * serre)} Q${f(lx * .64)} ${f(U - .97 * serre)} ${f(lx)} ${f(L)} ${top}Z`,
     );
     path(
       'levre-basse',
-      `M${f(rx)} ${f(R)} ${lower} Q${f(lx * .72)} ${f(D + 1.3)} 0 ${f(D + 1.71 - .23 * bite)} Q${f(rx * .72)} ${f(D + 1.3)} ${f(rx)} ${f(R)}Z`,
+      `M${f(rx)} ${f(R)} ${lower} Q${f(lx * .72)} ${f(D + 1.3 * serre)} 0 ${f(D + 1.71 * serre - .23 * bite)} Q${f(rx * .72)} ${f(D + 1.3 * serre)} ${f(rx)} ${f(R)}Z`,
     );
     path(
       'dents',
@@ -292,8 +370,8 @@ export function rigAicha(svg) {
       `M${f(lx * .83)} ${f(D + .1)} Q${f(lx * .32)} ${f(D - .68 - .4 * tongue)} .19 ${f(D - .42 - .79 * tongue)} Q${f(rx * .49)} ${f(D - .58 - .3 * tongue)} ${f(rx * .83)} ${f(D + .1)} V${f(D + 2)} H${f(lx * .83)}Z`,
     );
     set('langue', { opacity: bound(smooth(.98, 2.83, o) * .62 + .52 * tongue) });
-    path('reflet-levre', `M${f(lx * .24)} ${f(D + .92)} Q0 ${f(D + 1.26)} ${f(rx * .24)} ${f(D + .91)}`);
-    const active = smooth(.035, .28, Math.max(joy * .78, o, .41 * bite, (1 - w) * 1.6));
+    path('reflet-levre', `M${f(lx * .24)} ${f(D + .92 * serre)} Q0 ${f(D + 1.26 * serre)} ${f(rx * .24)} ${f(D + .91 * serre)}`);
+    const active = smooth(.035, .28, Math.max(Math.abs(p.smile) * .78, Math.abs(p.asym) * .52, .56 * p.focus, o, .41 * bite, Math.abs(1 - w) * 1.6));
     set('bouche', { opacity: active });
     set('levres-repos', { opacity: 1 - active });
     path(
@@ -307,33 +385,25 @@ export function rigAicha(svg) {
   }
 
   function drawHand(side, arm, p) {
-    const s = side.toUpperCase(), touche = side === 'l' ? p.lunettes : 0;
-    const palmed = p['open' + s] + touche, index = p['index' + s] + smooth(.54, 1, touche);
-    const radial = (side === 'l' ? .17 : .34) + .26 * (1 - palmed);
-    transform('poignet-' + side, move(arm.main), turn(arm.rot + p['wrist' + s], pt(0, 0)));
-    const facing = smooth(.18, .77, palmed);
-    set('paume-' + side, { opacity: facing, transform: resize(interp(.68, 1, facing), 1) });
-    set('profil-' + side, { opacity: 1 - facing, transform: resize(1 - .17 * facing, 1) });
-    const bendThumb = radial * 1.24;
-    path(
-      'pouce-' + side,
-      `M2.58 5.7 Q${f(5.12 - .55 * bendThumb)} 3.78 ${f(5.8 - .22 * bendThumb)} 6.79 Q${f(5.96 - .55 * bendThumb)} 8.19 ${f(5.53 - .94 * bendThumb)} ${f(9.78 - .9 * bendThumb)}`,
-    );
-    knuckles.forEach(([x, y, end, ox], i) => {
-      const repos = radial + .055 * (3 - i);
-      const curl = interp(repos, i === 3 ? .025 : .94, index);
-      const loose = .37 + (1 - curl) * .63;
-      const tip = ox * loose + (1 - curl) * Math.sign(ox) * .36,
-        bottom = end - curl * (i < 2 ? 2.86 : 2.04) - (i === 3 ? 0 : 3.55 * index);
-      path(
-        `doigt-${side}-${i}`,
-        `M${x} ${y} Q${f(interp(x, ox, .74))} ${f(interp(y, bottom, .56))} ${f(tip + .39 * curl)} ${f(bottom)}`,
-      );
+    const s = side.toUpperCase(), main = get('poignet-' + side);
+    const devant = p['hanche' + s] || (side === 'l' && (p.lunettes || p.ourlet));
+    const calque = devant ? buste : get('bras-' + side);
+    if (main.parentNode !== calque) calque.append(main);
+    const angle = arm.rot + p['wrist' + s], centre = pt(0, 0);
+    transform('poignet-' + side, devant && side === 'r' ? 'scale(-1 1)' : '', move(arm.main), turn(angle, centre));
+    transform('paume-' + side, resize(arm.largeur, 1));
+    // Manche alignée sur l’avant-bras.
+    transform('manche-' + side, resize(1 / arm.largeur, 1), turn(arm.avantBras - angle, centre));
+    set('lignes-' + side, { opacity: .75 * arm.face });
+    const ombre = smooth(.94, 1, arm.appui);
+    set('ombre-main-' + side, { display: ombre ? 'inline' : 'none', opacity: .24 * ombre });
+    phalanges.forEach((_, i) => {
+      const [a, b, c, d] = doigtAicha(arm, i);
+      path(i === 4 ? 'pouce-' + side : `doigt-${side}-${i}`, `M${xy(a)} Q${xy(b)} ${xy(blend(b, c, .5))} Q${xy(c)} ${xy(d)}`);
     });
   }
 
   function draw(p, t) {
-    const pelvis = pt(p.weight, p.settle);
     const [L, R] = jambesAicha(p);
     const trousers = (v) => blend(L.map(v), R.map(v), smooth(-2.75, 2.75, v.x));
     for (const { el, p, flip } of legs)
@@ -349,10 +419,12 @@ export function rigAicha(svg) {
     const bassin = get('bassin'), devant = get(L.toe.z > R.toe.z ? 'chaussure-l' : 'chaussure-r');
     if (bassin.previousElementSibling !== devant) svg.insertBefore(devant, bassin);
     set('ombre-appui', { cx: p.weight * .6 });
-    transform('bassin', move(pelvis), turn(p.hip, hipPivot));
-    transform('buste', move(pt(p.buste, 0)), turn(p.chest, chestPivot));
+    transform('bassin', move(translationBassin(p)), turn(p.hip, hipPivot));
+    transform('buste', move(translationBuste(p)), turn(p.chest, chestPivot));
+    const cage = cageAicha(p);
     transform(
       'sweat',
+      `matrix(${f(cage.c)} ${f(cage.pente)} 0 1 0 0)`,
       'translate(0 72)',
       resize(1 + .0086 * p.breath, 1 + .0105 * p.breath),
       'translate(0 -72)',
@@ -366,7 +438,7 @@ export function rigAicha(svg) {
     set('embout-l', { cx: -3 + drift, cy: endY + .5 });
     set('embout-r', { cx: 3 + drift * .82, cy: endY + .55 });
     limbs.forEach((side) => {
-      const s = side.toUpperCase(), arm = brasAicha(p, s);
+      const s = side.toUpperCase(), arm = brasAicha(p, s, cage, ancre);
       for (const { el, p: points } of sleeves[side]) ecrire(el, 'd', mapPath(points, arm.map));
       const base = pt(-25, 40), lit = arm.map(base);
       attrs(light[side], { transform: `${move(sub(lit, base))} ${turn(20 + p['arm' + s], base)}` });
@@ -379,10 +451,10 @@ export function rigAicha(svg) {
     transform('tete', move(origine), turn(angle, skullBase), move(pt(0, haut)), resize(sx, sy));
     transform('plan-visage', move(visage), resize(rx, ry));
     transform('lunettes', move(pt(0, p.ajuste)));
-    const calque = p.lunettes ? head.parentNode : mancheG;
-    if (mainG.parentNode !== calque) calque.append(mainG);
-    const cheek = p.smile;
-    transform('joues', move(pt(.1 * p.asym, -.7 * cheek + .15 * p.focus)));
+    const joie = Math.max(0, p.smile), retrousse = p.focus * Math.abs(p.asym);
+    transform('joues', move(pt(.19 * p.asym, -1.12 * joie + .15 * p.focus)));
+    for (const joue of pommettes) attrs(joue, { opacity: .16 + .12 * joie + .07 * Math.abs(p.asym) });
+    transform('nez', move(pt(.25 * p.asym * retrousse, -.68 * retrousse)), resize(1 + .12 * retrousse, 1));
     set('front', {
       opacity: .33 * smooth(.3, 1.41, p.inner + .85 * p.outer),
       transform: move(pt(0, -.22 * p.inner)),

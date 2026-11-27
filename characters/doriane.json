@@ -3,6 +3,7 @@
   "nom": "Doriane",
   "svg": "doriane.svg",
   "rig": "aicha",
+  "appuiHanche": [19.45, 76.8],
   "mouvements": { "style": "fluide" },
   "voixSuggeree": { "hauteur": 1, "vitesse": 1 }
 }

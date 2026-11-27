@@ -103,9 +103,9 @@ public final class DeviceChecks extends Instrumentation {
                 check("quatre-gestes",()->robotChoreo(ctx,refs));
                 check("catalogue-et-reglages",()->fullAccess(ctx));
                 check("cinq-lectrices",()->{
-                    int frames=AichaChecks.parity(refs.json("g2p.json"),fixtures().getJSONArray("aicha"));
+                    int frames=AichaChecks.parity(refs,fixtures().getJSONArray("aicha"));
                     AichaChecks.stage(this,ctx);
-                    return frames+" poses Web comparées (appuis, mains, regards et visèmes) ; cinq lectures en mode avion, pause et recherche déterministes";
+                    return frames+" poses Web comparées (appuis, mains, visages et visèmes) ; cinq lectures en mode avion, pause et recherche déterministes";
                 });
                 check("lips-reference",()->lipsReference(ctx,refs));
                 check("audio-importe",()->imported(ctx));

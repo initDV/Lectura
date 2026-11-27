@@ -94,8 +94,8 @@ export function configure(treeJson, definitionJson, trackJson) {
   const timeline = new Timeline(text, segments);
   const humeur = creerHumeur({ lexique, matcher, actif: emotions });
   if (def.rig === 'aicha') {
-    const rig = rigAicha(root), glasses = !!root.querySelector('#lunettes')?.children.length;
-    const plan = planAicha(segments, duration, { emotions, humeur }), lips = planBouche(segments, lang, siwis);
+    const rig = rigAicha(root, def.appuiHanche), glasses = !!root.querySelector('#lunettes')?.children.length;
+    const plan = planAicha(timeline.segs, duration, { emotions, humeur, texte: text }), lips = planBouche(segments, lang, siwis);
     const rest = planAicha([], 0);
     scene = { root, timeline, animate(ms, level, reduced, idle) {
       const t = ms < 0 ? 0 : ms, wait = reduced ? 0 : idle;

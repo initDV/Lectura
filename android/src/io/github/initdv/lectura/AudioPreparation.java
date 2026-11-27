@@ -84,7 +84,7 @@ final class AudioPreparation {
             boolean lectrice=AichaTrack.matches(refs.character(cfg.character));
             double duration=decoded!=null?decoded.duration():Math.max(1,request.silent?text.length()*1000./cps:segments.get(segments.size()-1).to);
             G2p.Profile phones=spokenBy.equals("siwis")?G2p.Profile.SIWIS:spokenBy.equals("kokoro-siwis")?G2p.Profile.KOKORO:G2p.Profile.PIPER;
-            AichaTrack aicha=lectrice?new AichaTrack(refs,segments,duration,mood,cfg.emotions,lang,phones,decoded):null;
+            AichaTrack aicha=lectrice?new AichaTrack(refs,text,segments,duration,mood,cfg.emotions,lang,phones,decoded):null;
             Performance performance=lectrice?null:new Performance(segments,mood,refs.rig);
             // Highlighting the complete script can be costly; do it before UI delivery.
             Pcm.interrupted();Script.Terminal terminal=new Script.Terminal(text,words);Pcm.interrupted();

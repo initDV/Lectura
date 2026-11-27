@@ -90,7 +90,12 @@ async function lireSvg(def, mode) {
 export async function loadCharacterSvg(def) {
   const svg = await lireSvg(def, 'direct');
   svg.setAttribute('aria-label', def.nom);
-  svg.setAttribute('preserveAspectRatio', def.rig === RIG_AICHA ? 'xMidYMid meet' : 'xMidYMax meet');
+  if (def.rig === RIG_AICHA) {
+    // Garder de l’air pour le béret et les coiffures quand la tête tourne.
+    const { x, y, width, height } = svg.viewBox.baseVal;
+    svg.setAttribute('viewBox', `${x} ${y - 8} ${width} ${height + 8}`);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  } else svg.setAttribute('preserveAspectRatio', 'xMidYMax meet');
   return svg;
 }
 

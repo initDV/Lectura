@@ -4,8 +4,8 @@ import { analyserAudioAicha, boucheA, planBouche, REPOS_BOUCHE } from './mouth.j
 import { rigAicha } from './rig.js';
 import { creerDecorAicha } from './decor.js';
 
-export function creerAicha(svg, { reduireAnimations, gain, couleurs }) {
-  const rig = rigAicha(svg), decor = creerDecorAicha(svg, couleurs);
+export function creerAicha(svg, { reduireAnimations, gain, couleurs, appuiHanche }) {
+  const rig = rigAicha(svg, appuiHanche), decor = creerDecorAicha(svg, couleurs);
   const monture = !!svg.querySelector('#lunettes *');
   const preference = matchMedia('(prefers-reduced-motion: reduce)'), repos = planAicha([], 0);
   let plan = repos, piste = [], cadre = '', dernierNiveau, depuis;
@@ -31,12 +31,12 @@ export function creerAicha(svg, { reduireAnimations, gain, couleurs }) {
     analyserAudio: analyserAudioAicha,
     preparer(prep, projet, humeur) {
       const { segs } = prep.timeline, { audio, reglages } = projet;
-      plan = planAicha(segs, prep.source.dureeMs, { emotions: reglages.emotions, humeur });
+      plan = planAicha(segs, prep.source.dureeMs, { emotions: reglages.emotions, humeur, texte: projet.texte });
       const siwis = audio.source === 'voix' && audio.voix.moteur === 'piper' && audio.voix.id === 'siwis';
       piste = planBouche(segs, getLang(), siwis);
       cadre = ''; dernierNiveau = undefined;
     },
-    repos(now) { peindre(repos, 0, '', REPOS_BOUCHE, attente(now)); },
+    repos(now, expression = '') { peindre(repos, 0, expression, REPOS_BOUCHE, attente(now)); },
     image(prep, { ms, sceneMs, lecture, fin, expression, now }) {
       if (fin) return peindre(plan, plan.duration * 1000, expression, REPOS_BOUCHE, attente(now));
       depuis = undefined;

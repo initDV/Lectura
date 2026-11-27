@@ -1,18 +1,26 @@
 import { typeLigne } from '../timeline.js';
 import { bound, smooth, windowAt } from './math.js';
+import { indicesVisage, jouerVisage, pisteHumeurs, reprendReplique } from './humeurs.js';
+import { VISAGES } from './visages.js';
 
 const SALUT = /(?:^|[^\p{L}])(?:bonjour|bonsoir|salut|coucou|hello|hi|hey)(?!\p{L})/iu;
 const DEPLACEMENT = /(?:\b(?:avance|marchons)\b|marche vers|walk forward|come closer|pas de côté|step aside|sidestep)/iu;
 const PONCTUATION = /([?!])[\s»”"')\]]*$/u;
 const CONTRASTE = /(?:^|[^\p{L}])(?:non|pourtant|mais|but)(?!\p{L})/iu;
 const ACCORD = /^\P{L}*(?:oui|exactement|yes|exactly)(?!\p{L})/iu;
+const EXPLIQUE = /(?:^|[^\p{L}])(?:voici|par exemple|en clair|for example|let me show you)(?!\p{L})/iu;
+const COMPARE = /(?:^|[^\p{L}])(?:d['’]un côté|de l['’]autre côté|deux (?:choix|options)|two (?:choices|options)|on (?:the )?(?:one|other) hand)(?!\p{L})/iu;
+const JOIE = /^\P{L}*(?:bravo|youpi|hourra|ta[- ]?da|hooray|hurray|et voilà)(?!\p{L})/iu;
 const pulse = (t, a, b, c, d) => smooth(a, b, t) * (1 - smooth(c, d, t));
 const APPUI = Object.freeze({ x: 0, z: 0, lift: 0, pitch: 0, grounded: true });
 const MARCHE_MIN = 2.05;
 const LUNETTES = [2.62, 3.52, 3.94, 4.88];
 const FATIGUE = [5.64, 6.74, 7.18, 7.99];
 const TERMINAL = [9.62, 10.24, 10.73, 11.46];
+const HANCHE = [12.08, 13.15, 15.54, 16.86];
 const TOURS = ['presente', 'confie', 'marque', 'ouvre', 'hoche', 'presente', 'nuance', 'confie'];
+const POSES = ['illustre', 'compare', 'rejouit'];
+const figure = (texte) => COMPARE.test(texte) ? 'compare' : EXPLIQUE.test(texte) ? 'illustre' : '';
 
 function trajet(start, fin, stride) {
   const duree = Math.min(3.08, fin - start);
@@ -42,9 +50,9 @@ function groupes(texte, debut, span, start, end) {
   return [...bornes, end];
 }
 
-export function planAicha(segments, dureeMs, { emotions = true, humeur = null } = {}) {
-  const duration = Math.max(0, dureeMs / 1000), cues = [], marches = [], paroles = [];
-  let past = 0, spoken = 0, voiced = 0, tour = 0, waved = false, explicite = null, quiet = null;
+export function planAicha(segments, dureeMs, { emotions = true, humeur = null, texte: source } = {}) {
+  const duration = Math.max(0, dureeMs / 1000), cues = [], marches = [], paroles = [], phrases = [];
+  let past = 0, spoken = 0, voiced = 0, tour = 0, waved = false, explicite = null, quiet = null, precedente;
   const gap = (start, end) => {
     const span = end - start;
     if (span < .44) return;
@@ -52,6 +60,8 @@ export function planAicha(segments, dureeMs, { emotions = true, humeur = null } 
     if (!quiet && voiced > 0 && start >= 1.35 && span >= MARCHE_MIN) quiet = trajet(start, end, 35);
   };
   for (const seg of segments) {
+    const prec = precedente;
+    precedente = undefined;
     const start = bound(seg.debutMs / 1000, past, duration), end = bound(seg.finMs / 1000, start, duration);
     if (end <= start) continue;
     gap(past, start);
@@ -62,7 +72,11 @@ export function planAicha(segments, dureeMs, { emotions = true, humeur = null } 
     const last = Math.min(end, speechEnd + .12);
     if (span > 0) paroles.push({ start, end: last });
     if (span < .1) { gap(start, end); continue; }
-    const e = seg.expression && seg.expression !== 'auto' ? { expr: seg.expression, force: 1 } : emotions && humeur?.de(seg);
+    const manual = Object.hasOwn(VISAGES, seg.expression);
+    const e = manual ? { expr: seg.expression, force: 1 } : emotions && humeur?.de(seg);
+    phrases.push({ start, end: last, speechEnd, texte, face: e?.expr || 'neutre', force: e?.force ?? 1, manual,
+      liee: reprendReplique(prec, seg, source), indices: emotions && !manual ? indicesVisage(texte, e?.moments) : [] });
+    precedente = seg;
     const add = (kind, a, b, side) => {
       if (b - a >= .14) cues.push({ start: a, end: b, kind, side, face: e?.expr || 'neutre', force: e?.force ?? 1 });
     };
@@ -74,16 +88,17 @@ export function planAicha(segments, dureeMs, { emotions = true, humeur = null } 
       add('salut', from, jusqua, -1);
       from = jusqua; waved = true;
     }
-    const accent = marque && last - from >= .26 ? marque === '?' ? 'question' : 'accent' : '';
-    let fin = accent ? Math.max(from, last - 1.16) : last;
+    let accent = last - from >= .26 ? marque === '?' ? 'question' : emotions && JOIE.test(texte) ? 'rejouit' : marque ? 'accent' : '' : '';
+    let fin = accent ? Math.max(from, last - (accent === 'rejouit' ? 1.64 : 1.16)) : last;
     if (accent && fin - from < .61) fin = from;
+    if (accent === 'accent' && fin === from && !wave) accent = figure(texte) || accent;
     if (fin - from >= .14) {
       const bornes = groupes(texte, start, span, from, fin);
       for (let i = 1; i < bornes.length; i++, tour++) {
         const a = bornes[i - 1], b = bornes[i];
         const avant = Math.round(texte.length * (a - start) / span);
         const groupe = texte.slice(i === 1 && !wave ? 0 : avant, Math.ceil(texte.length * (b - start) / span));
-        const kind = emotions && CONTRASTE.test(groupe) ? 'nuance' : emotions && ACCORD.test(groupe) ? 'hoche' : TOURS[tour % TOURS.length];
+        const kind = (emotions && (figure(groupe) || (CONTRASTE.test(groupe) ? 'nuance' : ACCORD.test(groupe) ? 'hoche' : ''))) || TOURS[tour % TOURS.length];
         add(kind, a, b, tour % 2 ? -1 : 1);
       }
     }
@@ -95,9 +110,11 @@ export function planAicha(segments, dureeMs, { emotions = true, humeur = null } 
   }
   gap(past, duration);
   const finSalut = cues.find(c => c.kind === 'salut')?.end ?? 0;
+  const figures = cues.filter(c => POSES.includes(c.kind));
   const appuiParle = (apres, stride) => {
     const fin = duration - .48;
-    const ref = cues.find(c => c.start >= Math.max(apres, finSalut) && c.start + MARCHE_MIN <= fin && TOURS.includes(c.kind));
+    const ref = cues.find(c => c.start >= Math.max(apres, finSalut) && c.start + MARCHE_MIN <= fin && TOURS.includes(c.kind)
+      && !windowAt(figures, Math.min(fin, c.start + 3.08), c.start));
     return ref ? trajet(ref.start, fin, stride) : null;
   };
   if (emotions && voiced > 0) {
@@ -112,30 +129,25 @@ export function planAicha(segments, dureeMs, { emotions = true, humeur = null } 
   paroles.forEach(({ start }, i) => {
     if (start - (paroles[i - 1]?.end ?? 0) >= 1.2 && !windowAt(marches, start, start - .9)) reprises.push({ start: start - .82, end: start });
   });
-  // Espacer les gestes sans changer le regard.
-  let reposMains = 0, cote = 1;
+  // Laisser l’espace à un geste de sens ; un déplacement explicite ou dans un silence reste prioritaire.
+  let reposMains = 0, cote = 1, suivante = 0;
   for (const cue of cues) {
-    const salut = cue.kind === 'salut';
-    cue.hand = salut ? -1 : cue.kind !== 'ecoute' && cue.kind !== 'hoche'
-      && cue.end - cue.start >= .56 && cue.start >= reposMains ? cote : 0;
+    while (figures[suivante]?.start < cue.end) suivante++;
+    const salut = cue.kind === 'salut', figure = POSES.includes(cue.kind);
+    const libre = Math.max(cue.end + .28, cue.start + 1.65);
+    const reserve = !figure && figures[suivante]?.start < libre;
+    const enMarche = figure && marches.some(m => m.start < cue.end && cue.start < m.end);
+    cue.hand = salut ? -1 : !reserve && !enMarche && cue.kind !== 'ecoute' && cue.kind !== 'hoche'
+      && cue.end - cue.start >= (cue.kind === 'rejouit' ? .46 : .56) && cue.start >= reposMains ? cote : 0;
     if (cue.hand) {
-      reposMains = Math.max(cue.end + .28, cue.start + 1.65);
+      reposMains = libre;
       cote = -cue.hand;
     }
   }
-  return { duration, cues, marches, paroles, reprises };
+  return { duration, cues, marches, paroles, reprises, visages: pisteHumeurs(phrases) };
 }
 
-const familles = [
-  [/^(content|enthousiaste|rire|fier|soulage|malicieu|reconnaissant|amuse|rassurant|excite|apaise|tendre)$/, [.61, .21, .24, .15, 0, -.21]],
-  [/^(surpris|emerveille|curieux)$/, [.18, .72, .69, .13, 0, -.19]],
-  [/^(sceptique|confus|provocateur|degoute|jaloux)$/, [.05, .23, .53, .72, .34, .11]],
-  [/^(concentre|determine|colere|impatient)$/, [0, .02, .10, -.12, .7, .26]],
-  [/^(triste|fatigue|gene|inquiet|peur|ennuye|nostalgique|intimide|compatissant|pensif|resigne|honteux|contemplatif)$/, [.03, .43, .08, .19, .25, .54]],
-];
-const faceDe = (nom) => familles.find(([motif]) => motif.test(nom))?.[1] || [0, 0, 0, 0, 0, 0];
-
-// Bras, tête, visage.
+// Bras, tête, visage et (pour les figures) rotation de la cage / déplacement de l’appui.
 const gestes = {
   salut:   [[16, 78, .94, 6], [7.2, 3.1, -2.1, .17], [.69, .29, .45, 0, .10]],
   presente:[[5, 37, .84, 3], [11.3, 4.1, 3.2, .55], [.33, .28, .31, .03, .22]],
@@ -146,51 +158,63 @@ const gestes = {
   nuance:  [[0, 34, .67, -3, .66, .12], [12, 4.2, -2.7, -.32], [.07, .21, .62, .30, .53]],
   question:[[4, 28, .68, 3, 0, .15], [9.9, 7.1, -6.7, -.36], [.21, .76, .64, .08, .36]],
   accent:  [[5, 36, .80, 3, 0, .22], [7.2, -3.9, 7.1, .18], [.49, .51, .54, 0, .21]],
+  illustre:[[8, 52, .98, 17, .10], [13, 3.6, 3, .53], [.37, .34, .32, .04, .32], [27, -4.4]],
+  compare: [[8, 60, .96, 17, .09, .98], [15, 4.2, 4.4, .46], [.28, .48, .44, .09, .34], [23, 5.0]],
+  rejouit: [[17, 77, .98, 11, .05, 1], [9, -6.4, -8.3, -.48], [.90, .56, .79, 0, .39], [19, 3.5]],
   ecoute:  [[], [15.2, 5.8, 6.6, .78], [.06, .32, .24, .45, .18]],
 };
 
 function acting(plan, t, gain) {
   const cue = windowAt(plan.cues, t), span = cue ? cue.end - cue.start : 1;
-  const u = cue ? (t - cue.start) / span : -1, side = cue?.side ?? 1;
-  const kind = cue?.kind, nuance = kind === 'nuance';
-  const [bras, tete, visage] = gestes[kind] || gestes.ecoute;
+  const u = cue ? (t - cue.start) / span : -1, kind = cue?.kind;
+  const compare = kind === 'compare';
+  const [bras, tete, visage, corps] = gestes[kind] || gestes.ecoute;
+  const side = (corps && cue?.hand) || cue?.side || 1;
   const intensity = gain * (.22 + .78 * smooth(.14, .91, span));
   const look = intensity * pulse(u, 0, .155, .66, .95);
   const neck = intensity * pulse(u, Math.min(.18, .068 / span), .32, .61, .96);
   const skull = intensity * pulse(u, Math.min(.25, .105 / span), .39, .65, 1);
   const face = pulse(u, .04, .255, .68, 1);
   const appui = intensity * pulse(u, .015, .305, .65, .98);
-  const turn = nuance ? 2 * smooth(.24, .63, u) - 1 : 1;
+  const turn = compare ? 1 - 2 * smooth(.49, .76, u) : kind === 'nuance' ? 2 * smooth(.24, .63, u) - 1 : 1;
+  const yeux = compare ? 1 - 2 * smooth(.38, .63, u) : turn;
+  const poids = side * appui * (compare ? turn : 1) * (corps?.[1] ?? 2.66);
   const nod = kind === 'hoche' ? skull * (1 - .69 * pulse(u, .40, .58, .60, .77)) - intensity * 1.9 / 11.8 * pulse(u, .13, .26, .29, .39) : skull;
   return {
-    cue, face,
-    gazeX: bound(side * look * (kind === 'ecoute' ? 1.8 : 1.35) * turn, -1.8, 1.8), gazeY: look * tete[3],
+    cue, face, appui,
+    gazeX: bound(side * look * (kind === 'ecoute' ? 1.8 : 1.35) * yeux, -1.8, 1.8), gazeY: look * tete[3],
     neck: side * neck * (kind === 'ecoute' ? 1.94 : 1.41) * turn,
-    tilt: side * skull * tete[1], yaw: bound(side * skull * tete[0] * turn, -19, 19), pitch: nod * tete[2],
-    weight: side * 2.66 * appui, hip: -.93 * side * appui, chest: (bras[4] > .4 ? -1.33 : 1.25) * side * appui,
+    tilt: side * skull * tete[1] * turn, yaw: bound(side * skull * tete[0] * turn, -19, 19), pitch: nod * tete[2],
+    weight: poids, hip: -.35 * poids, chest: corps ? .42 * poids : (bras[4] > .4 ? -1.33 : 1.25) * side * appui,
+    torse: (corps?.[0] ?? 10) * side * appui * turn,
+    ressort: kind === 'rejouit' ? intensity * (2.7 * pulse(u, .025, .21, .31, .53) + 3.15 * pulse(u, .02, .24, .69, .99)) : 0,
     smile: face * visage[0], inner: face * visage[1], outer: face * visage[2], focus: face * visage[3], asym: side * face * visage[4],
   };
 }
 
 function jeuMains(cue, t, gain) {
-  // Épaule, coude, paume, poignet, plan, index.
-  const l = [0, 0, 0, 0, 0, 0], r = l.slice();
+  // Épaule, coude, paume, poignet, plan du coude, index, contact à la hanche.
+  const l = [0, 0, 0, 0, 0, 0, 0], r = l.slice();
   if (!cue?.hand || !gain) return [l, r];
   const { start, end, kind } = cue;
   const [arm, elbow, palm, wrist, fold = 0, contra = 0, index = 0] = gestes[kind][0];
-  const span = end - start, u = (t - start) / span;
-  const force = Math.min(gain, 1.12) * smooth(.34, .91, span), paume = bound(force);
+  const span = end - start, u = (t - start) / span, joue = kind === 'rejouit', compare = kind === 'compare';
+  const force = Math.min(gain, 1.12) * (joue ? smooth(.34, .80, span) : smooth(.34, .91, span)), paume = bound(force);
   const hand = paume * pulse(u, .16, .46, .65, 1);
-  const retard = force * contra * pulse(u, .29, .61, .70, 1);
+  const retard = force * contra * pulse(u, joue ? .13 : .29, joue ? .49 : .64, .72, 1);
   const [m, o] = cue.hand < 0 ? [l, r] : [r, l];
   m[0] = arm * force * pulse(u, .025, .33, .55, 1);
-  m[1] = elbow * force * pulse(u, .07, .42 + .05 * fold, .63, 1);
-  m[2] = palm * hand;
+  m[1] = elbow * force * pulse(u, .07, .42 + .05 * fold, compare ? .51 : .63, 1) * (compare ? 1 - .30 * smooth(.49, .73, u) : 1);
+  m[2] = palm * hand * (compare ? 1 - .30 * smooth(.48, .72, u) : 1);
   m[3] = wrist * hand * (kind === 'salut' ? Math.sin((u - .4) * Math.PI * 6) : 1);
   m[4] = fold * smooth(0, .6, force) * pulse(u, 0, .26, .72, 1);
   m[5] = index * paume * pulse(u, .32, .48, .58, .78);
-  o[0] = 3 * retard; o[1] = 27 * retard;
-  o[2] = .67 * retard; o[3] = -3 * retard;
+  o[0] = (joue ? 8 : compare ? 5 : 3) * retard;
+  o[1] = (joue ? 40 : compare ? 33 + 20 * smooth(.52, .76, u) : 27) * retard;
+  o[2] = (joue || compare ? .88 : .67) * retard;
+  o[3] = (joue ? 10 : compare ? 17 : -3) * retard;
+  o[4] = (joue ? .12 : compare ? .16 : 0) * retard;
+  if (kind === 'illustre') o[6] = bound(force * 1.25) * pulse(u, .015, .33, .69, .96);
   return [l, r];
 }
 
@@ -254,8 +278,17 @@ export function poseAicha(plan, ms, { gain = 1, reduit = false, expression = '',
   const balancier = 11.9 * (.97 * turn + .055 * weight);
   const phase = (v) => v.tilt + v.neck * 1.65 + v.yaw * .21 + v.pitch * .25;
   const inertia = bound((phase(acting(plan, t - .158, k)) - phase(a)) * .94, -5.1, 5.1);
-  const emotion = faceDe(expression || a.cue?.face || 'neutre');
-  const env = expression ? 1 : a.face * (a.cue?.force ?? 0), accent = expression || reduit ? 0 : 1;
+  const acteur = windowAt(plan.visages, t);
+  const { face, force, nom, leve } = jouerVisage(acteur, t, expression, a.cue?.face, a.cue?.force ?? 0);
+  const [sourire, medial, lateral, paupiere, tension, asym, regardX, regardY, levres, menton] = face;
+  // L’enveloppe tient la phrase, même quand le bras ou l’humeur change.
+  const span = acteur ? acteur.end - acteur.start : 0;
+  const env = expression ? 1 : bound(force * (acteur ? pulse(t, acteur.start, acteur.start + Math.min(.23, .30 * span),
+    acteur.end - Math.min(.35, .38 * span), acteur.end) : a.face), 0, 1.1);
+  const accent = expression || acteur?.manual || reduit ? 0 : 1 - (nom === 'neutre' ? 0 : .92 * bound(env)), jeu = reduit ? 0 : env;
+  const phrase = windowAt(plan.paroles, t);
+  const silence = phrase ? 1 - pulse(t, phrase.start, phrase.start + Math.min(.045, .30 * (phrase.end - phrase.start)),
+    phrase.end - Math.min(.065, .38 * (phrase.end - phrase.start)), phrase.end) : 1;
   const [l, r] = jeuMains(a.cue, t, k);
   const q = vie % 17.4, cycle = vie - q;
   const coup = activite * (1 - mix) ** 2 * (1 - bound(redresse)) * pulse(q, .74, 1, 1.58, 2.07);
@@ -265,45 +298,55 @@ export function poseAicha(plan, ms, { gain = 1, reduit = false, expression = '',
     const u = k && pulse(q, ...fen);
     return u && ![plan.paroles, plan.marches, plan.reprises].some(p => windowAt(p, cycle + fen[3] + .08, cycle + fen[0] - .08)) ? u : 0;
   };
-  const lunettes = monture ? libre(LUNETTES) : 0;
+  const ajusteTenue = libre(LUNETTES);
+  const lunettes = monture ? ajusteTenue : 0, ourlet = monture ? 0 : bound(.88 * k) * ajusteTenue;
+  const hanche = bound(1.34 * k) * libre(HANCHE);
   const appui = libre(FATIGUE);
   const fatigue = k * appui, talon = k * smooth(.28, 1, appui);
   const relache = q > FATIGUE[2] ? bound(fatigue - talon) : 0;
   const regard = k * libre(TERMINAL);
   const tourne = regard * smooth(9.85, 10.42, q);
+  // Contrepoint : le poids se rapproche du pied porteur, les épaules et le bassin ne tournent pas d’un bloc.
+  const repos = activite * (.64 + .36 * Math.cos(.51 * vie - .23)) * (1 - .84 * bound(a.appui));
+  const dehanche = 2.35 * repos * (1 - appui) + 4.4 * hanche;
+  const torse = bound((a.torse + 13 * repos - 27 * hanche) * (1 - mix) * (1 - lunettes) * (1 - .64 * bound(redresse)), -33, 33);
   const bassin = pas.hip + 1.95 * fatigue;
+  // Décaler les deux ancrages dans le monde, y compris pendant un pas. Aucun recentrage en fin de geste.
+  const ecart = Math.min(k, 1.1);
+  const ancre = (pied, cote) => ecart ? { ...pied, x: pied.x + 2.2 * cote * ecart, z: pied.z + 5.2 * cote * ecart } : pied;
   const paupieres = t => reduit ? 0 : Math.max(.58 * talon, .62 * relache, blink(t));
   return {
     avance: pas.avance,
     breath: activite * libres * (.52 * Math.sin(1.83 * vie - .29) + .16 * Math.sin(2.43 * vie + .30)) + 5.2 * talon - 8 * relache + 4.6 * redresse,
-    weight: weight + (a.weight + activite * 1.26 * foyer) * libres - .5 * lunettes - 4.6 * fatigue,
-    settle: settle + .26 * activite * (1 - Math.cos(vie * 1.19)) + 1.9 * fatigue,
-    hip: (a.hip - activite * .58 * foyer) * libres + bassin,
-    chest: (a.chest + activite * .74 * foyer) * libres - .83 * bassin,
-    buste: -.30 * weight,
+    weight: weight + (a.weight + activite * .88 * foyer + dehanche) * libres - .5 * lunettes - 4.6 * fatigue,
+    settle: settle + .26 * activite * (1 - Math.cos(vie * 1.19)) + 1.9 * fatigue + (1.1 * activite + 1.2 * hanche + a.ressort) * (1 - mix),
+    hip: (a.hip - activite * .46 * foyer - .45 * dehanche) * libres + bassin,
+    chest: (a.chest + activite * .62 * foyer + .56 * dehanche) * libres - .83 * bassin,
+    buste: -.30 * weight, torse,
     neck: a.neck * libres + .64 * tete + 1.35 * tourne,
-    tilt: a.tilt * libres + activite * libres * .56 * Math.sin(vie * 1.51) + 1.15 * tete - .75 * lunettes,
-    yaw: bound(a.yaw * libres + 1.25 * turn + 2.4 * tete + 14.6 * tourne, -19, 19),
-    pitch: bound(a.pitch * libres + .29 * settle - .96 * mix + 1.4 * lunettes + 3.4 * fatigue - 6.6 * redresse, -13, 13),
-    gazeX: bound(a.gazeX * libres + coup + 1.72 * regard, -1.8, 1.8),
-    gazeY: a.gazeY * libres + env * emotion[5] * (reduit ? 0 : .66) + .75 * talon + 1.3 * relache + .45 * regard - .55 * redresse,
+    tilt: a.tilt * libres + activite * libres * .56 * Math.sin(vie * 1.51) + 1.15 * tete - .75 * lunettes + 2.15 * hanche,
+    yaw: bound(a.yaw * libres + 1.25 * turn + 2.4 * tete + 14.6 * tourne - 6.4 * hanche, -19, 19),
+    pitch: bound(a.pitch * libres + .29 * settle - .96 * mix + 1.4 * lunettes + 3.4 * fatigue - 6.6 * redresse + jeu * (menton - 1.7 * leve) * (1 - bound(redresse)), -13, 13),
+    gazeX: bound(a.gazeX * libres + coup + 1.72 * regard + jeu * regardX, -1.8, 1.8),
+    gazeY: a.gazeY * libres + jeu * (regardY - .52 * leve) + .75 * talon + 1.3 * relache + .45 * regard - .55 * redresse,
     hairL: inertia * libres + activite * .24 * Math.sin(vie * 2.3) + 1.4 * turn,
     hairR: .79 * inertia * libres + activite * .29 * Math.sin(vie * 2.11 + .5) + 1.2 * turn,
     lag: -.73 * turn - .12 * a.weight * libres,
-    marche: mix, balancier, lacet: 5.2 * turn,
+    marche: mix, balancier, lacet: 5.2 * turn - .42 * torse,
+    hancheL: l[6] * mains, hancheR: Math.max(r[6] * mains, hanche), reposHanche: hanche, ourlet,
     armL: .55 + l[0] * mains - 1.4 * mix - .16 * weight,
     armR: .25 + r[0] * mains - mix + .16 * weight,
     flexL: bound(2.4 + l[1] * mains + 7.1 * mix + 2.7 * turn, 0, 112),
     flexR: bound(2.5 + r[1] * mains + 6.7 * mix - 2.7 * turn, 0, 99),
-    wristL: bound(-.9 + l[3] * mains - 1.2 * mix + .43 * weight, -14, 14),
-    wristR: bound(.3 + r[3] * mains - 1.5 * mix - .41 * weight, -14, 14),
+    wristL: bound(-.9 + l[3] * mains - 1.2 * mix + .43 * weight + 5 * ourlet, -19, 19),
+    wristR: bound(.3 + r[3] * mains - 1.5 * mix - .41 * weight, -19, 19),
     openL: l[2] * mains, openR: r[2] * mains, foldL: l[4] * mains, foldR: r[4] * mains,
     indexL: l[5] * mains, indexR: r[5] * mains,
     lunettes, ajuste: -.9 * lunettes * pulse(q, LUNETTES[1], 3.78, LUNETTES[2], 4.23),
     blinkL: paupieres(vie), blinkR: paupieres(vie - .009),
-    stepL: pas.stepL, stepR: talon ? { ...APPUI, pitch: 22 * talon, roll: -10 * talon } : pas.stepR,
-    smile: bound(env * emotion[0] + accent * a.smile, 0, .94), inner: bound(env * emotion[1] + accent * a.inner, 0, 1.06),
-    outer: bound(env * emotion[2] + accent * a.outer, 0, 1.05), asym: bound(env * emotion[3] + accent * a.asym, -.84, .84),
-    focus: bound(env * emotion[4] + accent * a.focus), mouth: bouche,
+    stepL: ancre(pas.stepL, -1), stepR: ancre(talon ? { ...APPUI, pitch: 22 * talon, roll: -10 * talon } : pas.stepR, 1),
+    smile: bound(env * sourire + accent * a.smile, -1, 1), inner: bound(env * medial + accent * a.inner, -1.12, 1.16),
+    outer: bound(env * lateral + accent * a.outer, -1.02, 1.22), asym: bound(env * asym + accent * a.asym, -.98, .98),
+    focus: bound(env * tension + accent * a.focus), lids: bound(env * paupiere, -1, 1), levres: silence * env * levres, mouth: bouche,
   };
 }

@@ -64,11 +64,13 @@ Chaque échec affiche un message en français avec les boutons pour passer à la
 
 ## 2. Production sans bundler
 
-- Le site publié est le code source lui-même : modules ES natifs, aucun fichier généré à part le numéro de version.
+- Le JavaScript publié reste en modules ES natifs, sans compilation.
 - `tools/build.mjs` copie les fichiers dans `dist/`, calcule une empreinte, réécrit `VERSION` et `SHELL` dans `sw.js`
-  et `BUILD` dans `src/version.js`. Aucune dépendance npm n'est nécessaire pour construire.
+  et `BUILD` dans `src/version.js`. Les cinq feuilles CSS du shell sont regroupées dans l’ordre de la cascade, dans le même
+  dossier pour garder leurs URL relatives. Seuls les en-têtes documentaires `//` du code maison sont retirés (sans modifier
+  les numéros de ligne) ; licences, bibliothèques et police restent intactes. Aucune dépendance npm n'est nécessaire pour construire.
 - `tools/serve.mjs` est un serveur statique sans dépendance : on peut développer sans `npm install`.
-- Poids mesuré : 150 Ko compressés pour tout le code, les styles et la police (objectif : moins de 300 Ko).
+- Budget au build : moins de 300 Kio pour le code, les styles et la police du shell, mesurés en gzip (la police WOFF2 est déjà compressée).
 - Conséquence : ~70 petits fichiers au premier chargement. Sur HTTP/2 (GitHub Pages, Cloudflare) c'est sans effet
   mesurable, et le service worker les garde ensuite hors ligne.
 

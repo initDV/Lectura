@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
+import { VISAGES } from '../src/modules/aicha/visages.js';
 
 const racine = fileURLToPath(new URL('../', import.meta.url));
 const liste = ['aicha', 'charlotte', 'doriane', 'monique', 'prisca', 'robot_lectura', 'robot_rouge'];
@@ -34,6 +35,11 @@ it('livre exactement le même catalogue en PWA et dans les assets natifs, même 
     node('android/assets.mjs', 'assets', 'res');
     const nativeVersion = bytes('android/AndroidManifest.xml').toString().match(/android:versionName="([^"]+)"/)[1];
     expect(lire('assets/version.json').version).toBe(nativeVersion);
+    const landing = bytes('dist/app/index.html').toString(), base = `https://github.com/initDV/Lectura/releases/download/v${nativeVersion}/`;
+    expect([...landing.matchAll(/https:\/\/github\.com\/initDV\/Lectura\/releases\/download\/[^"]+/g)].map(([href]) => href)).toEqual([
+      `${base}Lectura.apk`, `${base}Lectura.apk`, `${base}Lectura-v${nativeVersion}-android.zip`,
+    ]);
+    expect(bytes('dist/src/version.js').toString()).toContain(`VERSION = '${lire('package.json').version}'`);
     expect(bytes('characters/index.json').equals(index)).toBe(true);
     const attendus = ['index.json'];
     for (const id of liste) {
@@ -49,7 +55,21 @@ it('livre exactement le même catalogue en PWA et dans les assets natifs, même 
     }
     const precache = JSON.parse(bytes('dist/sw.js').toString().match(/const SHELL = (\[[^\]]*\]);/)[1]);
     expect(precache.filter((url) => url.startsWith('./characters/')).map((url) => url.slice('./characters/'.length)).sort()).toEqual(attendus);
-    expect(precache).toContain('./src/modules/aicha/stage.js');
+    expect(precache).toEqual(expect.arrayContaining(['./src/modules/aicha/stage.js', './src/modules/aicha/visages.js', './src/modules/aicha/humeurs.js']));
+    expect(lire('assets/expressions.json').visages).toEqual(VISAGES);
+    const visages = 'src/modules/aicha/visages.js';
+    const source = bytes(visages).toString(), web = bytes(`dist/${visages}`).toString();
+    expect(web.trimStart()).toBe(source.slice(source.indexOf('export const VISAGES')));
+    expect(web.split('\n')).toHaveLength(source.split('\n').length);
+    expect(precache.filter(url => url.endsWith('.css'))).toEqual(['./src/ui/styles/app.css']);
+    for (const page of ['index.html', 'offline.html']) {
+      expect([...bytes(`dist/${page}`).toString().matchAll(/rel="stylesheet" href="([^"]+)"/g)].map(m => m[1])).toEqual(['src/ui/styles/app.css']);
+    }
+    expect(bytes('dist/src/ui/styles/app.css').toString()).toContain('../../../fonts/jetbrains-mono-latin.woff2');
+    for (const f of ['src/vendor/lamejs/lame.min.js', 'src/vendor/fixwebm/fix-webm-duration.js', 'fonts/jetbrains-mono-latin.woff2']) {
+      expect(precache).toContain(`./${f}`);
+      expect(bytes(`dist/${f}`).equals(bytes(f))).toBe(true);
+    }
     expect(readdirSync(join(dossier, 'assets'))).not.toContain('src');
   } finally {
     rmSync(dossier, { recursive: true, force: true });

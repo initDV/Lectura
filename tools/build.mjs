@@ -2,7 +2,7 @@
 // tools/build.mjs : fabrique dist/ (site statique prêt pour GitHub Pages ou Cloudflare Pages), sans dépendance.
 //   node tools/build.mjs           copie le site, numérote la version, liste les fichiers à garder hors ligne
 //   node tools/build.mjs --index   reconstruit seulement characters/index.json (après l'ajout d'un personnage)
-// Production « sans bundler » : les modules ES natifs sont servis tels quels (voir docs/DECISIONS.md).
+// Production sans bundler JS : les modules ES natifs sont servis tels quels (voir docs/DECISIONS.md).
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -13,7 +13,6 @@ import { empaqueterPersonnages, reindexerPersonnages } from './character-catalog
 const racine = join(dirname(fileURLToPath(import.meta.url)), '..'), dist = join(racine, 'dist');
 const A_COPIER = ['index.html', 'offline.html', 'manifest.webmanifest', 'sw.js', 'LICENSE', 'THIRD_PARTY_LICENSES.md', 'src', 'data', 'icons', 'fonts'];
 const PAGES_PUBLIQUES = ['app', 'privacy', 'robots.txt', 'sitemap.xml', 'google121a4ae782cb28f.html'];
-const RELEASE_ANDROID = 'v1.1.4';
 
 const catalogue = join(racine, 'characters');
 const annoncer = (ids) => console.log(`✔ characters/index.json : ${ids.length} personnages (${ids.join(', ')})`);
@@ -36,9 +35,29 @@ function construire() {
 
   // Pages de téléchargement, confidentialité et référencement : publiques, hors du précache.
   for (const f of PAGES_PUBLIQUES) cpSync(join(racine, f), join(dist, f), { recursive: true });
-  // Le dossier source /app/ reste aussi le gabarit de la distribution historique 1.0.0.
-  const telechargements = join(dist, 'app', 'index.html');
-  writeFileSync(telechargements, readFileSync(telechargements, 'utf8').replaceAll('v1.0.0', RELEASE_ANDROID));
+
+  // Même cascade et mêmes URL relatives ; un seul dictionnaire gzip pour les feuilles du shell.
+  const liensCss = /(?:^[ \t]*<link rel="stylesheet" href="(src\/ui\/styles\/[^"\n]+\.css)" \/>\r?\n)+/m;
+  const lienCss = '    <link rel="stylesheet" href="src/ui/styles/app.css" />\n';
+  const index = readFileSync(join(dist, 'index.html'), 'utf8');
+  const feuilles = index.match(liensCss)?.[0].match(/src\/ui\/styles\/[^"\n]+\.css/g);
+  if (!feuilles?.length) throw new Error('Feuilles du shell introuvables dans index.html.');
+  const css = feuilles.map(f => readFileSync(join(dist, f), 'utf8')).join('\n')
+    .replace(/^[ \t]*\/\*(?:[^*]|\*(?!\/))*\*\/[ \t]*\r?\n/gm, '');
+  writeFileSync(join(dist, 'src/ui/styles/app.css'), css);
+  for (const f of feuilles) rmSync(join(dist, f));
+  writeFileSync(join(dist, 'index.html'), index.replace(liensCss, lienCss));
+  const secours = join(dist, 'offline.html');
+  writeFileSync(secours, readFileSync(secours, 'utf8').replace(liensCss, lienCss));
+
+  // Ne pas livrer les en-têtes documentaires maison. Pas de réécriture à l’intérieur des modules.
+  // Garder les lignes (débogage), les licences et les bibliothèques tierces intactes.
+  for (const f of lister(join(dist, 'src')).filter(p => p.endsWith('.js') && !relative(dist, p).startsWith(`src${sep}vendor${sep}`))) {
+    const original = readFileSync(f, 'utf8');
+    const compact = original.replace(/^(?:[ \t]*\/\/[^\r\n]*\r?\n)+/, bloc =>
+      /licen[cs]e|copyright|SPDX|source(?:Mapping)?URL/i.test(bloc) ? bloc : bloc.replace(/[^\r\n]+/g, ''));
+    if (compact !== original) writeFileSync(f, compact);
+  }
 
   // Fichiers gardés hors ligne dès la première visite : tout sauf models/ (à la demande) et les fichiers de service.
   const fichiers = lister(dist).map((p) => relative(dist, p).split(sep).join('/'))

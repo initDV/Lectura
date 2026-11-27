@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#141218">
+  <title>Le jeu des lectrices · Lectura</title>
+  <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="atelier.css">
+</head>
+<body>
+  <main class="studio">
+    <header class="masthead">
+      <div class="wordmark"><img src="icons/favicon.svg" alt="" width="30" height="30"> Lectura <span>Atelier</span></div>
+      <span class="badge"><span></span> Gestes &amp; visages</span>
+    </header>
+
+    <div class="intro">
+      <p class="eyebrow">Étude de mouvement</p>
+      <h1>Le jeu des lectrices</h1>
+      <p>Observe le poids d’un appui et le jeu du visage, du premier regard au relâchement.</p>
+    </div>
+
+    <div class="workspace">
+      <section class="viewer" aria-label="Scène animée">
+        <div class="stage">
+          <div class="stage-label"><span id="scene-number">01</span> <span id="scene-family">Repos</span></div>
+          <button type="button" class="closeup" id="zoom" aria-pressed="false" disabled>Gros plan</button>
+          <div id="portrait" class="portrait"></div>
+          <div class="slate"><strong id="name">Aïcha</strong><span id="state">Pose repère</span></div>
+        </div>
+        <div class="transport">
+          <button type="button" class="play" id="play" disabled>
+            <svg class="icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path class="triangle" d="M8 5l11 7-11 7z"/><path class="bars" d="M7 5h3v14H7zm7 0h3v14h-3z"/></svg>
+            <span>Jouer</span>
+          </button>
+          <div class="scrub">
+            <input type="range" id="time" aria-label="Position dans le geste" min="0" max="1000" step="10" value="0" disabled>
+            <div class="time-labels"><span id="clock">0,00 / 0,00 s</span><button type="button" id="mark" aria-label="Poser au repère" disabled>Au repère</button></div>
+          </div>
+          <label class="speed"><span class="sr-only">Vitesse de lecture</span><select id="speed"><option value="1">1×</option><option value="0.5">½×</option></select></label>
+        </div>
+      </section>
+
+      <aside class="controls" aria-label="Réglages de l’atelier">
+        <div class="casting">
+          <label for="character">Lectrice</label><select id="character" disabled></select>
+          <label for="motion">Mouvements</label><select id="motion"><option value="0.6">Calme</option><option value="1" selected>Normal</option><option value="1.3">Vif</option><option value="0">Réduits</option></select>
+        </div>
+        <div class="modes" role="group" aria-label="Choisir une étude">
+          <button type="button" id="mode-gestes" aria-pressed="true">Gestes</button>
+          <button type="button" id="mode-visages" aria-pressed="false">Expressions</button>
+          <button type="button" id="mode-replique" aria-pressed="false">Réplique</button>
+        </div>
+        <div id="gestes"><h2>Répertoire</h2><div id="repertoire" class="repertoire" role="group" aria-label="Choisir une pose"></div></div>
+        <div id="visages" hidden>
+          <h2>Jeu du visage</h2>
+          <div id="palette" class="palette" role="group" aria-label="Expressions principales"></div>
+          <label class="palette-label" for="expression">Toutes les expressions</label>
+          <select id="expression"></select>
+          <label class="speech"><input id="parole" type="checkbox"> En parlant <small>(sans son)</small></label>
+        </div>
+        <div id="replique" hidden>
+          <h2>Un changement d’humeur</h2>
+          <div class="palette" role="group" aria-label="Repères dans la réplique">
+            <button type="button" data-time="1220">Inquiétude</button>
+            <button type="button" data-time="2400">Regard relevé</button>
+            <button type="button" data-time="3240">Sourire</button>
+          </div>
+        </div>
+        <div class="note">
+          <p id="direction"></p>
+          <p id="line" class="line" hidden></p>
+        </div>
+      </aside>
+    </div>
+    <footer class="footer"><p>Même animation que dans Lectura · Démo sans son ni téléchargement de voix</p><p id="message" role="status"></p></footer>
+  </main>
+  <script type="module" src="atelier.js"></script>
+</body>
+</html>

@@ -13,6 +13,11 @@ function fichiersPersonnage(dossier, id) {
   if (def.id !== id) throw new Error(`« id » vaut « ${def.id} » mais le fichier s'appelle ${fiche}`);
   if (def.rig && def.rig !== RIG_AICHA) throw new Error(`Rig inconnu pour ${id} : ${def.rig}`);
   for (const k of ['nom', 'svg', 'mouvements']) if (!def[k]) throw new Error(`${fiche} : champ « ${k} » manquant`);
+  const a = def.appuiHanche;
+  if (a !== undefined && (def.rig !== RIG_AICHA || !Array.isArray(a) || a.length < 2 || a.length > 3 ||
+      !Number.isFinite(a[0]) || a[0] <= 0 || !Number.isFinite(a[1]) || (a.length === 3 && typeof a[2] !== 'boolean'))) {
+    throw new Error(`${fiche} : appuiHanche doit contenir [x positif, y, sur veste (facultatif)]`);
+  }
   const dessins = [def.svg, def.svgScene].filter(Boolean);
   for (const nom of dessins) {
     if (typeof nom !== 'string' || !/^[a-z0-9][a-z0-9_-]*\.svg$/.test(nom)) throw new Error(`${fiche} : nom SVG invalide`);

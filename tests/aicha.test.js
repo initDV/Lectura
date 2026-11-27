@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { NOMS } from '../src/modules/expressions.js';
+import { VISAGES, faceDe } from '../src/modules/aicha/visages.js';
 import { piecesSvg } from '../src/modules/character-spec.js';
 import { autoTiming, Timeline } from '../src/modules/timeline.js';
 import { planAicha, poseAicha } from '../src/modules/aicha/motion.js';
-import { brasAicha, jambesAicha } from '../src/modules/aicha/rig.js';
+import { brasAicha, doigtAicha, jambesAicha } from '../src/modules/aicha/rig.js';
 import { dalles } from '../src/modules/aicha/decor.js';
 import { focale, HORIZON, SOL } from '../src/modules/aicha/math.js';
 import { boucheA, enveloppeAudio, planBouche, REPOS_BOUCHE } from '../src/modules/aicha/mouth.js';
@@ -21,6 +23,12 @@ const phrase = 'Aujourd’hui je te propose de partir ensemble au marché pour d
 const long = planAicha([seg(phrase, 0, 14000)], 14000);
 const suite = planAicha([seg('Je m’avance pour te montrer le chemin.', 0, 2800), seg(phrase, 2800, 24000)], 24000);
 const court = planAicha([seg('Je m’avance lentement.', 0, 2051)], 2051);
+const texteFigures = [
+  seg('Voici une piste pour éclairer notre choix.', 0, 2130, { speechEndMs: 1980 }),
+  seg('Deux options : le temps ou le détail.', 2550, 5060, { speechEndMs: 4760 }),
+  seg('Et voilà, nous avons trouvé !', 5240, 6670, { speechEndMs: 6420 }),
+];
+const figures = planAicha(texteFigures, 6670);
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
 function sampleCue(cue, u) { return 1000 * (cue.start + (cue.end - cue.start) * u); }
@@ -205,14 +213,14 @@ describe('Mise en scène au temps de la source', () => {
     expect(silence.marches).toEqual([]);
     const question = plan.cues.find(c => c.kind === 'question');
     const t = sampleCue(question, .46);
-    expect(poseAicha(plan, t).inner).toBeGreaterThan(.7);
+    expect(poseAicha(plan, t).inner).toBeGreaterThan(.55);
     const forcet = poseAicha(plan, t, { expression: 'content' });
     expect(forcet.smile).toBeGreaterThan(.5);
     expect(forcet.inner).toBeLessThan(.4);
   });
 
   it('animations réduites : pas, bassin, bras et tête immobiles, lèvres toujours lisibles', () => {
-    const fields = ({ mouth: _mouth, smile: _s, inner: _i, outer: _o, asym: _a, focus: _f, ...corps }) =>
+    const fields = ({ mouth: _mouth, smile: _s, inner: _i, outer: _o, asym: _a, focus: _f, lids: _l, levres: _v, ...corps }) =>
       Object.values(corps).map(x => x || 0);
     const neutre = fields(poseAicha(repose, 0, { reduit: true }));
     for (const scenario of [plan, long, suite]) {
@@ -225,7 +233,8 @@ describe('Mise en scène au temps de la source', () => {
   });
 
   it.each([.6, 1, 1.3])('garde les appuis, les longueurs et les angles du rig (gain %f)', (gain) => {
-    for (const direction of [plan, long, suite, court]) {
+    const neutre = poseAicha(repose, 0, { gain });
+    for (const direction of [plan, long, suite, court, figures]) {
       const levees = [];
       let dernier = null, regard = 0, avance = 0;
       for (let ms = 0; ms <= direction.duration * 1000; ms += 9) {
@@ -234,7 +243,7 @@ describe('Mise en scène au temps de la source', () => {
         const legs = jambesAicha(p), [l, r] = legs;
         if (legs.every(v => !v.ground.grounded) || legs.some(v => !v.reachable)) throw new Error(`Appui ou portée faux à ${ms} ms`);
         if (l.toe.z > r.heel.z && r.toe.z > l.heel.z && r.ankle.x - l.ankle.x < 17) throw new Error(`Chaussures qui se traversent à ${ms} ms`);
-        if (Math.max(Math.abs(l.ankle.x), Math.abs(r.ankle.x)) > 10.25) throw new Error(`Trajet de pied latéral à ${ms} ms`);
+        if (Math.max(Math.abs(l.ankle.x - neutre.stepL.x), Math.abs(r.ankle.x - neutre.stepR.x)) > 10.25 + 1e-8) throw new Error(`Trajet de pied latéral à ${ms} ms`);
         for (const [i, v] of legs.entries()) {
           if (Math.abs(distance(v.hip, v.knee) - Math.hypot(1.4, 74, 12.6)) > 1e-7 ||
               Math.abs(distance(v.knee, v.ankle) - Math.hypot(2.85, 57, 12.6)) > 1e-7) throw new Error(`Longueur fausse à ${ms} ms`);
@@ -261,11 +270,220 @@ describe('Mise en scène au temps de la source', () => {
       }
       const pas = direction.marches.flatMap(m => Array.from({ length: m.count }, (_, i) => (m.pied + i) % 2));
       expect(levees).toEqual(pas);
-      expect(avance).toBeGreaterThan(30);
+      if (pas.length) expect(avance).toBeGreaterThan(30);
+      else expect(avance).toBe(0);
     }
     const fin = poseAicha(suite, 24000, { gain });
-    expect(fin.stepL).toEqual(fin.stepR);
-    expect(fin.stepL.z).toBe(0);
+    expect([fin.stepL, fin.stepR]).toEqual([neutre.stepL, neutre.stepR]);
+  });
+});
+
+describe('Figures expressives', () => {
+  const repere = (kind, u, options) => poseAicha(figures, sampleCue(figures.cues.find(c => c.kind === kind), u), options);
+
+  it('réserve les figures au sens du texte et à la parole réelle', () => {
+    const gestes = figures.cues.filter(c => c.hand);
+    expect(gestes.map(c => c.kind)).toEqual(['illustre', 'compare', 'rejouit']);
+    expect(gestes.every((c, i) => c.end * 1000 <= texteFigures[i].speechEndMs + 120)).toBe(true);
+    expect(figures.marches).toEqual([]);
+    expect(planAicha(texteFigures, 6670, { emotions: false }).cues.some(c => gestes.some(g => g.kind === c.kind))).toBe(false);
+
+    const avecPas = planAicha([seg('Voici le chemin. Avance avec moi un instant.', 0, 3150)], 3150);
+    expect(avecPas.marches).toHaveLength(1);
+    expect(avecPas.cues.find(c => c.kind === 'illustre')?.hand).toBe(0);
+    const bref = planAicha([seg('Bravo !', 0, 330)], 330);
+    expect(bref.cues[0]).toMatchObject({ kind: 'rejouit', hand: 0 });
+    const af = planAicha([seg('Une idée.', 0, 900), seg('Bravo !', 950, 1800)], 1800);
+    expect(af.cues.filter(c => c.hand).map(c => c.kind)).toEqual(['rejouit']);
+  });
+
+  it.each([['Voici !', 'illustre'], ['Deux options !', 'compare'], ['Bravo !', 'rejouit']])(
+    'ne déclenche pas la figure de « %s » quand les émotions automatiques sont désactivées', (texte, kind) => {
+      const segment = [seg(texte, 0, 840)];
+      expect(planAicha(segment, 840).cues[0]).toMatchObject({ kind, hand: 1 });
+      expect(planAicha(segment, 840, { emotions: false }).cues[0]).toMatchObject({ kind: 'presente' });
+    },
+  );
+
+  it('présente d’une main et place l’autre vers la hanche, sur la jambe porteuse', () => {
+    const p = repere('illustre', .5);
+    expect(p.openR).toBeGreaterThan(.85);
+    expect(p.hancheL).toBe(1);
+    expect(p.weight).toBeLessThan(-2.5);
+    expect(p.torse).toBeGreaterThan(21);
+    expect(p.hip).toBeGreaterThan(0);
+    expect(p.chest).toBeLessThan(0);
+    const a = brasAicha(p, 'L'), b = brasAicha(p, 'R');
+    const doigt = (a.rot + p.wristL) * Math.PI / 180;
+    expect(a.E.x).toBeLessThan(a.W.x - 15);
+    expect(a.main.x - 12 * Math.sin(doigt)).toBeGreaterThan(-23);
+    expect(b.main.x).toBeLessThan(-44);
+  });
+
+  it('met les deux options en balance avec deux hauteurs et un regard qui mène le transfert', () => {
+    const debut = repere('compare', .37), entre = repere('compare', .57), fin = repere('compare', .72);
+    expect(debut.openL).toBeGreaterThan(debut.openR + .5);
+    expect(debut.gazeX).toBeLessThan(-.8);
+    expect(entre.gazeX).toBeGreaterThan(.7);
+    expect(entre.yaw).toBeLessThan(-6);
+    expect(Math.min(entre.openL, entre.openR)).toBeGreaterThan(.7);
+    expect(brasAicha(entre, 'R').main.y - brasAicha(entre, 'L').main.y).toBeGreaterThan(3);
+    expect(fin.weight - debut.weight).toBeGreaterThan(6);
+    expect(fin.yaw).toBeGreaterThan(9);
+    expect(fin.openR).toBeGreaterThan(fin.openL);
+  });
+
+  it('amorce une flexion puis ouvre le geste joyeux, sans faire sauter les pieds', () => {
+    const plie = repere('rejouit', .24), haut = repere('rejouit', .53), reduit = repere('rejouit', .53, { reduit: true });
+    expect(plie.settle - haut.settle).toBeGreaterThan(2);
+    expect(haut.smile).toBeGreaterThan(.8);
+    expect(haut.pitch).toBeLessThan(-7);
+    expect(Math.min(haut.openL, haut.openR)).toBeGreaterThan(.8);
+    expect(Math.abs(brasAicha(haut, 'L').main.y - brasAicha(haut, 'R').main.y)).toBeGreaterThan(5);
+    expect([haut.stepL, haut.stepR]).toEqual([plie.stepL, plie.stepR]);
+    expect([reduit.torse, reduit.ourlet, reduit.openL, reduit.openR, reduit.hancheL, reduit.hancheR]).toEqual([0, 0, 0, 0, 0, 0]);
+    expect(repere('rejouit', .53)).toEqual(haut);
+  });
+});
+
+describe('Jeu du visage', () => {
+  it('donne aux 38 expressions du catalogue un profil distinct et une valeur de repli', () => {
+    const profils = Object.values(VISAGES);
+    expect(Object.keys(VISAGES).sort()).toEqual([...NOMS].sort());
+    expect(profils.every(v => v.length === 10 && v.every(Number.isFinite))).toBe(true);
+    expect(new Set(profils.map(v => v.join())).size).toBe(profils.length);
+    expect(faceDe('ancienne-humeur')).toBe(VISAGES.neutre);
+    expect(faceDe('constructor')).toBe(VISAGES.neutre);
+  });
+
+  it('distingue joie, colère et tristesse, même sans mouvement du corps', () => {
+    const pose = (expression, reduit) => poseAicha(repose, 0, { expression, reduit });
+    const [joie, colere, tristesse] = ['content', 'colere', 'triste'].map(id => pose(id));
+    expect(joie.smile).toBeGreaterThan(.8);
+    expect(colere.focus).toBeGreaterThan(.92);
+    expect(colere.inner).toBeLessThan(-.9);
+    expect(tristesse.inner).toBeGreaterThan(.9);
+    expect(tristesse.outer).toBeLessThan(-.6);
+    expect(tristesse.smile).toBeLessThan(-.8);
+    expect(tristesse.gazeY).toBeGreaterThan(colere.gazeY + .8);
+    expect(tristesse.pitch).toBeGreaterThan(joie.pitch + 6);
+    const fixe = pose('triste', true);
+    for (const k of ['smile', 'inner', 'outer', 'asym', 'focus', 'lids', 'levres']) expect(fixe[k]).toBe(tristesse[k]);
+    expect([fixe.gazeX, fixe.gazeY, fixe.pitch]).toEqual([0, 0, 0]);
+  });
+
+  it('garde l’humeur pendant toute la phrase avec entrée et sortie douces, indépendamment des gestes', () => {
+    const segs = [seg(phrase, 0, 8100, { speechEndMs: 7440 })];
+    const humeur = { de: () => ({ expr: 'colere', force: 1 }) };
+    const direction = planAicha(segs, 8300, { humeur });
+    expect(direction.visages).toMatchObject([{ start: 0, face: 'colere', force: 1 }]);
+    expect(direction.visages[0].end).toBeCloseTo(7.56, 9);
+    const check = t => poseAicha(direction, t, { reduit: true });
+    expect(check(0).focus).toBe(0);
+    expect(check(80).focus).toBeLessThan(check(220).focus);
+    for (const c of direction.cues.filter(c => c.start > 1 && c.start < 7.2)) {
+      expect(check(1000 * c.start - 1).focus).toBe(1);
+      expect(check(1000 * c.start + 1).focus).toBe(1);
+    }
+    expect(check(7410).focus).toBeGreaterThan(check(7550).focus);
+    const avant = check(7300);
+    check(1900);
+    expect(check(7300)).toEqual(avant);
+    expect(check(7640).smile).toBeGreaterThan(-.08);
+    expect(check(8300).smile).toBe(0);
+    expect(planAicha(segs, 8300, { humeur, emotions: false }).visages).toEqual([]);
+    expect(poseAicha(direction, 1400, { expression: 'content', reduit: true }).smile).toBeGreaterThan(.8);
+  });
+
+  it('laisse P, B, M et les voyelles piloter l’ouverture en cours de réplique', () => {
+    const segs = [seg('Papa bouge la lampe.', 0, 5200, { expression: 'surpris' })];
+    const direction = planAicha(segs, 5200);
+    const parole = planBouche(segs, 'fr')[0];
+    for (const { start, end, value } of parole.phones) {
+      if (start < .3 || end > 5100) continue;
+      const p = poseAicha(direction, (start + end) / 2, { bouche: value });
+      expect(p.mouth).toBe(value);
+      expect(p.levres).toBe(0);
+    }
+    expect(poseAicha(repose, 0, { expression: 'surpris' }).levres).toBeGreaterThan(3);
+  });
+});
+
+describe('Main articulée en appui', () => {
+  const attend = (attente, gain) => poseAicha(repose, 0, { attente, gain });
+  const tourne = ({ x, y }, a, pivot = 0) => {
+    const c = Math.cos(a * Math.PI / 180), s = Math.sin(a * Math.PI / 180);
+    return { x: x * c - (y - pivot) * s, y: x * s + (y - pivot) * c + pivot, z: 0 };
+  };
+
+  const repere = figures.cues.find(c => c.kind === 'illustre');
+  const surScene = (p, side, a, { x, y }) => {
+    const local = tourne({ x: x * a.largeur, y }, a.rot + p['wrist' + side]);
+    const buste = tourne({ x: (side === 'L' ? 1 : -1) * (a.main.x + local.x), y: a.main.y + local.y }, p.chest, 72);
+    const bassin = tourne({ x: buste.x + p.buste, y: buste.y + .8 * p.settle }, p.hip, 77);
+    return { x: bassin.x + p.weight, y: bassin.y + p.settle, z: 0 };
+  };
+
+  it.each([.6, 1, 1.3])('garde la paume sur la taille des deux côtés (gain %f)', gain => {
+    const echantillons = [
+      ...[13400, 14000, 15150].map(t => [attend(t, gain), 'R']),
+      ...[.37, .49, .65].map(u => [poseAicha(figures, sampleCue(repere, u), { gain }), 'L']),
+    ];
+    for (const [p, side] of echantillons) {
+      const a = brasAicha(p, side), gauche = side === 'L';
+      const tissu = jambesAicha(p)[gauche ? 0 : 1].map({ x: gauche ? -19.3 : 19.3, y: 79, z: 0 });
+      const paume = surScene(p, side, a, { x: 0, y: 5.7 });
+      expect(distance(tissu, paume)).toBeLessThan(.001);
+      expect(a.prise).toBe(1);
+      expect(a.rot + p['wrist' + side] - a.avantBras).toBeGreaterThan(10);
+      const pouce = surScene(p, side, a, doigtAicha(a, 4)[3]);
+      expect(pouce.y).toBeLessThan(paume.y - 2);
+      for (let i = 0; i < 4; i++) {
+        const doigt = doigtAicha(a, i), base = surScene(p, side, a, doigt[0]), bout = surScene(p, side, a, doigt[3]);
+        expect(bout.y - base.y).toBeGreaterThan(Math.abs(bout.x - base.x));
+      }
+      expect(distance(a.S, a.E)).toBeCloseTo(Math.hypot(6.7, 35.5), 8);
+      expect(distance(a.E, a.W)).toBeCloseTo(Math.hypot(3.9, 31.2), 8);
+    }
+  });
+
+  it.each([.6, 1, 1.3])('ne saute pas entre l’approche, la prise et le relâchement (gain %f)', gain => {
+    const parcours = [
+      ['R', 12000, 17000, t => attend(t, gain)],
+      ['L', sampleCue(repere, 0), sampleCue(repere, 1), t => poseAicha(figures, t, { gain })],
+    ];
+    for (const [side, debut, fin, pose] of parcours) {
+      let precedent;
+      for (let t = debut; t <= fin; t += 5) {
+        const p = pose(t), a = brasAicha(p, side);
+        const bouts = Array.from({ length: 5 }, (_, i) => surScene(p, side, a, doigtAicha(a, i)[3]));
+        if (precedent) expect(Math.max(...bouts.map((b, i) => distance(b, precedent[i])))).toBeLessThan(2.5);
+        precedent = bouts;
+      }
+    }
+  });
+
+  it('fléchit chaque doigt après avoir posé le poignet, sans raccourcir les os', () => {
+    const p = attend(14000, 1);
+    const arrivé = brasAicha({ ...p, hancheR: .56 }, 'R'), établi = brasAicha(p, 'R');
+    expect(distance(arrivé.main, établi.main)).toBeLessThan(.001);
+    expect(établi.prise - arrivé.prise).toBeGreaterThan(.14);
+    const [auriculaire, annulaire, majeur, index] = [0, 1, 2, 3].map(i => {
+      const [a, b, , d] = doigtAicha(établi, i);
+      return (d.z - a.z) / distance(a, b);
+    });
+    expect(auriculaire).toBeGreaterThan(annulaire);
+    expect(annulaire).toBeGreaterThan(majeur);
+    expect(majeur).toBeGreaterThan(index);
+    expect(brasAicha(p, 'L').prise).toBeGreaterThan(.18);
+    expect(brasAicha(p, 'L').appui).toBe(0);
+    const ouvert = { ouvert: 1, index: 0, prise: 0 };
+    for (let i = 0; i < 5; i++) {
+      const a = doigtAicha(ouvert, i), b = doigtAicha(établi, i), c = doigtAicha(arrivé, i);
+      for (let j = 1; j < 4; j++) expect(distance(a[j], a[j - 1])).toBeCloseTo(distance(b[j], b[j - 1]), 9);
+      expect(b[3].y).toBeLessThan(c[3].y);
+      expect(b[3].z).toBeGreaterThan(c[3].z);
+    }
   });
 });
 
@@ -298,16 +516,50 @@ describe('Vie au repos', () => {
     }
   });
 
-  it('ne lève pas la main vers une monture absente, mais garde les autres microgestes', () => {
-    for (let ms = 2620; ms <= 4880; ms += 20) {
-      const p = attend(ms, { monture: false });
+  it('effleure le tissu plutôt que de chercher des lunettes absentes', () => {
+    let precedent;
+    for (let ms = 2620; ms <= 4880; ms += 10) {
+      const p = attend(ms, { monture: false }), bras = brasAicha(p, 'L');
       expect(p.lunettes).toBe(0);
       expect(Math.abs(p.ajuste)).toBe(0);
-      expect(brasAicha(p, 'L').main.y).toBeGreaterThan(99);
+      expect(bras.main.y).toBeGreaterThan(83);
+      expect(distance(bras.S, bras.E)).toBeCloseTo(Math.hypot(6.7, 35.5), 8);
+      expect(distance(bras.E, bras.W)).toBeCloseTo(Math.hypot(3.9, 31.2), 8);
+      if (precedent) expect(distance(bras.main, precedent)).toBeLessThan(1);
+      precedent = bras.main;
     }
-    for (const ms of [1190, 7020, 10420]) {
-      expect(attend(ms, { monture: false })).toEqual(attend(ms));
-    }
+    const contact = attend(3780, { monture: false });
+    expect(contact.ourlet).toBeGreaterThan(.8);
+    expect(brasAicha(contact, 'L').main.y).toBeLessThan(92);
+    expect(attend(3780).ourlet).toBe(0);
+    for (const ms of [1190, 7020, 10420]) expect(attend(ms, { monture: false })).toEqual(attend(ms));
+  });
+
+  it.each([.6, 1, 1.3])('prend une pose de repos sur un appui décalé (gain %f)', (gain) => {
+    const neutre = attend(12000, { gain }), etabli = attend(14000, { gain });
+    expect(etabli.hancheR).toBeGreaterThan(.78);
+    expect(etabli.weight - neutre.weight).toBeGreaterThan(3);
+    expect(etabli.hip).toBeLessThan(-1.5);
+    expect(etabli.chest).toBeGreaterThan(1.6);
+    expect(etabli.torse).toBeLessThan(-10);
+    expect(brasAicha(etabli, 'R').main.y).toBeLessThan(82);
+    for (const s of ['L', 'R']) expect(etabli['step' + s]).toEqual(neutre['step' + s]);
+    const [l, r] = jambesAicha(etabli);
+    expect(r.ankle.z - l.ankle.z).toBeGreaterThan(6);
+    expect(l.heel.y).toBe(SOL);
+    expect(r.toe.y).toBe(SOL);
+    expect(l.reachable && r.reachable).toBe(true);
+    expect(attend(17000, { gain }).hancheR).toBe(0);
+  });
+
+  it('n’amorce ni la main sur la hanche ni l’ourlet si une syllabe ou un pas arrive avant la fin', () => {
+    const tenue = planAicha([seg('Oui.', 4870, 4890)], 18000);
+    const appui = planAicha([seg('On reprend.', 17200, 18400)], 18400);
+    const marche = planAicha([seg('Avance vers le bord.', 15800, 18000)], 18100);
+    expect(poseAicha(tenue, 3780, { monture: false }).ourlet).toBe(0);
+    expect(poseAicha(appui, 14000).hancheR).toBe(0);
+    expect(poseAicha({ ...marche, paroles: [], reprises: [] }, 14000).hancheR).toBe(0);
+    expect(attend(14000, { reduit: true }).hancheR).toBe(0);
   });
 
   it.each([.6, 1, 1.3])('guide l’index à la monture, sans étirement ni saut (gain %f)', (gain) => {
@@ -327,8 +579,9 @@ describe('Vie au repos', () => {
     for (const ms of [3520, 3780, 3930]) {
       const p = { ...attend(ms, { gain }), neck: 0, tilt: 0, yaw: 0, pitch: 0, breath: 0 };
       const a = brasAicha(p, 'L'), r = (a.rot + p.wristL) * Math.PI / 180;
-      expect(a.main.x + 3.569 * Math.cos(r) - 13.489 * Math.sin(r)).toBeCloseTo(-10.5, 8);
-      expect(a.main.y + 3.569 * Math.sin(r) + 13.489 * Math.cos(r)).toBeCloseTo(-6.12 + p.ajuste, 8);
+      const { x, y } = doigtAicha(a, 3)[3];
+      expect(a.main.x + a.largeur * x * Math.cos(r) - y * Math.sin(r)).toBeCloseTo(-10.5, 8);
+      expect(a.main.y + a.largeur * x * Math.sin(r) + y * Math.cos(r)).toBeCloseTo(-6.12 + p.ajuste, 8);
     }
   });
 
@@ -369,7 +622,7 @@ describe('Vie au repos', () => {
     expect(p(24400).stepR).toEqual(haut.stepR);
 
     const [appui, leve] = jambesAicha(depart);
-    const pointeInterieure = { x: 3.5, y: SOL, z: leve.toe.z };
+    const pointeInterieure = { x: leve.toe.x - 6.75, y: SOL, z: leve.toe.z };
     const talonHaut = jambesAicha(haut)[1].heel.y;
     expect(talonHaut).toBeLessThan(SOL - 5);
     expect(jambesAicha(p(6420))[1].heel.y).toBeGreaterThan(talonHaut);
@@ -509,7 +762,7 @@ describe('Vie au repos', () => {
     for (const direction of [motAvant, motApres, marche]) {
       for (const ms of [5990, 6420, 7000, 7590]) {
         const p = poseAicha(direction, ms), ref = poseAicha({ ...direction, paroles: [], marches: [], reprises: [] }, ms);
-        expect(p.stepR).toEqual(p.stepL);
+        expect(p.stepR).toEqual(attend(0).stepR);
         expect(p.weight).toBeGreaterThan(ref.weight);
         expect(p.gazeY).toBeLessThanOrEqual(ref.gazeY);
       }
@@ -526,7 +779,7 @@ describe('Vie au repos', () => {
     poseAicha(silence, 2000);
     poseAicha(silence, 12000);
     expect(poseAicha(silence, 7000)).toEqual(repere);
-    expect(attend(7000, { gain: 0 }).stepR).toEqual(attend(0).stepR);
+    expect(attend(7000, { gain: 0 }).stepR).toEqual(attend(0, { gain: 0 }).stepR);
   });
 
   it('peut reprendre vie en fin sans bouger le décor, sauf en mouvements réduits', () => {
@@ -571,8 +824,8 @@ describe('Démarche frontale', () => {
       return r.ankle.x - l.ankle.x;
     };
     const depart = largeur(0);
-    expect(largeur(.49)).toBeGreaterThan(.62 * depart);
-    expect(largeur(.49)).toBeLessThan(.73 * depart);
+    expect(depart - largeur(.49)).toBeGreaterThan(5.5);
+    expect(depart - largeur(.49)).toBeLessThan(8);
     expect(largeur(1)).toBe(depart);
   });
 
@@ -625,10 +878,11 @@ describe('Défilement en profondeur', () => {
     const [appui] = jambesAicha(p);
     expect(p.avance).toBeGreaterThan(0);
     expect(appui.ground.grounded).toBe(true);
-    expect(appui.ankle.z + p.avance).toBeCloseTo(0, 9);
+    const ancre = poseAicha(long, sampleCue(m, 0)).stepL.z;
+    expect(appui.ankle.z + p.avance).toBeCloseTo(ancre, 9);
     const grille = [...dalles(440, p.avance)];
     const dalle = grille.find(r => r.n === 0);
-    expect(dalle.y).toBeCloseTo(HORIZON + (appui.ankle.y + 15 - HORIZON) * focale(appui.ankle.z), 9);
+    expect(dalle.y).toBeCloseTo(HORIZON + (appui.ankle.y + 15 - HORIZON) * focale(appui.ankle.z - ancre), 9);
     expect(dalle.y).toBeLessThan(SOL);
     const ancienne = new Map([...dalles(440, 0)].map(r => [r.n, r.y]));
     const proche = ancienne.get(0) - dalle.y, lointaine = ancienne.get(-5) - grille.find(r => r.n === -5).y;

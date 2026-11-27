@@ -7,6 +7,7 @@ import fr from '../src/i18n/fr.js';
 import en from '../src/i18n/en.js';
 import { DEFAUTS } from '../src/modules/storage.js';
 import { EXPRESSIONS, NEUTRE } from '../src/modules/expressions.js';
+import { VISAGES } from '../src/modules/aicha/visages.js';
 import { DIGITS, SEGMENTS, DIGIT_X, DIGIT_Y } from '../src/modules/robot-motion.js';
 import { THEMES } from '../src/modules/themes.js';
 import * as phonemes from '../src/modules/voice/g2p_lexique.js';
@@ -117,7 +118,7 @@ await Promise.all([
   })),
   put('robot-stage.json', { digits: DIGITS, segments: SEGMENTS, digitX: DIGIT_X, digitY: DIGIT_Y }),
   put('defaults.json', defaults),
-  put('themes.json', { app: themes, terminal: THEMES }), put('expressions.json', { neutral: NEUTRE, expressions: EXPRESSIONS }),
+  put('themes.json', { app: themes, terminal: THEMES }), put('expressions.json', { neutral: NEUTRE, expressions: EXPRESSIONS, visages: VISAGES }),
   put('g2p.json', { ...phonemes, CLITIQUES: [...phonemes.CLITIQUES], TIRET: [...phonemes.TIRET] }),
   put('hd-voices.json', { voices }), put('icons.json', await table('src/ui/icons.js', 'TRACES')),
   put('version.json', { version, native: process.env.LECTURA_BUILD || 'android', base: '39e429522cc715aeda6ce0db9d3eb5690ba1f2fd' }),
