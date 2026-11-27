@@ -111,7 +111,7 @@ final class ExportUi implements AutoCloseable {
         long timestamp=lastFrame<0?0:index*1_000_000/MediaExport.FPS;
         try{
             Picture picture=r.buffer();if(picture==null)return;
-            a.stage.recordExport(picture,r.w,r.h,sceneTime);r.offer(picture,timestamp);lastFrame=index;
+            a.stage.recordVideoFrame(picture,r.w,r.h,sceneTime);r.offer(picture,timestamp);lastFrame=index;
         }catch(RuntimeException|OutOfMemoryError e){a.handler.post(()->failed(r,e));}
     }
     void naturalEnd(){if(active()&&origin>0){MediaExport.Recording r=recording;a.handler.postDelayed(()->{if(recording==r)stop();},600);}}

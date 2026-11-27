@@ -125,8 +125,8 @@ final class VideoQualityChecks {
                 int sample=i;
                 d.main(()->{
                     a.stage.updatePose(1100);
-                    long start=System.nanoTime();a.stage.exportDraw(canvas,w,h,false,1100);
-                    long recorded=System.nanoTime();a.stage.recordExport(picture,w,h,1100);long end=System.nanoTime();
+                    long start=System.nanoTime();a.stage.drawVideoFrame(canvas,w,h,1100);
+                    long recorded=System.nanoTime();a.stage.recordVideoFrame(picture,w,h,1100);long end=System.nanoTime();
                     if(sample>=0){direct[sample]=recorded-start;commands[sample]=end-recorded;}
                     if(sample==direct.length-1){
                         // The queued picture must not see later mutations of the pose or terminal.
@@ -143,7 +143,12 @@ final class VideoQualityChecks {
                     require(different*200L<=expected.length,"Commandes UHD différentes du dessin direct : "+different+" / "+expected.length);
                 }
             }
-            require(b.getPixel(w-100,h/2)!=b.getPixel(20,h/2),"Rendu UHD vide");
+            SceneLayout f=a.stage.screenLayout();float scale=Math.min(w/f.width,h/f.height);
+            float x=(w-f.width*scale)/2,y=(h-f.height*scale)/2;
+            int background=a.stage.background|0xff000000;
+            require(b.getPixel((int)(x+(f.width-11)*scale),(int)(y+70*scale))==Refs.color(a.stage.term,"bg"),"Terminal à droite dans le rendu UHD");
+            if(x>1)require(b.getPixel(0,h/2)==background&&b.getPixel(w-1,h/2)==background,"Marges UHD latérales");
+            if(y>1)require(b.getPixel(w/2,0)==background&&b.getPixel(w/2,h-1)==background,"Marges UHD verticales");
             try(FileOutputStream out=new FileOutputStream(file)){require(b.compress(Bitmap.CompressFormat.PNG,100,out),"Capture du rendu UHD");}
             return String.format(Locale.ROOT,"médianes sur 6 images : dessin direct UI %.2f ms, commandes UI %.2f ms, raster hors UI %.2f ms",
                 medianMillis(direct),medianMillis(commands),medianMillis(raster));

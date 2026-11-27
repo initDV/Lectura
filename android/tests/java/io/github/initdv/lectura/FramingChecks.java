@@ -6,6 +6,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.Picture;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -147,12 +148,12 @@ final class FramingChecks {
             });
             d.waitFor("Retour en portrait",()->a.root.getWidth()<a.root.getHeight()&&a.stage.screenLayout().closePortrait,10000);
             return "1080×2400 à 288 dpi : terminal à droite, œil et défilement, cinq curseurs, "+palmPixels[0]
-                +" pixels de la main animée devant le terminal, persistance, réinitialisation, paysage et exports stables";
+                +" pixels de la main animée devant le terminal, persistance, réinitialisation, PNG inchangé et vidéo fidèle en 9:16 et 16:9";
         }finally{d.main(a::finish);}
     }
 
     private static boolean near(float a,float b){return Math.abs(a-b)<.025f;}
-    private static void set(MainActivity a,Control control,int value){
+    static void set(MainActivity a,Control control,int value){
         SeekBar slider=DeviceChecks.named(a.modal,a.t(LABEL+control.key),SeekBar.class);
         require(slider!=null,"Curseur absent : "+control.key);
         Bundle args=new Bundle();args.putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,value);
@@ -167,7 +168,7 @@ final class FramingChecks {
             // Freeze an actual right-arm presentation gesture, not a separate hand prop.
             AichaMotion.Cue cue=r.aicha.plan.cues.stream().filter(c->c.kind.equals("presente")&&c.side==1).findFirst().orElseThrow();
             r.seek(1000*(cue.start+.50*(cue.end-cue.start)));stage.updatePose(0);
-            Bitmap portrait=export(stage,360,640),landscape=export(stage,640,360);
+            Bitmap portrait=png(stage,360,640),landscape=png(stage,640,360);
             try{
                 set(a,Control.WIDTH,63);
                 SceneLayout wide=stage.screenLayout();
@@ -181,7 +182,8 @@ final class FramingChecks {
                 float[] box=stage.artwork.box;
                 require(near(f.actorX+(box[2]*f.actorScale-old.width*.24f)/2,old.actorX+box[2]*old.actorScale/2)
                     &&near(f.actorY+(box[3]*f.actorScale+old.height*.14f)/2,old.actorY+box[3]*old.actorScale/2),"Déplacements horizontal et vertical");
-                sameExport(stage,portrait);sameExport(stage,landscape);
+                samePng(stage,portrait);samePng(stage,landscape);
+                videoMatchesPreview(stage,360,640);videoMatchesPreview(stage,640,360);
                 JSONObject saved=new Library(a.refs).settings.optJSONObject(SceneLayout.PREFERENCE);
                 require(saved!=null&&saved.optInt(Control.WIDTH.key)==63&&saved.optInt(Control.HEIGHT.key)==88&&saved.optInt(Control.SIZE.key)==118
                     &&saved.optInt(Control.X.key)==12&&saved.optInt(Control.Y.key)==-7,"Cadrage conservé dans le stockage local");
@@ -192,14 +194,29 @@ final class FramingChecks {
     private static boolean sameActor(SceneLayout a,SceneLayout b){
         return near(a.actorScale,b.actorScale)&&near(a.actorX,b.actorX)&&near(a.actorY,b.actorY);
     }
-    private static Bitmap export(Stage stage,int width,int height){
+    private static Bitmap png(Stage stage,int width,int height){
         Bitmap b=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);
-        stage.exportDraw(new Canvas(b),width,height,true,0);return b;
+        stage.drawPng(new Canvas(b),width,height);return b;
     }
-    private static void sameExport(Stage stage,Bitmap before){
-        Bitmap after=export(stage,before.getWidth(),before.getHeight());
-        try{require(before.sameAs(after),"Le cadrage de l’écran ne doit pas changer le rendu de l’export");}
+    private static void samePng(Stage stage,Bitmap before){
+        Bitmap after=png(stage,before.getWidth(),before.getHeight());
+        try{require(before.sameAs(after),"Le cadrage propre au PNG reste inchangé");}
         finally{after.recycle();}
+    }
+    private static void videoMatchesPreview(Stage stage,int w,int h){
+        Bitmap expected=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888),actual=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
+        try{
+            SceneLayout scene=stage.screenLayout();float scale=Math.min(w/scene.width,h/scene.height);
+            Canvas preview=new Canvas(expected);preview.drawColor(stage.background|0xff000000);
+            preview.translate((w-scene.width*scale)/2,(h-scene.height*scale)/2);preview.scale(scale,scale);
+            stage.drawScreen(preview,0);
+            Picture picture=new Picture();stage.recordVideoFrame(picture,w,h,0);new Canvas(actual).drawPicture(picture);
+            int sampled=0,different=0;
+            for(int y=2;y<h;y+=5)for(int x=2;x<w;x+=5){
+                sampled++;if(colorDistance(expected.getPixel(x,y),actual.getPixel(x,y))>3)different++;
+            }
+            require(different*200L<=sampled,"La vidéo doit reprendre le cadre et le terminal affichés : "+w+"×"+h+", "+different+" / "+sampled+" pixels");
+        }finally{expected.recycle();actual.recycle();}
     }
 
     private static void scrollTerminal(MainActivity a){
@@ -213,6 +230,9 @@ final class FramingChecks {
             require(swipe(stage,a.ui.f(f.width-30),a.ui.f(y),a.ui.f(y+70)),"Glisser dans un terminal avec du texte hors cadre");
             scrolled=screen(stage);
             require(!scrolled.sameAs(original),"Le texte doit défiler dans la fenêtre du terminal");
+            videoMatchesPreview(stage,360,640);
+            stage.mask(true);
+            try{videoMatchesPreview(stage,360,640);}finally{stage.mask(false);}
         }finally{original.recycle();if(outside!=null)outside.recycle();if(scrolled!=null)scrolled.recycle();}
     }
     private static Bitmap screen(Stage stage){

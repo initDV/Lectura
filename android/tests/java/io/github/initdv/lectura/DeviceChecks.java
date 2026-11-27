@@ -9,10 +9,12 @@ import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Picture;
 import android.view.KeyEvent;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
+import android.media.MediaMetadataRetriever;
 import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.Bundle;
@@ -525,7 +527,7 @@ public final class DeviceChecks extends Instrumentation {
                 Svg.Node clock=a.stage.sprite.svg.get("robot-clock");require(!clock.hidden&&clock.alpha>.97,"Horloge visible au pointage");
                 require(a.stage.sprite.svg.get("robot-clock-digits").children.size()==24,"Chiffres de 08:30");
                 Bitmap image=Bitmap.createBitmap(720,1280,Bitmap.Config.ARGB_8888);
-                a.stage.exportDraw(new Canvas(image),720,1280,true,100);
+                a.stage.drawPng(new Canvas(image),720,1280);
                 int green=0;for(int y=950;y<1230;y++)for(int x=0;x<274;x++)if(image.getPixel(x,y)==0xff83edbd)green++;
                 require(green>=30,"Chiffres absents du rendu d’export : "+green);
                 try(var file=Files.newOutputStream(new File(dir,"android-robot-heure.png").toPath())){image.compress(Bitmap.CompressFormat.PNG,100,file);}finally{image.recycle();}
@@ -537,7 +539,7 @@ public final class DeviceChecks extends Instrumentation {
                 a.startPlaying();
             });
             waitFor("Fin naturelle après le salut au ralenti",()->a.reading.ended,5000);
-            main(()->{a.db.set("formatVideo","9:16");a.reading.speed(1);a.record();});
+            SceneLayout[] preview={null};main(()->{preview[0]=a.stage.screenLayout();a.db.set("formatVideo","9:16");a.reading.speed(1);a.record();});
             waitFor("Export du robot jusqu’au salut",()->a.exports.capturing(),12000);
             try{
                 waitFor("Fin automatique de la vidéo",()->a.modal!=null&&action(a.modal,a.t("dl.bouton.telecharger"))!=null,28000);
@@ -566,15 +568,17 @@ public final class DeviceChecks extends Instrumentation {
                     require(mixed.duration()>=6360&&pcmPeak(mixed,500,4400)>5000&&pcmPeak(mixed,5500,6300)<180,
                         "La vidéo doit garder la piste originale et la fin muette du salut : "+mixed.duration()+" ms");
                 }
-                try(android.media.MediaMetadataRetriever frames=new android.media.MediaMetadataRetriever()){
+                try(MediaMetadataRetriever frames=new MediaMetadataRetriever()){
                     frames.setDataSource(kept.file.getPath());
-                    var bitmapParams=new android.media.MediaMetadataRetriever.BitmapParams();
+                    var bitmapParams=new MediaMetadataRetriever.BitmapParams();
                     bitmapParams.setPreferredConfig(Bitmap.Config.ARGB_8888);
-                    Bitmap begin=frames.getFrameAtTime(5310000,android.media.MediaMetadataRetriever.OPTION_CLOSEST,bitmapParams);
-                    Bitmap bow=frames.getFrameAtTime(5750000,android.media.MediaMetadataRetriever.OPTION_CLOSEST,bitmapParams);
+                    Bitmap begin=frames.getFrameAtTime(5310000,MediaMetadataRetriever.OPTION_CLOSEST,bitmapParams);
+                    Bitmap bow=frames.getFrameAtTime(5750000,MediaMetadataRetriever.OPTION_CLOSEST,bitmapParams);
                     require(begin!=null&&bow!=null&&begin.getHeight()==1280&&begin.getWidth()==720,"Images MP4 du salut portrait");
                     try{
-                        int changes=0;for(int y=880;y<1270;y+=2)for(int x=0;x<269;x+=2){
+                        SceneLayout f=preview[0];float scale=Math.min(begin.getWidth()/f.width,begin.getHeight()/f.height);
+                        int leftOfTerminal=Math.round((begin.getWidth()-scale*f.width)/2+scale*f.termX);
+                        int changes=0;for(int y=0;y<begin.getHeight();y+=2)for(int x=0;x<leftOfTerminal;x+=2){
                             int first=begin.getPixel(x,y),next=bow.getPixel(x,y);
                             if(Math.abs((first>>16&255)-(next>>16&255))+Math.abs((first>>8&255)-(next>>8&255))>45)changes++;
                         }
@@ -1000,10 +1004,12 @@ public final class DeviceChecks extends Instrumentation {
         waitFor("Retour depuis le récepteur",()->a.isForeground,6000);
     }
     private String recordFromScene(Context ctx)throws Exception {
-        MainActivity a=open(ctx);File wave=tone(ctx,6);File dir=wave.getParentFile();String title="verification-lectura-"+System.nanoTime();
+        MainActivity a=open(ctx);File wave=tone(ctx,8);File dir=wave.getParentFile();String title="verification-lectura-"+System.nanoTime();
+        JSONObject saved=a.db.settings.optJSONObject(SceneLayout.PREFERENCE);
         try{
             main(()->{
-                Project p=new Project(a.db.settings);p.character="monique";a.open(p);a.project.title=title;a.stage.aicha.reduced=false;
+                a.db.set(SceneLayout.PREFERENCE,new JSONObject().put("largeur",40).put("taille",115).put("horizontal",-18).put("vertical",20));
+                Project p=new Project(a.db.settings);p.character="aicha";a.open(p);a.project.title=title;a.stage.aicha.reduced=false;
                 a.scene.edit.setText("Bonjour, ceci est une leçon. Deuxième phrase. Dernière phrase.");a.importAudio(Uri.fromFile(wave),"tonalité.wav");
             });
             waitFor("Import pour enregistrement",()->a.project.fileAudio,10000);
@@ -1015,9 +1021,16 @@ public final class DeviceChecks extends Instrumentation {
             click(a,"Enregistrer la vidéo");
             waitFor("Démarrage enregistrement de la scène",()->a.exports.capturing()&&a.reading.playing,15000);
             AtomicReference<MediaExport.Recording> session=new AtomicReference<>();
-            Thread.sleep(350);main(()->{session.set(a.exports.recording);a.project.speed=1.25f;a.adjustRate();});
+            SceneLayout[] layouts=new SceneLayout[2];
+            Thread.sleep(650);main(()->{session.set(a.exports.recording);layouts[0]=a.stage.screenLayout();a.project.speed=1.25f;a.adjustRate();});
+            click(a,"Cadrage de la scène");
+            main(()->{
+                FramingChecks.set(a,SceneLayout.Control.WIDTH,68);FramingChecks.set(a,SceneLayout.Control.SIZE,133);
+                layouts[1]=a.stage.screenLayout();
+                require(a.exports.recording==session.get()&&a.exports.capturing()&&a.reading.playing,"Les changements doivent être pris sans arrêter la vidéo");
+            });
             int draws=ScenePacingChecks.countDraws(this,a,1200);
-            click(a,"Menu");click(a,"Arrêter l’enregistrement");
+            click(a,"Fermer");click(a,"Menu");click(a,"Arrêter l’enregistrement");
             waitFor("Dialogue Télécharger",()->a.modal!=null&&action(a.modal,"Télécharger")!=null,15000);
             click(a,"Télécharger");
             Movies lib=new Movies(ctx);Movies.Entry movie=null;
@@ -1033,6 +1046,7 @@ public final class DeviceChecks extends Instrumentation {
                     short[] audio=new short[4096];int n=decoded.read(decoded.rate/2,audio,audio.length),peak=0;
                     for(int i=0;i<n;i++)peak=Math.max(peak,Math.abs((int)audio[i]));require(peak>5000,"Le muet d’écoute a supprimé le son de l’export");
                 }
+                recordedFraming(movie.file,layouts[0],layouts[1]);
                 Files.copy(movie.file.toPath(),new File(dir,"lectura-scene-portrait.mp4").toPath(),StandardCopyOption.REPLACE_EXISTING);
                 click(a,"Menu");click(a,"Mes vidéos");click(a,"Lire");
                 waitFor("Lecture depuis Mes vidéos",()->{
@@ -1041,14 +1055,37 @@ public final class DeviceChecks extends Instrumentation {
                 main(a::dismiss);
             }finally{lib.delete(movie);}
             require(draws>3&&!session.get().timings().isEmpty(),"Pas de progression pendant l’enregistrement HD");
-            return "Menu 16:9 / 9:16, Monique animée, MP4 portrait sonore téléchargé et relu dans Mes vidéos ; "
+            return "Aïcha en MP4 HD portrait avec son : cadre initial et réglage du terminal en cours de prise vérifiés dans deux images décodées, sans voyant REC ; téléchargement et Mes vidéos ; "
                 +draws+" dessins fenêtre en 1,2 s ; "+session.get().timings();
         }finally{
-            wave.delete();main(()->{a.db.audio(a.project).delete();a.finish();});
+            wave.delete();main(()->{a.db.set(SceneLayout.PREFERENCE,saved);a.db.audio(a.project).delete();a.finish();});
             var catalog=android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY);
             ctx.getContentResolver().delete(catalog,android.provider.MediaStore.MediaColumns.DISPLAY_NAME+" = ?",new String[]{title+".mp4"});
         }
     }
+    private static void recordedFraming(File movie,SceneLayout before,SceneLayout after)throws Exception{
+        Bitmap first=null,last=null;
+        try(MediaMetadataRetriever frames=new MediaMetadataRetriever()){
+            frames.setDataSource(movie.getPath());
+            long duration=Long.parseLong(frames.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));
+            var params=new MediaMetadataRetriever.BitmapParams();params.setPreferredConfig(Bitmap.Config.ARGB_8888);
+            first=frames.getFrameAtTime(0,MediaMetadataRetriever.OPTION_CLOSEST_SYNC,params);
+            last=frames.getFrameAtTime(Math.max(0,duration-300)*1000,MediaMetadataRetriever.OPTION_CLOSEST,params);
+            require(first!=null&&last!=null,"Deux images décodées du cadrage en direct");
+            float initialDot=before.termX+1+(before.termWidth<180?12:19.5f);
+            float movedDot=after.termX+1+(after.termWidth<180?12:19.5f);
+            int initial=videoPixel(first,before,initialDot,27.5f),changed=videoPixel(last,after,movedDot,27.5f);
+            require(videoRed(initial)&&videoRed(changed)&&!videoRed(videoPixel(first,after,movedDot,27.5f))
+                &&!videoRed(videoPixel(last,before,initialDot,27.5f)),"Le terminal doit changer de largeur dans le fichier : "
+                +Integer.toHexString(initial)+" puis "+Integer.toHexString(changed));
+            require(!videoRed(videoPixel(first,before,65,23))&&!videoRed(videoPixel(last,after,65,23)),"Le voyant REC ne doit pas être filmé");
+        }finally{if(first!=null)first.recycle();if(last!=null)last.recycle();}
+    }
+    private static int videoPixel(Bitmap image,SceneLayout f,float x,float y){
+        float scale=Math.min(image.getWidth()/f.width,image.getHeight()/f.height);
+        return image.getPixel(Math.round(image.getWidth()/2f+(x-f.width/2)*scale),Math.round(image.getHeight()/2f+(y-f.height/2)*scale));
+    }
+    private static boolean videoRed(int pixel){return Color.red(pixel)>175&&Color.red(pixel)-Color.green(pixel)>70&&Color.red(pixel)-Color.blue(pixel)>70;}
     private static android.widget.VideoView video(View root){
         if(root instanceof android.widget.VideoView)return (android.widget.VideoView)root;
         if(root instanceof ViewGroup){ViewGroup group=(ViewGroup)root;for(int i=0;i<group.getChildCount();i++){
@@ -1105,7 +1142,7 @@ public final class DeviceChecks extends Instrumentation {
                 while((buffer=r.buffer())==null){if(done.isDone())return done.get();require(System.nanoTime()<deadline,"Encodage bloqué : "+ext);Thread.sleep(3);}
                 final int frame=i;Picture picture=buffer;
                 main(()->{a.stage.sprite.tick(1000+frame*1000./30);a.reading.terminal.shown=a.reading.text.length()*frame/47;
-                    a.stage.recordExport(picture,w,h,frame*1000./30);});r.offer(picture,i*1_000_000L/30);
+                    a.stage.recordVideoFrame(picture,w,h,frame*1000./30);});r.offer(picture,i*1_000_000L/30);
             }
             r.end(1_600_000);return done.get(40,TimeUnit.SECONDS);
         }finally{r.cancel();worker.shutdownNow();}

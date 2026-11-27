@@ -332,7 +332,7 @@ public final class MainActivity extends Activity {
     void capturePng(){if(reading==null){note(t("scene.err.rienACapturer"),"info");return;}
         boolean portrait=viewportHeight()>content.getWidth()/ui.density;int w=portrait?1080:1280,h=portrait?1920:720;
         android.graphics.Bitmap b=android.graphics.Bitmap.createBitmap(w,h,android.graphics.Bitmap.Config.ARGB_8888);
-        stage.updatePose(SystemClock.uptimeMillis()-stage.initial);stage.exportDraw(new android.graphics.Canvas(b),w,h,true,0);
+        stage.updatePose(SystemClock.uptimeMillis()-stage.initial);stage.drawPng(new android.graphics.Canvas(b),w,h);
         String name=project.base()+"-"+Instant.now().toString().substring(0,19).replaceAll("[:T]","-")+".png";
         createFile("image/png",name,uri->{try(java.io.OutputStream output=getContentResolver().openOutputStream(uri,"wt")){if(output==null||!b.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output))throw new IOException("Capture impossible.");note(t("scene.captureOk"),"ok");}catch(Exception e){report("capture",e);}finally{b.recycle();}});}
     void record(){exports.toggle();}
@@ -406,6 +406,7 @@ public final class MainActivity extends Activity {
             List.of("Paysage 16:9 (YouTube)","Vertical 9:16 (TikTok)");
         int format=db.settings.optString("formatVideo").equals("16:9")?0:1;
         ui.add(r,ui.button(formats.get(format),"chevron",()->choose(t("scene.format"),formats,format,i->{db.set("formatVideo",i==0?"16:9":"9:16");menu();})),6);
+        ui.add(r,ui.small(t("android.video.scene")),4);
         exports.resolutionMenu(r);
         ui.menuGroup(r,t("menu.avance"),2);
         choice(r,t("menu.mesVideos"),"video",false,()->{dismiss();movies();});

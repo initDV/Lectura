@@ -100,8 +100,9 @@ est conservé sur l’appareil, indépendamment du projet. **Réinitialiser le c
 rétablit les valeurs adaptées à l’écran courant. En mode capture, un double
 appui sur la scène réaffiche les commandes.
 
-Ces réglages concernent l’écran Android. Les exports PNG et vidéo gardent leur
-composition fixe, avec le personnage devant la fenêtre du terminal.
+La vidéo reprend ces réglages, y compris si tu ajustes la scène pendant
+l’enregistrement. Seule la scène est filmée : ni les curseurs, ni les menus, ni
+le voyant REC n’apparaissent. La capture PNG garde son propre cadrage.
 
 ## Vérifier
 
@@ -128,8 +129,11 @@ Dans **Menu**, choisis le format **16:9** ou **9:16**, puis la **Résolution de 
 vidéo**. La **HD** (720p) reste le réglage initial ; la **4K UHD** donne
 **3840 × 2160** en paysage ou **2160 × 3840** en portrait. Le choix est mémorisé
 et ne change ni l’aperçu ni le PNG. Lance la scène, puis utilise **Enregistrer
-la vidéo**. La scène est dessinée à sa résolution de sortie ; l’enregistrement
-vise 30 i/s selon les performances de l’appareil.
+la vidéo**. La vidéo repart du début de la lecture et dessine la scène à sa
+résolution de sortie. Si les proportions du format choisi et de la scène
+à l’écran diffèrent, des marges de la couleur du fond préservent le cadrage
+sans étirer l’image. L’enregistrement vise 30 i/s selon les performances de
+l’appareil.
 
 La 4K nécessite un encodeur qui accepte la résolution dans l’orientation
 choisie. Lectura essaie les codecs du téléphone à la même résolution, en

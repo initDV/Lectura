@@ -199,12 +199,22 @@ final class Stage extends FrameLayout {
         if(aReading!=null&&!masked)screenText.draw(c,aReading.terminal,l+14,bodyTop,r-14,b,clamp((w-2)*.052f,11,project.fontSize),now);
         c.restore();
     }
-    void recordExport(Picture picture,int w,int h,double now){
+    void recordVideoFrame(Picture picture,int w,int h,double now){
         Canvas commands=picture.beginRecording(w,h);
-        try{exportDraw(commands,w,h,false,now);}finally{picture.endRecording();}
+        try{drawVideoFrame(commands,w,h,now);}finally{picture.endRecording();}
     }
-    void exportDraw(Canvas c,int w,int h,boolean frozen,double now){
-        // Export a stable 38/62 composition regardless of the device's screen preferences.
+    void drawVideoFrame(Canvas c,int w,int h,double now){
+        // Fit the live scene, not the surrounding Android controls. One uniform scale
+        // preserves the crop, terminal layout and proportions even in a different ratio.
+        c.drawColor(background|0xff000000);
+        SceneLayout frame=screen;
+        if(frame.width<=0||frame.height<=0)return;
+        float scale=Math.min(w/frame.width,h/frame.height);
+        c.save();c.translate((w-frame.width*scale)/2,(h-frame.height*scale)/2);c.scale(scale,scale);
+        drawScreen(c,now);c.restore();
+    }
+    void drawPng(Canvas c,int w,int h){
+        // Still images keep their independent 38/62 composition.
         float s=Math.min(w,h)/720f,left=w*.38f;
         float[] box=artwork.box;
         float factor=Math.min(left*.92f/box[2],h*.94f/box[3]);
@@ -218,10 +228,10 @@ final class Stage extends FrameLayout {
             decor.export(c,w,h);
         }
         Reading r=a.reading;
-        if(r!=null)exportTerminal(c,r.terminal,left,0,w-left,h,s,frozen,now);
+        if(r!=null)pngTerminal(c,r.terminal,left,0,w-left,h,s);
         artwork.draw(c,x,y,factor);
     }
-    private void exportTerminal(Canvas c,Script.Terminal text,float bx,float by,float bw,float bh,float s,boolean frozen,double now){
+    private void pngTerminal(Canvas c,Script.Terminal text,float bx,float by,float bw,float bh,float s){
         float pad=14*s,r=20*s,bar=38*s,x=bx+pad*.4f,y=by+pad,w=bw-pad*1.4f,h=bh-2*pad;
         round(c,x,y,x+w,y+h,r,termBg);clip.rewind();clip.addRoundRect(x,y,x+w,y+h,r,r,Path.Direction.CW);c.save();c.clipPath(clip);
         rect(c,x,y,x+w,y+bar,termBar);rect(c,x,y+bar,x+w,y+bar+Math.max(1,s),termBorder);dots(c,x+20*s,y+bar/2,20*s,6*s);
@@ -244,7 +254,7 @@ final class Stage extends FrameLayout {
                 drawRun(c,line,pos,a,x+ipad+(pos-part[1])*cw,yy,fpx,null,text);drawRun(c,line,a,b,x+ipad+(a-part[1])*cw,yy,fpx,token.cat,text);pos=b;}
             drawRun(c,line,pos,part[2],x+ipad+(pos-part[1])*cw,yy,fpx,null,text);cx=x+ipad+(part[2]-part[1])*cw;cy=yy;yy+=lh;
         }
-        if(!masked&&(frozen||((long)(now/500))%2==0))rect(c,cx+1,cy-fpx*.55f,cx+1+cw*.6f,cy+fpx*.55f,termFg);
+        if(!masked)rect(c,cx+1,cy-fpx*.55f,cx+1+cw*.6f,cy+fpx*.55f,termFg);
         c.restore();paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(Math.max(1,s));paint.setColor(termBorder);c.drawRoundRect(x,y,x+w,y+h,r,r,paint);paint.setStyle(Paint.Style.FILL);
     }
     private void drawRun(Canvas c,Script.Line line,int a,int b,float x,float y,float size,String cat,Script.Terminal terminal){
