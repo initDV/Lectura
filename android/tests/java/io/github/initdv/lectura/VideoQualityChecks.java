@@ -3,6 +3,7 @@ package io.github.initdv.lectura;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Picture;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.net.Uri;
@@ -11,6 +12,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
+import java.util.Locale;
 import static io.github.initdv.lectura.DeviceChecks.require;
 
 /** Both UHD ratios use the real UI, including explicit refusal on codec-limited devices. */
@@ -56,7 +59,7 @@ final class VideoQualityChecks {
     private static String check(DeviceChecks d,MainActivity a,File dir,boolean portrait)throws Exception{
         int w=portrait?2160:3840,h=portrait?3840:2160;String size=MediaExport.dimensions(w,h);
         String tag=portrait?"portrait":"paysage",title="test-uhd-"+tag;
-        render(d,a,dir,tag,w,h);
+        String drawing=render(d,a,dir,tag,w,h);
         int available=MediaExport.available(w,h,true,a.reading.pcm.channels,a.reading.pcm.rate).size();
         d.main(()->a.project.title=title);
         d.click(a,"Menu");d.click(a,a.t("scene.enregistrer"));
@@ -71,9 +74,13 @@ final class VideoQualityChecks {
             if(portrait)d.screen(a,dir,"video-4k-indisponible",390,780,false);
             d.click(a,a.t("android.video.useHd"));
             d.main(()->require(a.db.settings.optString(KEY).equals("720p")&&a.db.settings.optString("formatVideo").equals(portrait?"9:16":"16:9"),"Retour explicite en HD sans changer le ratio"));
-            return tag+" "+size+" : refus expliqué ("+available+" encodeur(s) annoncé(s))";
+            return tag+" "+size+" : refus expliqué ("+available+" encodeur(s) annoncé(s)), "+drawing;
         }
-        d.main(()->require(a.exports.recording.w==w&&a.exports.recording.h==h,"Pas de mise à l’échelle depuis la HD"));
+        MediaExport.Recording[] session={null};
+        d.main(()->{
+            session[0]=a.exports.recording;
+            require(session[0].w==w&&session[0].h==h,"Pas de mise à l’échelle depuis la HD");
+        });
         Thread.sleep(1450);d.click(a,"Menu");d.click(a,a.t("scene.arreterEnregistrement"));
         d.waitFor("Téléchargement UHD",()->!a.exports.busy()&&DeviceChecks.named(a.modal,a.t("dl.bouton.telecharger"))!=null,35000);
         d.click(a,a.t("dl.bouton.telecharger"));
@@ -101,7 +108,7 @@ final class VideoQualityChecks {
                 require(peak>5000,"Audio UHD muet");
             }
             Files.copy(movie.file.toPath(),new File(dir,"lectura-4k-"+tag+"."+movie.format).toPath(),StandardCopyOption.REPLACE_EXISTING);
-            return tag+" "+size+" : "+mime+" vérifié avec son, téléchargé et présent dans Mes vidéos";
+            return tag+" "+size+" : "+mime+" avec son, téléchargé dans Mes vidéos ; "+drawing+" ; "+session[0].timings();
         }finally{
             if(movie!=null)movies.delete(movie);
             a.getContentResolver().delete(MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
@@ -109,13 +116,51 @@ final class VideoQualityChecks {
         }
     }
 
-    private static void render(DeviceChecks d,MainActivity a,File dir,String tag,int w,int h)throws Exception{
+    private static String render(DeviceChecks d,MainActivity a,File dir,String tag,int w,int h)throws Exception{
         Bitmap b=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);File file=new File(dir,"lectura-rendu-uhd-"+tag+".png");
         try{
-            d.main(()->{a.stage.updatePose(1100);a.stage.exportDraw(new Canvas(b),w,h,false,1100);});
-            // Pixel coordinates are UHD; compare the terminal with the scene at the other edge.
+            Canvas canvas=new Canvas(b);Picture picture=new Picture();
+            long[] direct=new long[6],commands=new long[6],raster=new long[6];
+            for(int i=-1;i<direct.length;i++){
+                int sample=i;
+                d.main(()->{
+                    a.stage.updatePose(1100);
+                    long start=System.nanoTime();a.stage.exportDraw(canvas,w,h,false,1100);
+                    long recorded=System.nanoTime();a.stage.recordExport(picture,w,h,1100);long end=System.nanoTime();
+                    if(sample>=0){direct[sample]=recorded-start;commands[sample]=end-recorded;}
+                    if(sample==direct.length-1){
+                        // The queued picture must not see later mutations of the pose or terminal.
+                        String forced=a.forced;a.forced="surpris";a.stage.updatePose(1100);
+                        a.reading.terminal.shown=a.reading.text.length();a.forced=forced;a.stage.refresh();
+                    }
+                });
+                int[] expected=i==direct.length-1?pixels(b):null;
+                b.eraseColor(0);long start=System.nanoTime();canvas.drawPicture(picture);
+                if(i>=0)raster[i]=System.nanoTime()-start;
+                if(expected!=null){
+                    int[] actual=pixels(b);int different=0;
+                    for(int k=0;k<expected.length;k++)if(colorGap(expected[k],actual[k])>3)different++;
+                    require(different*200L<=expected.length,"Commandes UHD différentes du dessin direct : "+different+" / "+expected.length);
+                }
+            }
             require(b.getPixel(w-100,h/2)!=b.getPixel(20,h/2),"Rendu UHD vide");
             try(FileOutputStream out=new FileOutputStream(file)){require(b.compress(Bitmap.CompressFormat.PNG,100,out),"Capture du rendu UHD");}
+            return String.format(Locale.ROOT,"médianes sur 6 images : dessin direct UI %.2f ms, commandes UI %.2f ms, raster hors UI %.2f ms",
+                medianMillis(direct),medianMillis(commands),medianMillis(raster));
         }finally{b.recycle();}
+    }
+    private static int[] pixels(Bitmap b){
+        int w=b.getWidth(),h=b.getHeight(),step=16;int[] row=new int[w],sample=new int[(w/step)*(h/step)];int i=0;
+        for(int y=0;y<h/step;y++){
+            b.getPixels(row,0,w,0,y*step+step/2,w,1);
+            for(int x=0;x<w/step;x++)sample[i++]=row[x*step+step/2];
+        }
+        return sample;
+    }
+    private static int colorGap(int a,int b){
+        int gap=0;for(int shift=0;shift<=24;shift+=8)gap=Math.max(gap,Math.abs((a>>>shift&255)-(b>>>shift&255)));return gap;
+    }
+    private static double medianMillis(long[] samples){
+        Arrays.sort(samples);int i=samples.length/2;return (samples[i-1]+samples[i])/2_000_000.;
     }
 }

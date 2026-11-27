@@ -1,7 +1,6 @@
 package io.github.initdv.lectura;
 
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
+import android.graphics.Picture;
 import android.net.Uri;
 import android.view.View;
 import android.widget.CheckBox;
@@ -24,7 +23,7 @@ import java.util.concurrent.Future;
 /** Record/stop/download workflow and the private « Mes vidéos » library. */
 final class ExportUi implements AutoCloseable {
     final MainActivity a;final Ui u;final Movies movies;final File temp;
-    final ExecutorService executor=Executors.newSingleThreadExecutor();
+    final ExecutorService executor=Executors.newSingleThreadExecutor(r->new Thread(r,"Lectura-export"));
     MediaExport.Recording recording;
     Future<?> task;
     private long origin,lastFrame=-1;
@@ -110,14 +109,10 @@ final class ExportUi implements AutoCloseable {
         MediaExport.Recording r=recording;if(r==null||origin==0||finishing||a.stage==null)return;
         long index=nowUs()*MediaExport.FPS/1_000_000;if(index<=lastFrame)return;
         long timestamp=lastFrame<0?0:index*1_000_000/MediaExport.FPS;
-        Bitmap bitmap=null;
         try{
-            bitmap=r.buffer();if(bitmap==null)return;
-            a.stage.exportDraw(new Canvas(bitmap),r.w,r.h,false,sceneTime);r.offer(bitmap,timestamp);lastFrame=index;
-        }catch(RuntimeException|OutOfMemoryError e){
-            if(bitmap!=null)bitmap.recycle();
-            a.handler.post(()->failed(r,e));
-        }
+            Picture picture=r.buffer();if(picture==null)return;
+            a.stage.recordExport(picture,r.w,r.h,sceneTime);r.offer(picture,timestamp);lastFrame=index;
+        }catch(RuntimeException|OutOfMemoryError e){a.handler.post(()->failed(r,e));}
     }
     void naturalEnd(){if(active()&&origin>0){MediaExport.Recording r=recording;a.handler.postDelayed(()->{if(recording==r)stop();},600);}}
     void stop(){
@@ -128,7 +123,7 @@ final class ExportUi implements AutoCloseable {
     }
     void abandon(){
         if(recording!=null){recording.cancel();recording=null;if(task!=null)task.cancel(true);}
-        finishing=false;origin=0;if(a.stage!=null)a.stage.recording=false;
+        finishing=false;origin=0;if(a.stage!=null&&a.stage.recording){a.stage.recording=false;a.stage.refresh();}
     }
     void foreground(){if(a.isForeground&&!closed&&mediaToOffer!=null&&a.modal==null&&a.stage!=null)offer();}
     void offer(){

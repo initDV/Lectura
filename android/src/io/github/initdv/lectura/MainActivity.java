@@ -48,7 +48,7 @@ public final class MainActivity extends Activity {
     LinearLayout toasts;
     ScenePage scene;Stage stage;Screens screens;Reading reading;Talk talk;Hd hd;ExportUi exports;
     String route="scene",forced="",sig="",lastDraft="";
-    boolean muted,preparing,stopped=true,isForeground,fullscreen;
+    boolean muted,preparing,stopped=true,isForeground,fullscreen,dimmedScene;
     final Handler handler=new Handler(Looper.getMainLooper());
     private final PcmDelivery pcmDelivery=new PcmDelivery(handler::post);
     final ExecutorService queue=Executors.newSingleThreadExecutor();
@@ -170,13 +170,16 @@ public final class MainActivity extends Activity {
     LinearLayout sheet(String title){return sheet(title,16,true);}
     LinearLayout sheet(String title,int padding,boolean dismissOutside){
         FrameLayout overlay=showModal(0xd106060a,dismissOutside);
+        dimmedScene=true; // Unlike the translucent live framing controls.
         LinearLayout r=ui.col();ui.pad(r,padding+1,padding+1);r.setFocusableInTouchMode(true);r.setClickable(true);
         ScrollView s=ui.scroll();s.setBackground(ui.shape(ui.surface,title==null?18:ui.radiusLg,ui.border,1));s.setClipToOutline(true);s.addView(r,new ScrollView.LayoutParams(-1,-2));
         if(title!=null)sheetHeader(r,title);
         FrameLayout.LayoutParams lp=ui.fp(Math.min(460,Math.max(180,root.getWidth()>0?(root.getWidth()-root.getPaddingLeft()-root.getPaddingRight())/ui.density-32:getResources().getDisplayMetrics().widthPixels/ui.density-32)),Ui.WRAP,Gravity.CENTER);
         overlay.addView(s,lp);r.requestFocus();return r;
     }
-    void dismiss(){backModal=null;if(modalCleanup!=null){Runnable clean=modalCleanup;modalCleanup=null;clean.run();}if(modal!=null){root.removeView(modal);modal=null;content.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);}
+    void dismiss(){backModal=null;if(modalCleanup!=null){Runnable clean=modalCleanup;modalCleanup=null;clean.run();}if(modal!=null){
+        root.removeView(modal);modal=null;dimmedScene=false;content.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+        if(stage!=null)stage.refresh();}
         if(isForeground&&exports!=null)handler.post(exports::foreground);
     }
     void choice(LinearLayout r,String title,String icon,boolean selected,Runnable fn){ui.add(r,ui.choice(title,icon,selected,fn),4);}
@@ -221,7 +224,7 @@ public final class MainActivity extends Activity {
         });
         preparation=queue.submit(()->new AudioPreparation(refs,hd,talk).run(request,this::t,progress,
             prepared->pcmDelivery.post(()->{if(generation!=ticket||scene==null){prepared.close();return;}try{
-                reading=new Reading(text,prepared.segments,prepared.words,silent,prepared.pcm,talk,v,cfg,1,this::readingFinished,this::readingError);
+                reading=new Reading(text,prepared.segments,prepared.terminal,silent,prepared.pcm,talk,v,cfg,1,this::readingFinished,this::readingError);
                 String voiceUsed=prepared.voiceUsed;synthesisVoice=voiceUsed;
                 if(!silent&&!cfg.fileAudio&&!choices.isEmpty()&&!choices.get(0).equals(voiceUsed)){
                     JSONObject fallback=hd.voice(voiceUsed);note(t("android.voice.fallback","nom",fallback==null?voiceUsed:fallback.optString("nom")),"warn",5000);
@@ -255,10 +258,11 @@ public final class MainActivity extends Activity {
     void stop(){cancelPrewarm();exports.stop();if(preparing){if(preparation!=null)preparation.cancel(true);generation++;clearOverlay();preparing=false;}
         if(reading!=null)reading.pause();stopped=true;playState();}
     void readingFinished(){stopped=true;playState();exports.naturalEnd();}
-    void playState(){exports.mark(false);if(scene!=null)scene.update();if(reading!=null&&reading.playing)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}
+    void playState(){exports.mark(false);if(scene!=null){scene.update();stage.refresh();}if(reading!=null&&reading.playing)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}
     void seek(int ms){if(reading==null)return;double now=reading.time();if(reading.ended)stopped=false;reading.seek(now+ms);playState();exports.mark(true);}
     void nextExpression(){List<String> ids=new ArrayList<>();ids.add("");refs.expressions.keys().forEachRemaining(id->{if(!id.equals("neutre"))ids.add(id);});
-        forced=ids.get((ids.indexOf(forced)+1)%ids.size());note(t("scene.expression")+" : "+t("expr."+(forced.isEmpty()?"auto":forced)),"info",1800);}
+        forced=ids.get((ids.indexOf(forced)+1)%ids.size());if(stage!=null)stage.refresh();
+        note(t("scene.expression")+" : "+t("expr."+(forced.isEmpty()?"auto":forced)),"info",1800);}
     @Override public boolean dispatchKeyEvent(KeyEvent e){
         if(e.getAction()==KeyEvent.ACTION_DOWN&&e.getKeyCode()==KeyEvent.KEYCODE_ESCAPE&&modal!=null){onBackPressed();return true;}
         if(e.getAction()==KeyEvent.ACTION_DOWN&&e.getRepeatCount()==0&&!e.isCtrlPressed()&&!e.isMetaPressed()&&!e.isAltPressed()&&modal==null&&stage!=null&&!(getCurrentFocus() instanceof EditText)){

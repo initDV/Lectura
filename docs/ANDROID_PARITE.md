@@ -32,6 +32,12 @@ Le PNG et la vidéo conservent leur composition 38/62, indépendante de ces pré
 
 Android propose un [choix de résolution HD ou 4K UHD](../android/README.md#enregistrer-en-hd-ou-en-4k-android) distinct du ratio. La recette UHD exerce les deux ratios à leur taille native : sur un appareil compatible, elle contrôle les dimensions encodées et le son du fichier téléchargé ; sinon, elle contrôle le refus explicite sans changement automatique de résolution. Un refus sur l’émulateur ne valide pas l’encodage 4K sur un téléphone.
 
+### Réactivité et cadence
+
+L’aperçu suit l’horloge de lecture, avec moins de redessins au repos. Il réutilise les lignes terminées du terminal et prépare la coloration du script en arrière-plan. En vidéo, l’interface ne transmet que les commandes de dessin d’une image à la fois ; le fil d’encodage les dessine dans un seul bitmap à la résolution choisie. Une image peut être sautée si l’encodeur ne suit pas, sans ralentir l’horloge audio ni passer en HD.
+
+Dans `Lectura-comparaison`, `android-cadence.txt` relève le temps d’ouverture et de préparation sans voix, les redessins de la fenêtre au repos et sur un long texte, et vérifie pause, avance/recul, reprise et fin. Le contrôle HD rapporte la cadence des images et sépare le dessin du bitmap, son transfert GL et la soumission au codec. Le contrôle UHD compare les pixels du dessin direct au résultat des commandes jouées hors interface et mesure ces deux étapes même sans codec UHD. Ces mesures sont propres à l’émulateur et ne garantissent ni une cadence minimale sur téléphone ni un débit d’encodage UHD.
+
 Campagne sur l’APK [`1aec807`](https://github.com/initDV/Lectura/commit/1aec807) : [exécution `44295570195`](https://github.com/initDV/Lectura/actions/runs/44295570195) réussie. Résultats API 31 :
 
 | Contrôle | Résultat observé |

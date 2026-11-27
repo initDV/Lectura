@@ -35,10 +35,10 @@ final class Reading implements AutoCloseable {
     private long mark;
     private int pendingSeek=-1;
     private float appliedRate=1;
-    Reading(String text,List<Script.Segment> parts,Script.Keywords keywords, boolean silent,Pcm pcm,Talk talk,Voice voice,
-            Project p,float baseRate,Runnable finish,Consumer<String> fail) throws IOException {
-        this.text=text; this.silent=silent;this.pcm=pcm;this.baseRate=baseRate;this.finish=finish;
-        timeline=new Script.Timeline(text,parts);terminal=new Script.Terminal(text,keywords);
+    Reading(String text,List<Script.Segment> parts,Script.Terminal terminal,boolean silent,Pcm pcm,Talk talk,Voice voice,
+            Project p,float baseRate,Runnable finish,Consumer<String> fail)throws IOException{
+        this.text=text;this.silent=silent;this.pcm=pcm;this.baseRate=baseRate;this.finish=finish;this.terminal=terminal;
+        timeline=new Script.Timeline(text,parts);
         if(pcm!=null){
             mediaDuration=pcm.duration();lip=new Lip(pcm);queue=null;player=new MediaPlayer();
             try(FileInputStream in=new FileInputStream(pcm.file)){

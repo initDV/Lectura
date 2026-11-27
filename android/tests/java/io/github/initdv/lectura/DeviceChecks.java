@@ -9,6 +9,7 @@ import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Picture;
 import android.view.KeyEvent;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
@@ -75,6 +76,9 @@ public final class DeviceChecks extends Instrumentation {
                 break;
             case "offline-kokoro":
                 check("kokoro-en-avion",()->offlineNewVoice(ctx,"kokoro-siwis"));
+                break;
+            case "cadence":
+                check("cadence",()->ScenePacingChecks.run(this,ctx));
                 break;
             case "video-uhd":
                 check("video-uhd",()->VideoQualityChecks.run(this,ctx));
@@ -1007,8 +1011,10 @@ public final class DeviceChecks extends Instrumentation {
             click(a,"Paysage 16:9 (YouTube)");click(a,"Vertical 9:16 (TikTok)");
             click(a,"Enregistrer la vidéo");
             waitFor("Démarrage enregistrement de la scène",()->a.exports.capturing()&&a.reading.playing,15000);
-            Thread.sleep(350);main(()->{a.project.speed=1.25f;a.adjustRate();});
-            Thread.sleep(1200);click(a,"Menu");click(a,"Arrêter l’enregistrement");
+            AtomicReference<MediaExport.Recording> session=new AtomicReference<>();
+            Thread.sleep(350);main(()->{session.set(a.exports.recording);a.project.speed=1.25f;a.adjustRate();});
+            int draws=ScenePacingChecks.countDraws(this,a,1200);
+            click(a,"Menu");click(a,"Arrêter l’enregistrement");
             waitFor("Dialogue Télécharger",()->a.modal!=null&&action(a.modal,"Télécharger")!=null,15000);
             click(a,"Télécharger");
             Movies lib=new Movies(ctx);Movies.Entry movie=null;
@@ -1031,7 +1037,9 @@ public final class DeviceChecks extends Instrumentation {
                 },10000);
                 main(a::dismiss);
             }finally{lib.delete(movie);}
-            return "Menu : formats 16:9 / 9:16, Monique animée, enregistrement et arrêt, MP4 portrait avec son, téléchargement et lecture dans Mes vidéos";
+            require(draws>3&&!session.get().timings().isEmpty(),"Pas de progression pendant l’enregistrement HD");
+            return "Menu 16:9 / 9:16, Monique animée, MP4 portrait sonore téléchargé et relu dans Mes vidéos ; "
+                +draws+" dessins fenêtre en 1,2 s ; "+session.get().timings();
         }finally{
             wave.delete();main(()->{a.db.audio(a.project).delete();a.finish();});
             var catalog=android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY);
@@ -1051,7 +1059,7 @@ public final class DeviceChecks extends Instrumentation {
         runOnMainSync(()->{try{
             a.dismiss();a.project.character="robot_lectura";a.project.text=a.t("voix.exemple");a.render("scene");
             var kw=new Script.Keywords(a.refs,"fr",new JSONObject());List<Script.Segment> p=Script.timing(a.project.text,2000,1);
-            a.reading=new Reading(a.project.text,p,kw,true,null,a.talk,null,a.project,1,()->{},code->{});
+            a.reading=new Reading(a.project.text,p,new Script.Terminal(a.project.text,kw),true,null,a.talk,null,a.project,1,()->{},code->{});
             a.reading.performance=new Performance(p,new Mood(a.refs,"fr",kw,true),a.refs.rig);a.muted=true;a.reading.volume(0,true);a.reading.terminal.shown=a.project.text.length();
         }catch(Throwable e){setup.set(e);}});if(setup.get()!=null)throw new AssertionError(setup.get());
         try(Pcm pcm=Pcm.decode(wav,dir)){
@@ -1090,10 +1098,11 @@ public final class DeviceChecks extends Instrumentation {
             deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(35);
             r.mark(new MediaExport.Mark(0,0,1.25,true));
             for(int i=0;i<48;i++){
-                while(!r.room()){if(done.isDone())return done.get();require(System.nanoTime()<deadline,"Encodage bloqué : "+ext);Thread.sleep(3);}
-                final int frame=i;Bitmap bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
-                runOnMainSync(()->{a.stage.sprite.tick(1000+frame*1000./30);a.reading.terminal.shown=a.reading.text.length()*frame/47;
-                    a.stage.exportDraw(new Canvas(bitmap),w,h,false,frame*1000./30);});r.offer(bitmap,i*1_000_000L/30);
+                Picture buffer;
+                while((buffer=r.buffer())==null){if(done.isDone())return done.get();require(System.nanoTime()<deadline,"Encodage bloqué : "+ext);Thread.sleep(3);}
+                final int frame=i;Picture picture=buffer;
+                main(()->{a.stage.sprite.tick(1000+frame*1000./30);a.reading.terminal.shown=a.reading.text.length()*frame/47;
+                    a.stage.recordExport(picture,w,h,frame*1000./30);});r.offer(picture,i*1_000_000L/30);
             }
             r.end(1_600_000);return done.get(40,TimeUnit.SECONDS);
         }finally{r.cancel();worker.shutdownNow();}

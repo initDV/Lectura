@@ -3,6 +3,7 @@ package io.github.initdv.lectura;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Picture;
 import android.graphics.Typeface;
 import android.os.SystemClock;
 import android.text.Layout;
@@ -14,6 +15,7 @@ import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.ReplacementSpan;
 import android.text.style.TypefaceSpan;
+import android.util.LruCache;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -30,6 +32,7 @@ final class Stage extends FrameLayout {
     final Svg artwork;
     final AichaStage aicha;
     final JSONObject term;
+    private final int termBg,termBar,termBorder,termFg,termComment,termPrompt,termCommand;
     final String title;
     final boolean reduced;
     final int background;
@@ -40,9 +43,13 @@ final class Stage extends FrameLayout {
     private final View menu,settings,eye;
     private final Face face;
     final Typeface termFont;
+    private final Typeface terminalBold,terminalMedium;
     final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.SUBPIXEL_TEXT_FLAG);
     final Path clip=new Path();
     final ScreenText screenText;
+    private final TextPaint titlePaint=new TextPaint(Paint.ANTI_ALIAS_FLAG|Paint.SUBPIXEL_TEXT_FLAG);
+    private float titleWindowWidth=-1;
+    private CharSequence titleLabel;
     private final int radius;
     private Reading lastReading;
     private SceneLayout screen;
@@ -52,8 +59,12 @@ final class Stage extends FrameLayout {
         super(a);this.a=a;ui=a.ui;project=a.project;reduced=a.reduced();
         decor=new Decor(object(a.db.settings,"decor"));background=color(project.background);
         JSONObject ts=object(a.refs.themes,"terminal");JSONObject t=ts.optJSONObject(project.terminalTheme);term=t==null?object(ts,"sombre"):t;
+        termBg=color(term,"bg");termBar=color(term,"bar");termBorder=color(term,"bord");termFg=color(term,"fg");
+        termComment=color(term,"com");termPrompt=color(term,"prompt");termCommand=color(term,"cmd");
         termFont=project.font.equals("Système")?Typeface.MONOSPACE:ui.mono(400);
+        terminalBold=Typeface.create(termFont,700,false);terminalMedium=Typeface.create(termFont,500,false);
         title=a.db.settings.optString("titreTerminal");radius=Math.round(ui.radiusLg);
+        titlePaint.setTypeface(ui.mono(500));titlePaint.setColor(termComment);
         boolean reduce=reduced||a.db.settings.optBoolean("reduireAnimations");
         double gain=project.motion.equals("calme")?.6:project.motion.equals("vif")?1.3:1;
         if(AichaTrack.matches(def)){
@@ -84,7 +95,7 @@ final class Stage extends FrameLayout {
     }
     void mask(boolean yes){masked=yes;eye.setSelected(yes);eye.setContentDescription(a.t(yes?"scene.oeil.afficher":"scene.oeil.masquer"));
         ((android.widget.ImageView)eye).setImageDrawable(ui.iconDrawable(yes?"eye-off":"eye",20,ui.violet));face.invalidate();}
-    void present(boolean yes){presenting=yes;removeCallbacks(singleClick);clickAt=0;menu.setVisibility(yes?GONE:VISIBLE);settings.setVisibility(yes?GONE:VISIBLE);}
+    void present(boolean yes){presenting=yes;removeCallbacks(singleClick);clickAt=0;menu.setVisibility(yes?GONE:VISIBLE);settings.setVisibility(yes?GONE:VISIBLE);refresh();}
     private void onSingle(){if(presenting)a.launch(false);}
     @Override protected void onDetachedFromWindow(){super.onDetachedFromWindow();removeCallbacks(singleClick);}
     void updatePose(double now){
@@ -112,22 +123,39 @@ final class Stage extends FrameLayout {
         sprite.tick(now);
     }
     private final class Face extends View {
+        private final Runnable redraw=this::invalidate;
         private float startY,origin;private boolean dragged,terminalTouch;
         Face(){super(a);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);setContentDescription(a.t("scene.terminal"));}
         @Override public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(info);
             Reading r=a.reading;if(r!=null&&!masked)info.setText(r.text.substring(Math.max(0,r.terminal.shown-700),r.terminal.shown));}
+        @Override protected void onWindowVisibilityChanged(int visibility){
+            super.onWindowVisibilityChanged(visibility);
+            if(visibility==VISIBLE)invalidate();else removeCallbacks(redraw);
+        }
+        @Override protected void onDetachedFromWindow(){removeCallbacks(redraw);super.onDetachedFromWindow();}
         @Override protected void onDraw(Canvas c){
-            double now=SystemClock.uptimeMillis()-initial;Stage.this.updatePose(now);
+            removeCallbacks(redraw);
+            long start=SystemClock.uptimeMillis(),now=start-initial;Stage.this.updatePose(now);
             c.save();c.scale(ui.density,ui.density);
             drawScreen(c,now);
             if(recording){round(c,50,10,111,36,99,0xcc0d0d12);paint.setColor(ui.danger);c.drawCircle(65,23,5,paint);
                 style(ui.font(700),12.8f,0xffff8a8a);c.drawText("REC",76,baseline(paint,23),paint);}
             c.restore();
-            if(getWindowVisibility()==VISIBLE&&a.isForeground){
-                if(!reduced&&!presenting){float f=(float)((1-Math.cos(now*2*Math.PI/3500))*.5);settings.setScaleX(1+.05f*f);settings.setScaleY(1+.05f*f);}
-                postInvalidateOnAnimation();
-            }
+            if(getWindowVisibility()!=VISIBLE||!a.isForeground)return;
             a.recordFrame(now);
+            Reading r=a.reading;boolean playing=r!=null&&r.playing;
+            boolean animated=aicha!=null?!aicha.reduced:!sprite.reduced;
+            boolean idle=animated&&!a.preparing&&(r==null||aicha!=null&&(a.stopped||r.ended));
+            boolean settling=sprite!=null&&sprite.gliding(now);
+            if(animated&&!presenting&&!a.dimmedScene&&(playing||idle)){
+                float f=(float)((1-Math.cos(now*2*Math.PI/3500))*.5);settings.setScaleX(1+.05f*f);settings.setScaleY(1+.05f*f);
+            }
+            // Leave room for vsync rounding on 60–120 Hz screens. The pose
+            // always comes from the playback clock, never from a frame counter.
+            long delay=recording||playing?26:idle||settling?60:0;
+            if(delay>0&&a.dimmedScene&&!recording)delay=Math.max(delay,125);
+            if(delay==0&&r!=null&&!masked&&!reduced)delay=500-now%500;
+            if(delay>0)postOnAnimationDelayed(redraw,Math.max(0,start+delay-SystemClock.uptimeMillis()));
         }
         @Override public boolean performClick(){super.performClick();if(presenting){long now=SystemClock.uptimeMillis();boolean twice=clickAt>0&&now-clickAt<280;removeCallbacks(singleClick);
             if(twice){clickAt=0;a.presentation(false);}else{clickAt=now;postDelayed(singleClick,280);}}return true;}
@@ -161,16 +189,22 @@ final class Stage extends FrameLayout {
         float l=x+1,t=y+1,r=x+w-1,b=y+h-1,bodyTop=y+SceneLayout.TERMINAL_HEADER;
         boolean compact=w<180;
         float titleX=l+(compact?50:74);
-        round(c,x,y,x+w,y+h,radius,color(term,"bord"));
+        round(c,x,y,x+w,y+h,radius,termBorder);
         clip.rewind();clip.addRoundRect(l,t,r,b,radius-1,radius-1,Path.Direction.CW);c.save();c.clipPath(clip);
-        rect(c,l,t,r,b,color(term,"bg"));rect(c,l,t,r,bodyTop-1,color(term,"bar"));rect(c,l,bodyTop-1,r,bodyTop,color(term,"bord"));
+        rect(c,l,t,r,b,termBg);rect(c,l,t,r,bodyTop-1,termBar);rect(c,l,bodyTop-1,r,bodyTop,termBorder);
         dots(c,l+(compact?12:19.5f),t+26.5f,compact?12:18,compact?4:5.5f);
-        TextPaint tp=new TextPaint(Paint.ANTI_ALIAS_FLAG|Paint.SUBPIXEL_TEXT_FLAG);tp.setTypeface(ui.mono(500));tp.setTextSize(clamp((w-2)*.034f,10.56f,12.8f));tp.setColor(color(term,"com"));
-        float titleWidth=Math.max(0,r-titleX-57);CharSequence s=TextUtils.ellipsize(title,tp,titleWidth,TextUtils.TruncateAt.END);
-        c.drawText(s,0,s.length(),titleX,baseline(tp,t+26.5f),tp);
+        if(w!=titleWindowWidth){
+            titleWindowWidth=w;titlePaint.setTextSize(clamp((w-2)*.034f,10.56f,12.8f));
+            titleLabel=TextUtils.ellipsize(title,titlePaint,Math.max(0,r-titleX-57),TextUtils.TruncateAt.END);
+        }
+        c.drawText(titleLabel,0,titleLabel.length(),titleX,baseline(titlePaint,t+26.5f),titlePaint);
         Reading aReading=a.reading;
         if(aReading!=null&&!masked)screenText.draw(c,aReading.terminal,l+14,bodyTop,r-14,b,clamp((w-2)*.052f,11,project.fontSize),now);
         c.restore();
+    }
+    void recordExport(Picture picture,int w,int h,double now){
+        Canvas commands=picture.beginRecording(w,h);
+        try{exportDraw(commands,w,h,false,now);}finally{picture.endRecording();}
     }
     void exportDraw(Canvas c,int w,int h,boolean frozen,double now){
         // Export a stable 38/62 composition regardless of the device's screen preferences.
@@ -192,12 +226,12 @@ final class Stage extends FrameLayout {
     }
     private void exportTerminal(Canvas c,Script.Terminal text,float bx,float by,float bw,float bh,float s,boolean frozen,double now){
         float pad=14*s,r=20*s,bar=38*s,x=bx+pad*.4f,y=by+pad,w=bw-pad*1.4f,h=bh-2*pad;
-        round(c,x,y,x+w,y+h,r,color(term,"bg"));clip.rewind();clip.addRoundRect(x,y,x+w,y+h,r,r,Path.Direction.CW);c.save();c.clipPath(clip);
-        rect(c,x,y,x+w,y+bar,color(term,"bar"));rect(c,x,y+bar,x+w,y+bar+Math.max(1,s),color(term,"bord"));dots(c,x+20*s,y+bar/2,20*s,6*s);
-        style(Typeface.create(termFont,500,false),Math.round(Math.min(13*s,w*.036f)),color(term,"com"));
+        round(c,x,y,x+w,y+h,r,termBg);clip.rewind();clip.addRoundRect(x,y,x+w,y+h,r,r,Path.Direction.CW);c.save();c.clipPath(clip);
+        rect(c,x,y,x+w,y+bar,termBar);rect(c,x,y+bar,x+w,y+bar+Math.max(1,s),termBorder);dots(c,x+20*s,y+bar/2,20*s,6*s);
+        style(terminalMedium,Math.round(Math.min(13*s,w*.036f)),termComment);
         String label=title.isEmpty()?"lectura":title;float width=paint.measureText(label);c.save();c.translate(x+82*s,y+bar/2);c.scale(Math.min(1,(w-100*s)/Math.max(1,width)),1);c.drawText(label,0,baseline(paint,0),paint);c.restore();
         float fpx=Math.round(Math.min(project.fontSize*s*1.15f,w*.052f)),ipad=16*s,lh=fpx*1.55f;
-        style(termFont,fpx,color(term,"fg"));float cw=paint.measureText("M");
+        style(termFont,fpx,termFg);float cw=paint.measureText("M");
         int cols=Math.max(8,(int)((w-2*ipad)/cw)),maxRows=Math.max(1,(int)((h-bar-2*ipad)/lh));
         final List<int[]> rows=new ArrayList<>();
         for(int i=masked?-1:text.lineAt(text.shown);i>=0&&rows.size()<maxRows;i--){
@@ -213,14 +247,18 @@ final class Stage extends FrameLayout {
                 drawRun(c,line,pos,a,x+ipad+(pos-part[1])*cw,yy,fpx,null,text);drawRun(c,line,a,b,x+ipad+(a-part[1])*cw,yy,fpx,token.cat,text);pos=b;}
             drawRun(c,line,pos,part[2],x+ipad+(pos-part[1])*cw,yy,fpx,null,text);cx=x+ipad+(part[2]-part[1])*cw;cy=yy;yy+=lh;
         }
-        if(!masked&&(frozen||((long)(now/500))%2==0))rect(c,cx+1,cy-fpx*.55f,cx+1+cw*.6f,cy+fpx*.55f,color(term,"fg"));
-        c.restore();paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(Math.max(1,s));paint.setColor(color(term,"bord"));c.drawRoundRect(x,y,x+w,y+h,r,r,paint);paint.setStyle(Paint.Style.FILL);
+        if(!masked&&(frozen||((long)(now/500))%2==0))rect(c,cx+1,cy-fpx*.55f,cx+1+cw*.6f,cy+fpx*.55f,termFg);
+        c.restore();paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(Math.max(1,s));paint.setColor(termBorder);c.drawRoundRect(x,y,x+w,y+h,r,r,paint);paint.setStyle(Paint.Style.FILL);
     }
     private void drawRun(Canvas c,Script.Line line,int a,int b,float x,float y,float size,String cat,Script.Terminal terminal){
-        if(b<=a)return;style(cat!=null&&!cat.startsWith("__")?Typeface.create(termFont,700,false):termFont,size,ink(cat,terminal));c.drawText(line.text,a,b,x,baseline(paint,y),paint);
+        if(b<=a)return;style(cat!=null&&!cat.startsWith("__")?terminalBold:termFont,size,ink(cat,terminal));c.drawText(line.text,a,b,x,baseline(paint,y),paint);
     }
     private int ink(String cat,Script.Terminal data){
-        if(cat==null)return color(term,"fg");if(cat.startsWith("__"))return color(term,cat.substring(2));return data.keywords.colors.getOrDefault(cat,color(term,"fg"));
+        if(cat==null)return termFg;
+        switch(cat){
+            case "__com":return termComment;case "__prompt":return termPrompt;case "__cmd":return termCommand;
+            default:return cat.startsWith("__")?color(term,cat.substring(2)):data.keywords.colors.getOrDefault(cat,termFg);
+        }
     }
     private void style(Typeface font,float size,int ink){paint.setTypeface(font);paint.setTextSize(size);paint.setColor(ink);paint.setStyle(Paint.Style.FILL);}
     private void rect(Canvas c,float l,float t,float r,float b,int ink){paint.setColor(ink);c.drawRect(l,t,r,b,paint);}
@@ -229,28 +267,39 @@ final class Stage extends FrameLayout {
     private static float baseline(Paint p,float center){return center-(p.ascent()+p.descent())/2;}
     private final class ScreenText {
         final TextPaint p=new TextPaint(Paint.ANTI_ALIAS_FLAG|Paint.SUBPIXEL_TEXT_FLAG);
-        final ArrayList<StaticLayout> rows=new ArrayList<>();int shown=-1,cacheWidth=-1;float cacheSize,scroll,maxScroll,total;
+        final ArrayList<StaticLayout> rows=new ArrayList<>(40);int shown=-1,cacheWidth=-1;float cacheSize,scroll,maxScroll,total;
+        // Only the active line changes as characters appear. Bound the completed
+        // layouts so advancing through a long project doesn't retain every line.
+        private final LruCache<Integer,StaticLayout> completed=new LruCache<>(48);
         boolean cursor;
-        void reset(){shown=-1;rows.clear();scroll=maxScroll=total=0;}
+        void reset(){shown=-1;completed.evictAll();rows.clear();scroll=maxScroll=total=0;}
+        private StaticLayout layout(Script.Terminal data,Script.Line line,int count,int width,float size,boolean active){
+            SpannableStringBuilder s=new SpannableStringBuilder(line.text,0,count);
+            for(Script.Token tok:line.tokens){
+                if(tok.start>=count)break;
+                int b=Math.min(tok.end,count);if(b<=tok.start)continue;
+                s.setSpan(new ForegroundColorSpan(ink(tok.cat,data)),tok.start,b,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                if(tok.cat.equals("__prompt")||!tok.cat.startsWith("__"))s.setSpan(new TypefaceSpan(terminalBold),tok.start,b,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            if(active){int end=s.length();s.append('\ufffc');s.setSpan(new ReplacementSpan(){
+                @Override public int getSize(Paint p,CharSequence t,int a,int b,Paint.FontMetricsInt fm){return Math.round(size*.6f+1);}
+                @Override public void draw(Canvas c,CharSequence t,int a,int b,float x,int top,int y,int bot,Paint paint){if(cursor)c.drawRect(x+1,y-size*.99f,x+1+size*.6f,y+size*.11f,paint);}
+            },end,end+1,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);}
+            return StaticLayout.Builder.obtain(s,0,s.length(),p,width).setIncludePad(false).setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
+                .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE).setLineSpacing(size*1.55f-(p.descent()-p.ascent()),1).build();
+        }
         void draw(Canvas c,Script.Terminal data,float x,float top,float right,float bottom,float size,double now){
             int width=(int)(right-x);if(width<=0)return;
-            p.setTypeface(termFont);p.setTextSize(size);p.setColor(color(term,"fg"));float lh=size*1.55f;
-            boolean reflow=data.shown!=shown||width!=cacheWidth||cacheSize!=size;
-            if(reflow){shown=data.shown;cacheWidth=width;cacheSize=size;
+            p.setTypeface(termFont);p.setTextSize(size);p.setColor(termFg);float lh=size*1.55f;
+            boolean geometryChanged=width!=cacheWidth||cacheSize!=size;
+            boolean reflow=data.shown!=shown||geometryChanged;
+            if(reflow){
+                if(geometryChanged)completed.evictAll();shown=data.shown;cacheWidth=width;cacheSize=size;
                 rows.clear();total=0;int last=data.lineAt(shown);
                 for(int i=Math.max(0,last-39);i<=last;i++){
-                    Script.Line line=data.lines.get(i);int count=Math.max(0,Math.min(line.text.length(),shown-line.start));
-                    SpannableStringBuilder s=new SpannableStringBuilder(line.text.substring(0,count));
-                    for(Script.Token tok:line.tokens){int b=Math.min(tok.end,count);if(b<=tok.start)continue;
-                        s.setSpan(new ForegroundColorSpan(ink(tok.cat,data)),tok.start,b,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-                        if(tok.cat.equals("__prompt")||!tok.cat.startsWith("__"))s.setSpan(new TypefaceSpan(Typeface.create(termFont,700,false)),tok.start,b,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-                    }
-                    if(i==last){int end=s.length();s.append('\ufffc');s.setSpan(new ReplacementSpan(){
-                        @Override public int getSize(Paint p,CharSequence t,int a,int b,Paint.FontMetricsInt fm){return Math.round(size*.6f+1);}
-                        @Override public void draw(Canvas c,CharSequence t,int a,int b,float x,int top,int y,int bot,Paint paint){if(cursor)c.drawRect(x+1,y-size*.99f,x+1+size*.6f,y+size*.11f,paint);}
-                    },end,end+1,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);}
-                    StaticLayout l=StaticLayout.Builder.obtain(s,0,s.length(),p,width).setIncludePad(false).setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
-                        .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE).setLineSpacing(lh-(p.descent()-p.ascent()),1).build();
+                    Script.Line line=data.lines.get(i);StaticLayout l;
+                    if(i==last){int count=Math.max(0,Math.min(line.text.length(),shown-line.start));l=layout(data,line,count,width,size,true);}
+                    else {l=completed.get(i);if(l==null){l=layout(data,line,line.text.length(),width,size,false);completed.put(i,l);}}
                     rows.add(l);total+=l.getLineCount()*lh;
                 }
             }

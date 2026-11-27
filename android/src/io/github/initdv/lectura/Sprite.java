@@ -120,6 +120,7 @@ final class Sprite {
         this.directions=directions;sceneTime=sourceTime;
     }
     private double step(double a){return step==0?a:round(a/step)*step;}
+    boolean gliding(double t){return t<transitionAt+RigPose.GLIDE_MS;}
     void tick(double t){
         double dt=last<0?0:clamp(t-last,0,100);
         boolean clock=sceneTime>=0,scripted=clock&&directions!=null&&forcedPose==null;
@@ -136,7 +137,7 @@ final class Sprite {
         }
         double blend=RigPose.ease((t-transitionAt)/RigPose.GLIDE_MS);
         if(blend<1)RigPose.mix(transitionFrom,goal,blend,pose);
-        else if(clock||last<0)System.arraycopy(goal,0,pose,0,pose.length);
+        else if(clock||last<0||gliding(last))System.arraycopy(goal,0,pose,0,pose.length);
         else rig.idle(pose,goal,dt);
         if(clock&&!onClock){micro="";script="";}
         RobotChoreo.Pose robot=robotStage==null?null:robotStage.sample(reduced?null:choreography,sceneTime,forcedPose==null);

@@ -123,6 +123,7 @@ for ((i=0;i<150;i++)); do
         fi
         adb shell pm clear "$package" | tee -a "$log"
         instrument installation-en-avion DeviceChecks -e mode clean "${tts[@]}" || failures=1
+        instrument cadence DeviceChecks -e mode cadence || failures=1
         instrument video-uhd DeviceChecks -e mode video-uhd || failures=1
         # 1080 px at 288 dpi is 600 dp: a tall phone with modestly scaled display elements.
         adb shell wm size 1080x2400

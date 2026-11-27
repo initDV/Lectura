@@ -33,13 +33,13 @@ final class AudioPreparation {
     static final class Result implements AutoCloseable {
         final Pcm pcm;
         final List<Script.Segment> segments;
-        final Script.Keywords words;
+        final Script.Terminal terminal;
         final Performance performance;
         final AichaTrack aicha;
         final String voiceUsed;
 
-        Result(Pcm pcm,List<Script.Segment> segments,Script.Keywords words,Performance performance,AichaTrack aicha,String voiceUsed){
-            this.pcm=pcm;this.segments=segments;this.words=words;this.performance=performance;this.aicha=aicha;this.voiceUsed=voiceUsed;
+        Result(Pcm pcm,List<Script.Segment> segments,Script.Terminal terminal,Performance performance,AichaTrack aicha,String voiceUsed){
+            this.pcm=pcm;this.segments=segments;this.terminal=terminal;this.performance=performance;this.aicha=aicha;this.voiceUsed=voiceUsed;
         }
         @Override public void close(){if(pcm!=null)pcm.close();}
     }
@@ -85,7 +85,9 @@ final class AudioPreparation {
             double duration=decoded!=null?decoded.duration():Math.max(1,request.silent?text.length()*1000./cps:segments.get(segments.size()-1).to);
             AichaTrack aicha=lectrice?new AichaTrack(refs,segments,duration,mood,cfg.emotions,lang,!cfg.fileAudio&&spokenBy.equals("siwis"),decoded):null;
             Performance performance=lectrice?null:new Performance(segments,mood,refs.rig);
-            delivered=deliver.test(new Result(decoded,segments,words,performance,aicha,spokenBy));
+            // Highlighting the complete script can be costly; do it before UI delivery.
+            Pcm.interrupted();Script.Terminal terminal=new Script.Terminal(text,words);Pcm.interrupted();
+            delivered=deliver.test(new Result(decoded,segments,terminal,performance,aicha,spokenBy));
         }catch(Exception e){fail.accept(e);}finally{if(!delivered&&decoded!=null)decoded.close();}
     }
 }

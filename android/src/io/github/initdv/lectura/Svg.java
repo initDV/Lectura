@@ -21,6 +21,7 @@ final class Svg {
     private static final Pattern TRANSFORM = Pattern.compile("([A-Za-z]+)\\(([^)]*)\\)");
     private static final Set<String> SHAPES = Set.of("svg","g","rect","line","circle","ellipse","path","polyline","polygon","defs","clipPath","use");
     private static final Pattern LOCAL_CLIP = Pattern.compile("url\\(#([\\w-]+)\\)");
+    private static final Pattern INLINE_HIDDEN = Pattern.compile("display\\s*:\\s*none");
     final Node root;
     final float[] box;
     final HashMap<String,Node> ids = new HashMap<>();
@@ -50,6 +51,8 @@ final class Svg {
             if (evt==XmlPullParser.START_TAG) { Node child=read(x); if (child!=null) n.add(child); }
         }
         n.staticTransform=matrix(n.attr("transform"));
+        n.opacity=n.f("opacity",1);
+        String inline=n.attr("style");n.inlineHidden=!inline.isEmpty()&&INLINE_HIDDEN.matcher(inline).find();
         n.original=n.geometry();
         return n;
     }
@@ -80,33 +83,36 @@ final class Svg {
         drawNode(c,root,Style.DEFAULT,false); c.restore();
     }
     private void drawNode(Canvas c, Node n, Style parent, boolean reference) {
-        if(n.kind.equals("defs")||n.kind.equals("clipPath")||n.hidden||n.alpha==0||n.attr("display").equals("none"))return;
-        String inline=n.attr("style");if(!inline.isEmpty()&&inline.matches("(?s).*display\\s*:\\s*none.*"))return;
+        if(n.kind.equals("defs")||n.kind.equals("clipPath")||n.hidden||n.inlineHidden||n.attr("display").equals("none"))return;
+        float alpha=n.alpha<0?n.opacity:n.alpha;
+        if(alpha<=0)return;
         Style style = n.style;
         if (style==null || n.inherited!=parent) { n.inherited=parent; n.style=style=new Style(parent,n); }
-        c.save();
-        Matrix m=n.transform==null?n.staticTransform:n.transform;
-        if (m != null) c.concat(m);
-        if(n.mask!=null)c.clipPath(n.mask.outline());
-        float alpha=n.alpha<0?n.f("opacity",1):n.alpha;
-        boolean layer=alpha<.999f;
-        if (layer) c.saveLayerAlpha(null,Math.round(255*alpha));
         Path p=n.outline();
-        if (p!=null) {
-            if (style.fill!=0) {
-                paint.setStyle(Paint.Style.FILL); paint.setColor(style.fill); paint.setAlpha(Math.round(style.fillOpacity*255)); c.drawPath(p,paint);
-            }
-            float width=n.strokeWidth<0?style.width:n.strokeWidth;
-            if (style.stroke!=0 && width>0) {
-                paint.setStyle(Paint.Style.STROKE); paint.setColor(style.stroke); paint.setAlpha(Math.round(style.strokeOpacity*255));
-                paint.setStrokeWidth(width); paint.setStrokeMiter(4); paint.setStrokeCap(style.cap); paint.setStrokeJoin(style.join); c.drawPath(p,paint);
-            }
+        float width=n.strokeWidth<0?style.width:n.strokeWidth;
+        boolean fill=p!=null&&style.fill!=0,stroke=p!=null&&style.stroke!=0&&width>0;
+        // A single paint can carry the opacity directly. A group (or a fill
+        // overlapping a stroke) still needs isolated compositing.
+        boolean layer=alpha<.999f&&(fill&&stroke||n.reference!=null||!n.children.isEmpty());
+        int opacity=layer||alpha>=.999f?255:Math.round(255*alpha);
+        Matrix m=n.transform==null?n.staticTransform:n.transform;
+        boolean scoped=m!=null||n.mask!=null;
+        if(scoped)c.save();
+        if(m!=null)c.concat(m);
+        if(n.mask!=null)c.clipPath(n.mask.outline());
+        if(layer)c.saveLayerAlpha(null,Math.round(255*alpha));
+        if(fill){
+            paint.setStyle(Paint.Style.FILL);paint.setColor(style.fill);paint.setAlpha(Math.round(style.fillOpacity*opacity));c.drawPath(p,paint);
+        }
+        if(stroke){
+            paint.setStyle(Paint.Style.STROKE);paint.setColor(style.stroke);paint.setAlpha(Math.round(style.strokeOpacity*opacity));
+            paint.setStrokeWidth(width);paint.setStrokeMiter(4);paint.setStrokeCap(style.cap);paint.setStrokeJoin(style.join);c.drawPath(p,paint);
         }
         // The hand definition is a leaf reference (do not recurse through another <use>).
         if(n.reference!=null&&!reference)drawNode(c,n.reference,style,true);
-        for (Node child:n.children) drawNode(c,child,style,reference);
-        if (layer) c.restore();
-        c.restore();
+        for(Node child:n.children)drawNode(c,child,style,reference);
+        if(layer)c.restore();
+        if(scoped)c.restore();
     }
     private static final class Style {
         static final Style DEFAULT = new Style();
@@ -131,8 +137,8 @@ final class Svg {
         Matrix staticTransform,transform;
         Path original,current;
         Style style,inherited;
-        boolean hidden;
-        float alpha=-1,strokeWidth=-1;
+        boolean hidden,inlineHidden;
+        float alpha=-1,opacity=1,strokeWidth=-1;
         Node(String kind) { this.kind=kind; }
         void add(Node child) { if (child.parent!=null) child.parent.children.remove(child); child.parent=this; children.add(child); }
         void before(Node child,Node sibling) {
@@ -141,7 +147,10 @@ final class Svg {
         }
         Path outline(){return current==null?original:current;}
         String attr(String name) { return a.getOrDefault(name,""); }
-        float f(String name,float fallback) { try { return Float.parseFloat(attr(name)); } catch (NumberFormatException e) { return fallback; } }
+        float f(String name,float fallback) {
+            String value=a.get(name);if(value==null||value.isEmpty())return fallback;
+            try{return Float.parseFloat(value);}catch(NumberFormatException e){return fallback;}
+        }
         float f(String name) { return f(name,0); }
         Node find(String kind) { for(Node n:children) { if(n.kind.equals(kind)) return n; Node k=n.find(kind); if(k!=null)return k; } return null; }
         Matrix reset() { if (transform==null) transform=new Matrix(); else transform.reset(); return transform; }

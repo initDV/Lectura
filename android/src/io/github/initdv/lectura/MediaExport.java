@@ -1,6 +1,8 @@
 package io.github.initdv.lectura;
 
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Picture;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
@@ -29,6 +31,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CancellationException;
 
 /** Native MP4 (AVC/HEVC + AAC) and WebM (VPx + Opus) recording. */
@@ -97,9 +100,9 @@ final class MediaExport {
         if(f.audio.equals(AAC))m.setInteger(MediaFormat.KEY_AAC_PROFILE,MediaCodecInfo.CodecProfileLevel.AACObjectLC);
         return m;
     }
-    static final class Frame {
-        final Bitmap image;final long us;
-        Frame(Bitmap b,long t){image=b;us=t;}
+    private static final class Frame {
+        final Picture scene;final long us;
+        Frame(Picture scene,long time){this.scene=scene;us=time;}
     }
     /** Timed slices from the audio-only clock. The listening gain and mute are intentionally not copied. */
     static final class Mark {
@@ -109,37 +112,35 @@ final class MediaExport {
     static final class Recording {
         final int w,h;final File dir;final Pcm sound;
         private Frame next;
-        private Bitmap spare;
-        private boolean stopped,cancelled,begun,encoding;
+        private Picture spare;
+        private boolean stopped,cancelled,begun;
         private long stopAt;
+        private volatile String timings="";
         private final ArrayList<Mark> marks=new ArrayList<>();
+        String timings(){return timings;}
         Recording(int w,int h,File dir,Pcm sound)throws IOException{
             this.w=w;this.h=h;this.dir=dir;this.sound=sound==null?null:new Pcm(sound.file,sound.channels,sound.rate,sound.frames,false);
         }
         boolean uhd(){return MediaExport.uhd(w,h);}
-        // A single reusable ~32 MiB frame for UHD. Skip a tick when the encoder
-        // is busy rather than blocking playback or accumulating large bitmaps.
-        synchronized boolean room(){return !stopped&&!cancelled&&next==null&&(!uhd()||!encoding);}
-        synchronized Bitmap buffer(){
+        // The scene thread submits only vector commands. Keep one pending picture
+        // and never wait for the encoder on the UI thread.
+        private boolean room(){return !stopped&&!cancelled&&next==null;}
+        synchronized Picture buffer(){
             if(!room())return null;
-            Bitmap b=spare;spare=null;return b==null?newBuffer():b;
+            Picture p=spare;spare=null;return p==null?new Picture():p;
         }
-        private Bitmap newBuffer(){return Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);}
-        synchronized void offer(Bitmap b,long us){if(!room()){b.recycle();return;}next=new Frame(b,us);notifyAll();}
+        synchronized void offer(Picture p,long us){if(room()){next=new Frame(p,us);notifyAll();}}
         synchronized void mark(Mark mark){if(!stopped&&!cancelled&&sound!=null)marks.add(mark);}
-        synchronized void end(long us){
-            stopped=true;stopAt=us;if(spare!=null){spare.recycle();spare=null;}notifyAll();
-        }
+        synchronized void end(long us){stopped=true;stopAt=us;spare=null;notifyAll();}
         synchronized void cancel(){
-            if(cancelled)return;cancelled=true;if(next!=null){next.image.recycle();next=null;}
-            if(spare!=null){spare.recycle();spare=null;}
+            if(cancelled)return;cancelled=true;next=null;spare=null;
             if(!begun&&sound!=null)sound.close();notifyAll();
         }
         synchronized void check(){if(cancelled||Thread.currentThread().isInterrupted())throw new CancellationException();}
         private synchronized Frame take()throws InterruptedException {
-            while(!stopped&&!cancelled&&next==null)wait(100);check();Frame f=next;next=null;encoding=f!=null;return f;
+            while(!stopped&&!cancelled&&next==null)wait(100);check();Frame f=next;next=null;return f;
         }
-        private synchronized void used(Bitmap b){encoding=false;if(spare!=null||cancelled||stopped)b.recycle();else spare=b;}
+        private synchronized void used(Picture picture){if(!cancelled&&!stopped&&spare==null)spare=picture;}
         File run(String forcedExt,Runnable started)throws Exception {
             synchronized(this){check();begun=true;}
             File video=null,audio=null,merged=null,finalFile=null;
@@ -151,12 +152,21 @@ final class MediaExport {
                     try{encoder=new VideoEncoder(candidate,w,h,video);f=candidate;break;}
                     catch(Exception e){if(error!=null)e.addSuppressed(error);error=e;video.delete();video=null;}}
                 if(encoder==null)throw new Unavailable(w,h,error);
-                long last=0;int n=0;
+                long last=0,rasterNs=0,uploadNs=0,feedNs=0;int n=0;
                 try(VideoEncoder destination=encoder){
-                    check();used(newBuffer());check();started.run();
-                    while(true){Frame frame=take();if(frame==null)break;
-                        try{destination.write(frame);n++;last=frame.us;}finally{used(frame.image);}
-                    }
+                    check();
+                    // One full-resolution bitmap, owned and rasterized by the encoder worker.
+                    Bitmap bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
+                    try{
+                        Canvas canvas=new Canvas(bitmap);check();started.run();
+                        while(true){Frame frame=take();if(frame==null)break;
+                            long draw=System.nanoTime();
+                            try{canvas.drawPicture(frame.scene);}finally{used(frame.scene);}
+                            long feed=System.nanoTime();rasterNs+=feed-draw;
+                            uploadNs+=destination.write(bitmap,frame.us);feedNs+=System.nanoTime()-feed;
+                            n++;last=frame.us;
+                        }
+                    }finally{bitmap.recycle();}
                     if(n==0)throw new IOException("Enregistrement vide.");
                     destination.end();
                 }
@@ -165,7 +175,11 @@ final class MediaExport {
                     merged=File.createTempFile("lectura-","."+f.ext,dir);join(f,video,audio,merged);
                 }else{merged=video;video=null;}
                 if(f.ext.equals("mp4"))fastStart(merged);
-                verify(merged,f,w,h,sound!=null);finalFile=merged;return finalFile;
+                verify(merged,f,w,h,sound!=null);
+                // Diagnostic wall time per submitted frame, not the codec's asynchronous CPU time.
+                timings=String.format(Locale.ROOT,"%d images (%.1f i/s), raster %.2f ms, transfert GL %.2f ms, soumission GL/codec %.2f ms par image",
+                    n,n*1_000_000./length,rasterNs/(n*1_000_000.),uploadNs/(n*1_000_000.),(feedNs-uploadNs)/(n*1_000_000.));
+                finalFile=merged;return finalFile;
             }finally{
                 cancel();if(sound!=null)sound.close();if(video!=null)video.delete();if(audio!=null)audio.delete();if(merged!=null&&merged!=finalFile)merged.delete();
             }
@@ -182,8 +196,8 @@ final class MediaExport {
                 window=codec.createInputSurface();egl=new Egl(window,w,h);codec.start();output=new Track(file,f.container);
             }catch(Exception|OutOfMemoryError e){try{close();}catch(Exception cleanup){e.addSuppressed(cleanup);}throw e;}
         }
-        void write(Frame frame)throws IOException{
-            output.drain(codec,0);egl.blit(frame.image,frame.us);output.drain(codec,0);
+        long write(Bitmap frame,long us)throws IOException{
+            output.drain(codec,0);long upload=egl.blit(frame,us);output.drain(codec,0);return upload;
         }
         void end()throws IOException {codec.signalEndOfInputStream();output.untilEnd(codec);output.finish();}
         @Override public void close(){
@@ -368,10 +382,10 @@ final class MediaExport {
                 checkGl();
             }catch(Exception|OutOfMemoryError e){close();throw e;}
         }
-        void blit(Bitmap b,long us)throws IOException {
-            GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D,0,0,0,b);
+        long blit(Bitmap b,long us)throws IOException {
+            long start=System.nanoTime();GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D,0,0,0,b);long upload=System.nanoTime()-start;
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);checkGl();
-            req(EGLExt.eglPresentationTimeANDROID(display,surface,us*1000));req(EGL14.eglSwapBuffers(display,surface));
+            req(EGLExt.eglPresentationTimeANDROID(display,surface,us*1000));req(EGL14.eglSwapBuffers(display,surface));return upload;
         }
         private static int shader(int kind,String source)throws IOException{
             int shader=GLES20.glCreateShader(kind);GLES20.glShaderSource(shader,source);GLES20.glCompileShader(shader);int[] ok=new int[1];GLES20.glGetShaderiv(shader,GLES20.GL_COMPILE_STATUS,ok,0);
