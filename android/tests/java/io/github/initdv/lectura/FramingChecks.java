@@ -95,7 +95,7 @@ final class FramingChecks {
     }
 
     static String run(DeviceChecks d,Context ctx)throws Exception{
-        d.progress("Portrait allongé : ouverture");MainActivity a=d.open(ctx);
+        d.progress("Portrait allongé : ouverture");MainActivity a=d.openResumed(ctx);
         try{
             d.waitFor("Fenêtre du portrait allongé",()->a.isForeground&&a.hasWindowFocus(),10000);
             d.progress("Portrait allongé : préparation d’Aïcha");

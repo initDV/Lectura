@@ -1,6 +1,7 @@
 package io.github.initdv.lectura;
 
 import android.app.Activity;
+import android.app.Application;
 import android.app.Instrumentation;
 import android.content.Context;
 import android.content.ComponentName;
@@ -823,6 +824,31 @@ public final class DeviceChecks extends Instrumentation {
         return wav;
     }
     MainActivity open(Context ctx){return (MainActivity)startActivitySync(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
+    MainActivity openResumed(Context ctx)throws InterruptedException {
+        // After changing density, continuous window redraws can prevent startActivitySync's
+        // idle callback from ever running. Wait for this activity’s lifecycle, not for idle.
+        Application app=(Application)ctx.getApplicationContext();
+        CountDownLatch resumed=new CountDownLatch(1);
+        AtomicReference<MainActivity> result=new AtomicReference<>();
+        Application.ActivityLifecycleCallbacks observer=new Application.ActivityLifecycleCallbacks(){
+            @Override public void onActivityPostResumed(Activity a){
+                if(a instanceof MainActivity){result.set((MainActivity)a);resumed.countDown();}
+            }
+            @Override public void onActivityCreated(Activity a,Bundle state){}
+            @Override public void onActivityStarted(Activity a){}
+            @Override public void onActivityResumed(Activity a){}
+            @Override public void onActivityPaused(Activity a){}
+            @Override public void onActivityStopped(Activity a){}
+            @Override public void onActivitySaveInstanceState(Activity a,Bundle state){}
+            @Override public void onActivityDestroyed(Activity a){}
+        };
+        app.registerActivityLifecycleCallbacks(observer);
+        try{
+            ctx.startActivity(new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            require(resumed.await(18,TimeUnit.SECONDS),"Activité du portrait allongé non reprise sous 18 s");
+            return result.get();
+        }finally{app.unregisterActivityLifecycleCallbacks(observer);}
+    }
     // Observe the values from the actual drawn frame. t is a playback-clock sample, not an audio timestamp.
     private JSONArray sampleReading(MainActivity a,File dir,String name,long timeout)throws Exception {
         waitFor("Démarrage de la lecture : "+name,()->a.reading!=null&&a.reading.playing,10000);
