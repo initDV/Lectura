@@ -185,7 +185,7 @@ final class Screens {
         refs.expressions.keys().forEachRemaining(out::add);return out;}
     private void characters(){
         LinearLayout c=card(t("editeur.personnage"),0);small(c,t("persos.aide"),0);
-        Map<String,View> cards=new LinkedHashMap<>();
+        Map<String,View> cards=new LinkedHashMap<>();LinearLayout list=u.col();list.setVisibility(View.GONE);
         int width=(int)Math.min(960,a.getResources().getDisplayMetrics().widthPixels/u.density)-62,cols=Math.max(1,(width+10)/102);
         LinearLayout row=null;int n=0;for(JSONObject d:a.refs.characters){
             if(n%cols==0){row=u.row();row.setGravity(Gravity.TOP);u.add(c,row,10);}else u.gap(row,10);
@@ -195,26 +195,34 @@ final class Screens {
             try{v.addView(u.art(a.svg(d.optString("svg")),1),u.lp(52,104));}catch(Exception e){a.log("personnages",e);}
             TextView label=u.text(name,12.8f,u.text,400);label.setGravity(Gravity.CENTER);u.add(v,label,4);
             box.setContentDescription(name);cards.put(id,box);markCharacter(box,id.equals(p.character));
-            u.click(box,()->{p.character=id;a.db.set("personnageId",id);cards.forEach((k,w)->markCharacter(w,k.equals(id)));});
+            u.click(box,()->{p.character=id;a.db.set("personnageId",id);cards.forEach((k,w)->markCharacter(w,k.equals(id)));
+                if(list.getVisibility()==View.VISIBLE)segments(list);});
             row.addView(box,new LinearLayout.LayoutParams(0,Ui.WRAP,1));n++;
         }
         if(row!=null&&n%cols!=0)for(int i=n%cols;i<cols;i++){u.gap(row,10);row.addView(new View(a),new LinearLayout.LayoutParams(0,1,1));}
-        LinearLayout ec=card(t("persos.emotions"),14),list=u.col();
+        LinearLayout ec=card(t("persos.emotions"),14);
         check(ec,t("persos.emotions.auto"),p.emotions,b->{p.emotions=b;if(list.getVisibility()==View.VISIBLE)segments(list);});
         small(ec,t("persos.emotions.aide"),0);u.gap(ec,12);movements(ec);
         if(p.text.trim().isEmpty()){small(ec,t("persos.sansTexte"),0);return;}
         List<Script.Segment> parts=p.recalc();TextView expand=u.text(t("editeur.expressions")+" ("+parts.size()+")",15,u.text,600);expand.setMinimumHeight(u.d(44));u.setIcon(expand,"chevron",14,u.text,6);
-        list.setVisibility(View.GONE);u.click(expand,()->{boolean visible=list.getVisibility()!=View.VISIBLE;list.setVisibility(visible?View.VISIBLE:View.GONE);if(visible)segments(list);});
+        u.click(expand,()->{boolean visible=list.getVisibility()!=View.VISIBLE;list.setVisibility(visible?View.VISIBLE:View.GONE);if(visible)segments(list);});
         u.add(ec,expand,0);u.add(ec,list,0);
     }
     private void markCharacter(View box,boolean selected){box.setSelected(selected);box.setBackground(u.touch(selected?u.surface2:u.bg,12,selected?u.accent:u.border,1));}
     private void segments(LinearLayout box){
         box.removeAllViews();small(box,t("editeur.expressions.aide"),0);List<Script.Segment> parts=p.recalc();
-        Script.Keywords words=new Script.Keywords(a.refs,a.db.locale(),object(settings,"motsPerso"));Mood m=new Mood(a.refs,a.db.locale(),words,p.emotions);
+        boolean lectrice=AichaTrack.matches(a.refs.character(p.character));
+        Script.Keywords words=new Script.Keywords(a.refs,a.db.locale(),object(settings,"motsPerso"));Mood m=new Mood(a.refs,a.db.locale(),words,p.emotions,lectrice);
         List<String> ids=expressions(a.refs);ScrollView s=u.scroll();LinearLayout inner=u.col();s.addView(inner,new ScrollView.LayoutParams(-1,-2));box.addView(s,u.lp(Ui.MATCH,Math.min(320,parts.size()*82+30)));
         for(int i=0;i<Math.min(200,parts.size());i++){
             int index=i;Script.Segment seg=parts.get(i);String set=seg.expression;seg.expression="auto";Mood.Analysis auto=m.summary(seg);seg.expression=set;
-            List<String> names=new ArrayList<>();names.add(t("expr.auto")+" → "+t("expr."+auto.expr)+(auto.second.isEmpty()?"":" + "+t("expr."+auto.second)));
+            String face=auto.expr;
+            if(lectrice){
+                face="neutre";
+                if(p.emotions&&seg.type==Script.SPOKEN)face=a.refs.direction.read(seg.text,auto).faces.stream()
+                    .map(note->note.kind).filter(id->!id.equals("neutre")).findFirst().orElse("neutre");
+            }
+            List<String> names=new ArrayList<>();names.add(t("expr.auto")+" → "+t("expr."+face)+(lectrice||auto.second.isEmpty()?"":" + "+t("expr."+auto.second)));
             for(String id:ids.subList(1,ids.size()))names.add(t("expr."+id));
             LinearLayout row=u.col();u.pad(row,8,6);row.setBackground(u.shape(u.bg,10,u.border,1));u.add(inner,row,6);
             TextView text=u.text(seg.text,14.4f,u.text,400);u.one(text);u.add(row,text,0);

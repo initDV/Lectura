@@ -158,7 +158,7 @@ export function planAicha(segments, dureeMs, { emotions = true, humeur = null, t
   for (const cue of cues) {
     while (figures[suivante]?.start < cue.end) suivante++;
     const salut = cue.kind === 'salut', figure = POSES.includes(cue.kind);
-    const libre = figure || salut ? cue.end + .14 : Math.max(cue.end + .28, cue.start + 1.65);
+    const libre = figure ? cue.end + .075 : salut ? cue.end + .14 : Math.max(cue.end + .28, cue.start + 1.65);
     const reserve = !figure && figures[suivante]?.start < libre;
     const enMarche = figure && marches.some(m => m.start < cue.end && cue.start < m.end);
     cue.hand = salut ? -1 : !reserve && !enMarche && cue.kind !== 'ecoute' && cue.kind !== 'hoche'

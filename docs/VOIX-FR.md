@@ -39,6 +39,19 @@ Piper anticipe jusqu’à trois phrases sur 320 caractères parlés, Kokoro au p
 
 Le démarrage progressif avec N+1 pendant N n'est pas activé. La lecture, les sauts, les lèvres et l'export utilisent le même WAV et les mêmes durées mesurées. Démarrer avec un WAV incomplet introduirait une nouvelle horloge, des attentes à la frontière des phrases et, sur le Web, une normalisation différente avant de connaître le pic de l'ensemble. Les révisions de cache distinguent les nouveaux rendus des anciens ; les packs et brouillons sont conservés.
 
+### Du clic à la parole sur Android 12
+
+Sur l’[émulateur x86_64 de la recette #64](https://github.com/initDV/Lectura/actions/runs/46037781325), pack Estelle installé et réseau coupé, le contrôle chronomètre **Lancer** jusqu’au passage du curseur audio sur la première fenêtre de PCM audible. Le délai de scrutation est de 80 ms ; ce n’est pas une mesure au micro.
+
+| Situation | Temps observé après Lancer |
+| --- | ---: |
+| À froid, texte de trois phrases | 2 932 ms |
+| Clic pendant le préchauffage, autre texte de deux phrases | 7 825 ms |
+| Deux phrases déjà préparées après édition | 340 ms |
+| Relecture du même texte | 159 ms |
+
+Dans le troisième cas, 7 797 ms de préparation se sont déroulées **avant** le clic. L’essai vérifie aussi que la saisie d’un autre texte annule le travail périmé et que la relecture conserve le même WAV. Les textes ne sont pas identiques entre les scénarios : ce n’est pas un comparatif avant/après du moteur ni une mesure de la vitesse d’un téléphone ARM64.
+
 ## Vérification
 
 - `npm test`, `npm run lint`, `npm run build` ; `bash android/build.sh --check` avec JDK/SDK. La CI Android signe et vérifie l'APK sur émulateur, notamment la mise à jour et la lecture de Siwis Piper hors réseau.

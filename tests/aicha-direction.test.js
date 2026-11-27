@@ -40,7 +40,19 @@ describe('Gestes réellement joués dans la lecture', () => {
     const cite = bloc('Le mot « voici » précède le texte, et `par exemple` reste en code.');
     expect(cite.cues.some(c => c.kind === 'illustre' || c.kind === 'explique')).toBe(false);
     expect(bloc('On reprendra ensuite le calcul.').cues.some(c => c.kind === 'enumere')).toBe(false);
+    expect(bloc('Je regardais la porte, puis… silence.').cues.some(c => c.kind === 'enumere')).toBe(false);
     expect(bloc('Ce texte n’explique pas la théorie.').cues.some(c => c.kind === 'explique')).toBe(false);
+  });
+
+  it('garde deux mains actives sur deux phrases rapides contiguës', () => {
+    const plan = preparer('Par exemple, ouvre ton carnet. Deux options : le texte ou l’image.', 'fr', [
+      { texte: 'Par exemple, ouvre ton carnet.', debutMs: 0, finMs: 1410 },
+      { texte: 'Deux options : le texte ou l’image.', debutMs: 1410, finMs: 2950 },
+    ]);
+    const [a,b] = plan.cues.filter(c => c.kind === 'explique' || c.kind === 'compare');
+    expect(a.end).toBeLessThan(b.start);
+    expect(a.hand).toBe(1);
+    expect(b.hand).toBe(-1);
   });
 
   it('utilise les positions prononcées quand le texte préparé développe un nombre', () => {

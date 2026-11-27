@@ -68,7 +68,7 @@ export default {
   'editeur.err.tropGros': 'File too large (over 2 MB). Pick a shorter text file.',
   'editeur.personnage': 'Character',
   'editeur.expressions': 'Expression per sentence',
-  'editeur.expressions.aide': '“Auto” picks the expression from the words of the sentence (shown after the arrow). You can force one.',
+  'editeur.expressions.aide': '“Auto” follows the words and context. The arrow gives a preview: a reader can change expression as she reads. You can also choose a fixed expression.',
   'editeur.expressions.tronque': '… and {n} more sentences in automatic mode.',
   'editeur.expressionDe': 'Expression of sentence {n}',
   'editeur.enregistrer': 'Save',

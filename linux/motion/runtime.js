@@ -13,7 +13,9 @@ import { compilerLexique } from '../../src/modules/sentiment.js';
 import { creerHumeur } from '../../src/modules/humeur.js';
 import { buildMatcher, mergeDicts } from '../../src/modules/keywords.js';
 import sentiments from '../../data/sentiments_fr.json';
+import sentimentsEn from '../../data/sentiments_en.json';
 import keywords from '../../data/keywords_fr.json';
+import keywordsEn from '../../data/keywords_en.json';
 import extended from '../../data/keywords_fr_extended.json';
 
 const escape = (s) => String(s).replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
@@ -86,13 +88,16 @@ const factory = Object.freeze({ createElementNS: (_ns, name) => new Shape([name]
 // The robot rig asks for a shape factory when it groups limbs, not for a window.
 globalThis.document = factory;
 
-const lexique = compilerLexique(sentiments), matcher = buildMatcher(mergeDicts(keywords, extended));
+const resources = {
+  fr: { lexique: compilerLexique(sentiments), matcher: buildMatcher(mergeDicts(keywords, extended)) },
+  en: { lexique: compilerLexique(sentimentsEn), matcher: buildMatcher(mergeDicts(keywordsEn, extended)) },
+};
 let scene;
 export function configure(treeJson, definitionJson, trackJson) {
   const root = new Shape(JSON.parse(treeJson)), def = JSON.parse(definitionJson);
   const { text, segments, duration, siwis, lang, gain, emotions } = JSON.parse(trackJson);
   const timeline = new Timeline(text, segments);
-  const humeur = creerHumeur({ lexique, matcher, actif: emotions });
+  const humeur = creerHumeur({ ...resources[lang === 'en' ? 'en' : 'fr'], actif: emotions });
   if (def.rig === 'aicha') {
     const rig = rigAicha(root, def.appuiHanche), glasses = !!root.querySelector('#lunettes')?.children.length;
     const plan = planAicha(timeline.segs, duration, { emotions, humeur, texte: text }), lips = planBouche(segments, lang, siwis);

@@ -68,7 +68,7 @@ export default {
   'editeur.err.tropGros': 'Fichier trop gros (plus de 2 Mo). Choisis un fichier texte plus court.',
   'editeur.personnage': 'Personnage',
   'editeur.expressions': 'Expression par phrase',
-  'editeur.expressions.aide': '« Auto » choisit l’expression d’après les mots de la phrase (elle est indiquée après la flèche). Tu peux en imposer une.',
+  'editeur.expressions.aide': '« Auto » suit les mots et le contexte. La flèche indique un repère : une lectrice peut changer d’expression en lisant. Tu peux aussi en imposer une.',
   'editeur.expressions.tronque': '… et {n} autres phrases en mode automatique.',
   'editeur.expressionDe': 'Expression de la phrase {n}',
   'editeur.enregistrer': 'Enregistrer',

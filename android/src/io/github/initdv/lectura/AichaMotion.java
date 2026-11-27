@@ -190,7 +190,7 @@ final class AichaMotion {
         for(Cue c:p.cues){
             while(next<figures.size()&&figures.get(next).start<c.end)next++;
             boolean figure=FIGURES.contains(c.kind),walking=false;
-            double free=figure||c.kind.equals("salut")?c.end+.14:max(c.end+.28,c.start+1.65);
+            double free=figure?c.end+.075:c.kind.equals("salut")?c.end+.14:max(c.end+.28,c.start+1.65);
             boolean reserved=!figure&&next<figures.size()&&figures.get(next).start<free;
             if(figure)for(Walk w:p.walks)if(w.start<c.end&&c.start<w.end){walking=true;break;}
             c.hand=c.kind.equals("salut")?-1:!reserved&&!walking&&!c.kind.equals("ecoute")&&!c.kind.equals("hoche")
