@@ -1,15 +1,13 @@
-# Comparer les voix françaises de Lectura Android
+# Écouter Estelle avant et après le réglage de présence
 
-Les cinq WAV ont été produits par Lectura Android à **1×**, avec le même texte (`texte.txt`). Écoute-les au même volume. Compare l’enchaînement après la virgule, « les enfants », le « gn » de « montagne », « pluie », la fin de la question et le « Oui ! » isolé.
+Les trois WAV ont été produits hors ligne par Lectura Android à **1×**, avec le même texte (`texte.txt`). Compare d’abord les deux pistes Estelle au même volume : écoute « les enfants », « montagne », « pluie » et le « Oui ! » isolé.
 
-| Fichier | Voix dans Lectura |
+| Fichier | Voix et réglage |
 | --- | --- |
-| `01-siwis-douce.wav` | Siwis · F · douce (Piper, référence) |
-| `02-estelle.wav` | Estelle · F · Pocket TTS |
-| `03-siwis-kokoro.wav` | Siwis · F · Kokoro |
-| `04-mls-1.wav` | MLS 1 · F · claire (Piper) |
-| `05-mls-4.wav` | MLS 4 · M · clair (Piper) |
+| `01-siwis-douce.wav` | Siwis · F · douce (Piper, référence inchangée) |
+| `02-estelle-avant.wav` | Estelle · F · Pocket TTS, réglage du candidat #57 |
+| `03-estelle-plus5.wav` | La même prise d’Estelle, avec le renfort de présence |
 
-Les deux Siwis utilisent le même corpus avec des modèles différents. Estelle et Kokoro sont générées hors ligne sur l’émulateur ; les pistes n’ont pas été égalisées ni accélérées. Les tests vérifient le texte, les pauses et le signal PCM, pas une préférence à l’écoute ni le rendu des haut-parleurs du téléphone.
+**Les deux Estelle partent exactement de la même synthèse.** La seconde piste renforce légèrement la zone des consonnes autour de 3 kHz (+5 % d’amplitude au centre, soit environ +0,42 dB). La vitesse, le nombre d’échantillons, les pauses et les repères sont identiques. Ce pourcentage est celui du traitement, pas une note de clarté mesurée à l’oreille.
 
-**Attributions.** Siwis : *SIWIS French Speech Synthesis Database*, Université d’Édimbourg ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)), modèles Piper et [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M). Estelle : Kyutai Pocket TTS et préréglage Estelle (CC BY 4.0), [conversion ONNX d’Okuvia](https://github.com/ByBrawe/Okuvia-models/releases/tag/pocket-multilingual-preset-20261026). MLS : [Multilingual LibriSpeech](https://www.openslr.org/94/), CC BY 4.0, [modèle Piper français](https://huggingface.co/rhasspy/piper-voices/tree/main/fr/fr_FR/mls/medium).
+**Attributions.** Siwis : *SIWIS French Speech Synthesis Database*, Université d’Édimbourg ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)), [modèle Piper](https://huggingface.co/rhasspy/piper-voices/tree/main/fr/fr_FR/siwis/medium). Estelle : Kyutai Pocket TTS et préréglage Estelle (CC BY 4.0), [conversion ONNX d’Okuvia](https://github.com/ByBrawe/Okuvia-models/releases/tag/pocket-multilingual-preset-20261026).

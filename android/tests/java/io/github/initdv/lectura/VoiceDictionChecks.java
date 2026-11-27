@@ -42,7 +42,8 @@ final class VoiceDictionChecks {
         require(chunks.length==2&&Arrays.stream(chunks).allMatch(c->c.length<=400)
             &&(new String(chunks[0],0,chunks[0].length)+" "+new String(chunks[1],0,chunks[1].length)).equals(longIpa),"Borne Kokoro sans coupe de mot");
         quietEdges(refs,lex);
-        return "Clauses, question, pauses, texte et curseurs ; ɲ ≠ nj, liaison et ɥ dans les entrées Kokoro ; consonnes faibles conservées, Piper inchangé";
+        estellePresence(refs,lex);
+        return "Clauses, question, pauses, texte et curseurs ; ɲ ≠ nj, liaison et ɥ dans les entrées Kokoro ; bords faibles conservés ; Estelle +5 % à 3 kHz, durée et silences identiques";
     }
 
     private static void quietEdges(Refs refs,JSONObject lex)throws Exception {
@@ -50,7 +51,7 @@ final class VoiceDictionChecks {
         for(int i=start-quiet;i<end+quiet;i++)input[i]=(i%2==0?1:-1)*(i>=start&&i<end?.4f:.001f);
         int[] span=VoiceRender.audible(input,rate);
         require(span[0]>start-quiet&&span[1]<end+quiet,"Le seuil de référence doit rogner les bords faibles de la fixture");
-        for(var profile:List.of(VoiceRender.Profile.ESTELLE,VoiceRender.Profile.KOKORO)){
+        for(var profile:List.of(VoiceRender.Profile.ESTELLE,VoiceRender.Profile.PACK)){
             var plan=SpeechPlan.plan("Chut.","fr",lex,true);
             try(Pcm wav=VoiceRender.render(refs.context.getCacheDir(),null,null,plan,rate,28,profile,s->input,(n,total)->{}).pcm){
                 var p=plan.get(0).original;
@@ -58,6 +59,50 @@ final class VoiceDictionChecks {
                 require(DeviceChecks.pcmPeak(wav,4,20)>0&&DeviceChecks.pcmPeak(wav,430,446)>0
                     &&DeviceChecks.pcmPeak(wav,451,769)==0,"Bords perdus ou silence non nul "+profile);
             }
+        }
+    }
+
+    private static void estellePresence(Refs refs,JSONObject lex)throws Exception {
+        int rate=24000;
+        for(int hz:new int[]{220,3000,10000}){
+            float[] tone=new float[rate];
+            for(int i=0;i<tone.length;i++)tone[i]=(float)(.25*Math.sin(2*Math.PI*hz*i/rate));
+            float[] original=tone.clone();
+            var dryPlan=SpeechPlan.plan("Bonjour.","fr",lex,true);
+            var wetPlan=SpeechPlan.plan("Bonjour.","fr",lex,true);
+            File dir=refs.context.getCacheDir();
+            try(Pcm dry=VoiceRender.render(dir,null,null,dryPlan,rate,28,VoiceRender.Profile.PACK,s->tone,(n,total)->{}).pcm;
+                Pcm wet=VoiceRender.render(dir,null,null,wetPlan,rate,28,VoiceRender.Profile.ESTELLE,s->tone,(n,total)->{}).pcm){
+                var a=dryPlan.get(0).original;var b=wetPlan.get(0).original;
+                require(dry.frames==wet.frames&&a.speechEnd==b.speechEnd&&a.to==b.to&&b.to-b.speechEnd==320
+                    &&DeviceChecks.pcmPeak(wet,b.speechEnd+1,b.to-1)==0,"Renfort Estelle : modification de la durée ou du silence");
+                require(Arrays.equals(original,tone),"Renfort Estelle : modification du PCM source en cache");
+                double gain=rms(wet)/rms(dry);
+                require(hz==3000?Math.abs(gain-1.05)<.001:Math.abs(gain-1)<.005,"Renfort Estelle à "+hz+" Hz : "+gain);
+            }
+        }
+    }
+
+    private static double rms(Pcm pcm)throws Exception {
+        short[] buffer=new short[pcm.rate/4];
+        int n=pcm.read(pcm.rate/4,buffer,buffer.length);require(n==buffer.length,"Fenêtre de mesure PCM incomplète");
+        double sum=0;for(short value:buffer)sum+=(double)value*value;
+        return Math.sqrt(sum/n);
+    }
+
+    static void estelleComparison(Refs refs,Hd.Synthesis after,int cps,VoiceRender.Renderer raw)throws Exception {
+        var plan=SpeechPlan.plan(SAMPLE,"fr",Refs.object(refs.json("prononciation.json"),"fr"),true);
+        // Reassemble the very same model output as #57 would, without the new presence stage.
+        var before=VoiceRender.render(refs.context.getCacheDir(),null,null,plan,Pocket.RATE,cps,
+            VoiceRender.Profile.PACK,raw,(n,total)->{});
+        try(Pcm old=before.pcm){
+            require(old.frames==after.pcm.frames&&before.segments.size()==after.segments.size(),"Durée du comparatif Estelle");
+            for(int i=0;i<before.segments.size();i++){
+                var a=before.segments.get(i);var b=after.segments.get(i);
+                require(a.from==b.from&&a.speechEnd==b.speechEnd&&a.to==b.to&&a.text.equals(b.text),"Repère modifié dans le comparatif Estelle");
+            }
+            sample(refs,"02-estelle-avant",old);
+            sample(refs,"03-estelle-plus5",after.pcm);
         }
     }
 

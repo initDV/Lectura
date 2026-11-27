@@ -251,14 +251,15 @@ final class Hd implements AutoCloseable {
         if(text.length()>SpeechPlan.MAX_TEXT)throw new IOException("Texte trop long pour la synthèse.");
         JSONObject v=voice(id);if(!installed(v))throw new IOException("Voix HD non installée.");
         VoicePacks.Spec spec=pack(v);boolean estelle=spec==VoicePacks.ESTELLE;
-        String revision=estelle?"rendu-mimi-8|":spec==VoicePacks.KOKORO?"rendu-kokoro-8|":"rendu-7|";
+        // Estelle's presence filter changes only the assembled WAV, not the raw inference cache.
+        String revision=estelle?"rendu-mimi-9|":spec==VoicePacks.KOKORO?"rendu-kokoro-8|":"rendu-7|";
         String key=key("SHA-256",revision+id+"|"+cps+"|"+text);
         File wav=new File(whole,key+".wav"),json=new File(whole,key+".json");
         JSONObject config=spec==null?Library.readJson(cfg(v)):null;
         int rate=estelle?Pocket.RATE:config==null?24000:object(config,"audio").optInt("sample_rate",22050);
         List<SpeechPlan.Fragment> plan=spokenPlan(text,spec);
         Synthesis saved=VoiceRender.cached(wav,json,plan,rate,progress);if(saved!=null)return saved;
-        VoiceRender.Profile profile=estelle?VoiceRender.Profile.ESTELLE:spec==VoicePacks.KOKORO?VoiceRender.Profile.KOKORO:
+        VoiceRender.Profile profile=estelle?VoiceRender.Profile.ESTELLE:spec==VoicePacks.KOKORO?VoiceRender.Profile.PACK:
             id.equals("siwis")?VoiceRender.Profile.SIWIS:VoiceRender.Profile.STANDARD;
         Synthesis result=VoiceRender.render(whole,wav,json,plan,rate,cps,profile,w->phrase(v,w,config),progress);
         prune(whole,".wav",6,Pcm.MAX_BYTES);return result;

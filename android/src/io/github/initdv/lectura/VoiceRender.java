@@ -14,9 +14,9 @@ import java.util.List;
 
 /** Assemble every native engine's fragment PCM on the same presentation clock, at 1×. */
 final class VoiceRender {
-    static final float PACK_PEAK=.70794576f; // -3 dBFS of headroom for output resampling; never amplify.
+    static final float PACK_PEAK=.70794576f; // -3 dBFS of headroom for output resampling.
     enum Profile {
-        STANDARD(false), SIWIS(false), ESTELLE(true), KOKORO(true);
+        STANDARD(false), SIWIS(false), PACK(true), ESTELLE(true);
         final boolean keepEdges;
         Profile(boolean keepEdges){this.keepEdges=keepEdges;}
     }
@@ -74,8 +74,12 @@ final class VoiceRender {
                             float[] prosody=QuestionPitch.adjust(samples,span[0],span[1],rate,profile==Profile.SIWIS?70:0);
                             end+=prosody.length-samples.length;samples=prosody;
                         }
-                        float gain=profile.keepEdges?headroom(samples,begin,end):1;
                         if((frames+end-begin)*2>Pcm.MAX_BYTES)throw new IOException("Synthèse trop volumineuse.");
+                        if(profile==Profile.ESTELLE){
+                            samples=estellePresence(samples,begin,end,rate);
+                            begin=0;end=samples.length;
+                        }
+                        float gain=profile.keepEdges?headroom(samples,begin,end):1;
                         int fade=Math.max(1,rate/400); // 2.5 ms de raccord sans clic, sans allonger les silences.
                         pcm.clear();
                         for(int j=begin;j<end;j++) {
@@ -111,6 +115,22 @@ final class VoiceRender {
         while(bytes>0){Pcm.interrupted();int n=(int)Math.min(bytes,blank.length);file.write(blank,0,n);bytes-=n;}
     }
     private static long ms(long frames,int rate){return Math.round(frames*1000./rate);}
+
+    // Mix +5% of a unity-gain band-pass around 3 kHz into Estelle, not +5% of the whole signal.
+    // No resampling, dynamics or change to the cached phrase; this is done before the existing peak guard.
+    private static float[] estellePresence(float[] samples,int begin,int end,int rate){
+        double omega=2*Math.PI*3000/rate,alpha=Math.sin(omega)/(2*.95),norm=1/(1+alpha);
+        double b=alpha*norm,a1=-2*Math.cos(omega)*norm,a2=(1-alpha)*norm;
+        float[] out=new float[end-begin];
+        double x1=samples[begin],x2=x1,y1=0,y2=0;
+        for(int i=0;i<out.length;i++){
+            if((i&16383)==0)Pcm.interrupted();
+            double x=samples[begin+i],band=b*(x-x2)-a1*y1-a2*y2;
+            out[i]=(float)(x+.05*band);
+            x2=x1;x1=x;y2=y1;y1=band;
+        }
+        return out;
+    }
 
     static float headroom(float[] a,int start,int end)throws IOException {
         float peak=0;

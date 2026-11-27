@@ -271,7 +271,7 @@ jobs:
           name: Lectura-comparaison
           path: ${{ runner.temp }}/lectura-report
           if-no-files-found: warn
-      - name: Préparer le comparatif des voix françaises
+      - name: Préparer le comparatif Estelle avant/après
         id: voice_samples
         if: steps.android_checks.outcome == 'success'
         continue-on-error: true # The separately validated APK does not depend on transfer of the samples.
@@ -291,16 +291,24 @@ jobs:
           try:
               if not (folder / 'texte.txt').read_text(encoding='utf-8').strip():
                   raise ValueError('texte.txt vide')
-              for i, name in enumerate(('siwis-douce', 'estelle', 'siwis-kokoro', 'mls-1', 'mls-4'), 1):
+              estelle = []
+              for i, name in enumerate(('siwis-douce', 'estelle-avant', 'estelle-plus5'), 1):
                   path = folder / f'{i:02}-{name}.wav'
                   with wave.open(str(path), 'rb') as f:
-                      rate = 24000 if i in (2, 3) else 22050
+                      rate = 22050 if i == 1 else 24000
                       frames = f.getnframes()
                       if f.getparams()[:3] != (1, 2, rate) or not rate <= frames < 60 * rate:
                           raise ValueError(f'{path.name} : format ou durée inattendus')
-                      if len(f.readframes(frames)) != 2 * frames:
-                          raise ValueError(f'{path.name} : données PCM incomplètes')
+                      pcm = f.readframes(frames)
+                      if len(pcm) != 2 * frames or not any(pcm):
+                          raise ValueError(f'{path.name} : données PCM incomplètes ou muettes')
+                      if i != 1:
+                          estelle.append(pcm)
                       print(f'{path.name} : {frames / rate:.2f} s, PCM mono 16 bits à {rate} Hz')
+              dry, wet = estelle
+              if len(dry) != len(wet) or dry == wet:
+                  raise ValueError('Estelle : les deux pistes doivent différer sans changer de durée')
+              print(f'::notice title=Comparatif Estelle::Durée commune : {len(dry) // 2} échantillons ; piste corrigée distincte.')
           except (OSError, EOFError, wave.Error, ValueError) as error:
               print(f'::warning title=Comparatif vocal Android::{error}')
               raise SystemExit(1)
@@ -309,7 +317,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: steps.voice_samples.outcome == 'success'
         with:
-          name: Lectura-voix-francaises
+          name: Lectura-estelle-avant-apres
           path: ${{ runner.temp }}/lectura-report/voix
           if-no-files-found: error
       - uses: actions/upload-artifact@v4

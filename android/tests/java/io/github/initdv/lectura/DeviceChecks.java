@@ -34,6 +34,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -1170,7 +1172,6 @@ public final class DeviceChecks extends Instrumentation {
                     int m=a.read(0,x,x.length),n=b.read(0,y,y.length);
                     require(a.duration()>700&&b.duration()>700&&peak(x,m)>1000&&peak(y,n)>1000
                         &&!java.util.Arrays.equals(x,y),"Deux sorties MLS audibles et distinctes");
-                    VoiceDictionChecks.sample(refs,"04-mls-1",a);VoiceDictionChecks.sample(refs,"05-mls-4",b);
                 }
             }finally{h.remove("mls_f1");}
             require(!h.installed(two),"Suppression du modèle commun MLS");
@@ -1284,7 +1285,6 @@ public final class DeviceChecks extends Instrumentation {
                     require(p.to-p.speechEnd==pauses[i]&&pcmPeak(r.pcm,p.from,p.speechEnd)>900
                         &&pcmPeak(r.pcm,p.speechEnd+1,p.to-1)==0,"Voix ou silence du fragment : "+p.text);
                 }
-                VoiceDictionChecks.sample(a.refs,automatic?"02-estelle":"03-siwis-kokoro",r.pcm);
             });
             String cached=checkNewVoiceCache(ctx,id,text,cps);
             return id+" à froid en avion, "+(automatic?"1× puis ":"")+"1,25× (PCM 24 kHz), démarrage "+startup+" ms, "+observed.length()+" observations, pic "+peak[0]
@@ -1321,7 +1321,7 @@ public final class DeviceChecks extends Instrumentation {
             Files.write(new File(phrases,key+".f32").toPath(),new byte[Mimi.SAMPLES_PER_LATENT*Float.BYTES]);
             int from=spans.length()*1000;spans.put(new JSONArray().put(from).put(from+650).put(from+1000));
         }
-        String key=oldKey("SHA-256",(estelle?"rendu-mimi-7|":"rendu-7|")+id+"|"+cps+"|"+text);
+        String key=oldKey("SHA-256",(estelle?"rendu-mimi-8|":"rendu-7|")+id+"|"+cps+"|"+text);
         try(RandomAccessFile file=new RandomAccessFile(new File(whole,key+".wav"),"rw")){
             int size=Pocket.RATE*plan.size()*2;Pcm.header(file,1,Pocket.RATE,size);file.setLength(44L+size);
         }
@@ -1330,11 +1330,13 @@ public final class DeviceChecks extends Instrumentation {
     private String checkNewVoiceCache(Context ctx,String id,String text,int cps)throws Exception {
         File phraseDir=new File(ctx.getCacheDir(),"phrases");
         String[] before=phraseDir.list((d,n)->n.endsWith(".f32"));require(before!=null&&before.length>=2,"Cache de phrases absent");
-        try(Hd cached=new Hd(new Refs(ctx))) {
+        Refs refs=new Refs(ctx);
+        boolean estelle=id.equals("estelle");
+        try(Hd cached=new Hd(refs)) {
             long start=android.os.SystemClock.elapsedRealtime();
             Hd.Synthesis whole=cached.synth(text,id,cps,(n,total)->require(n==1&&total==1,"WAV complet pas repris"));
             long full=android.os.SystemClock.elapsedRealtime()-start;
-            // Only the final paragraph break changes. The WAV must change but neither spoken phrase should be resynthesized.
+            // Only the final paragraph break changes. Reassemble the WAV without new inference.
             Hd.Synthesis phr=cached.synth(text+"\n",id,cps,(n,total)->require(total==3,"Le texte édité ne doit pas réutiliser le WAV complet"));
             long end=android.os.SystemClock.elapsedRealtime()-start;
             try(Pcm a=whole.pcm;Pcm b=phr.pcm){
@@ -1342,10 +1344,16 @@ public final class DeviceChecks extends Instrumentation {
                 short[] rawA=new short[(int)a.frames],rawB=new short[(int)a.frames];
                 a.read(0,rawA,(int)a.frames);b.read(0,rawB,(int)a.frames);
                 require(Arrays.equals(rawA,rawB),"PCM des phrases différent après édition des seules pauses");
+                if(estelle)VoiceDictionChecks.estelleComparison(refs,whole,cps,spoken->{
+                    String key=oldKey("SHA-1","phrase-mimi-5|estelle|"+spoken);
+                    var f=ByteBuffer.wrap(Files.readAllBytes(new File(phraseDir,key+".f32").toPath())).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer();
+                    float[] pcm=new float[f.remaining()];f.get(pcm);return pcm;
+                });
             }
             String[] after=phraseDir.list((d,n)->n.endsWith(".f32"));require(after!=null,"Cache de phrases absent");
             Arrays.sort(before);Arrays.sort(after);require(Arrays.equals(before,after),"Phrases recalculées malgré le cache");
-            return "cache WAV "+full+" ms, édition avec cache de phrases "+(end-full)+" ms";
+            return "cache WAV "+full+" ms, édition avec cache de phrases "+(end-full)+" ms"
+                +(estelle?" ; avant/après issus de la même synthèse, durée et repères identiques":"");
         }
     }
     private String offlineSiwis(Context ctx)throws Exception {
