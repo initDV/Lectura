@@ -56,6 +56,13 @@ public final class MainActivity extends Activity {
     final Runnable draftTimer=new Runnable(){@Override public void run(){draft();handler.postDelayed(this,5000);}};
     Future<?> preparation,prewarm,hdDownload,hdListening;
     Runnable prewarmTimer;
+    WarmText warming;
+    // The main thread owns the request; only its two hand-off flags are shared with the voice worker.
+    static final class WarmText {
+        final String text,id;final int cps;
+        volatile boolean started,requested;
+        WarmText(String text,String id,int cps){this.text=text;this.id=id;this.cps=cps;}
+    }
     android.media.MediaPlayer hdPlayer;
     String hdChoice="",synthesisVoice="",hdDownloading="";
     int generation,hdDemoGen,downloadGen;
@@ -81,7 +88,9 @@ public final class MainActivity extends Activity {
         talk=new Talk(this,()->{if(scene!=null)scene.voice();else if(screens!=null&&route.equals("reglages"))screens.refresh();});
         render("scene");if(!db.settings.optBoolean("tutorielVu"))tutorial(1);handler.postDelayed(draftTimer,5000);
     }
-    @Override protected void onResume(){super.onResume();isForeground=true;if(stage!=null)stage.refresh();exports.foreground();}
+    @Override protected void onResume(){super.onResume();isForeground=true;if(stage!=null)stage.refresh();exports.foreground();
+        if(scene!=null&&reading==null&&!preparing&&prewarmTimer==null&&hdId().equals("estelle"))preloadVoice();
+    }
     @Override protected void onPause(){isForeground=false;exports.background();cancelPrewarm();stopHdExample();if(reading!=null&&reading.playing){reading.pause();playState();}draft();super.onPause();}
     @Override protected void onDestroy(){dismiss();disposeScene();exports.close();pcmDelivery.close();handler.removeCallbacksAndMessages(null);
         if(hdDownload!=null)hdDownload.cancel(true);queue.submit(hd::close);queue.shutdown();if(talk!=null)talk.close();super.onDestroy();}
@@ -121,18 +130,36 @@ public final class MainActivity extends Activity {
     private void cancelPrewarm(){
         if(prewarmTimer!=null){handler.removeCallbacks(prewarmTimer);prewarmTimer=null;}
         if(prewarm!=null){prewarm.cancel(true);prewarm=null;}
+        warming=null;
+    }
+    private void keepOrCancelPrewarm(boolean silent,String text,String id){
+        if(!silent&&!project.fileAudio&&id.equals("estelle")&&warming!=null&&warming.started
+            &&warming.id.equals(id)&&warming.cps==project.cps&&warming.text.equals(text)){
+            // The launch queues right behind the active fragment. Do not discard a partly loaded
+            // model or duplicate the same inference. An untouched timer/task gets cancelled instead.
+            warming.requested=true;return;
+        }
+        cancelPrewarm();
     }
     private void scheduleWarm(boolean editing){
         cancelPrewarm();String text=project.text,id=hdId();JSONObject voice=hd.voice(id);
-        if(project.fileAudio||!hd.installed(voice)||!editing&&text.length()>SpeechPlan.MAX_TEXT)return;
-        boolean prefix=text.length()>=30&&text.length()<=SpeechPlan.MAX_TEXT;
+        if(project.fileAudio||text.length()>SpeechPlan.MAX_TEXT||!hd.installed(voice))return;
+        boolean estelle=id.equals("estelle");
+        String trimmed=estelle?text.trim():text;
+        boolean complete=!trimmed.isEmpty()&&".!?…".indexOf(trimmed.charAt(trimmed.length()-1))>=0;
+        boolean prefix=estelle?!trimmed.isEmpty()&&(!editing||trimmed.length()>=26||complete):text.length()>=30;
         if(editing&&!prefix)return;
-        boolean preparePrefix=prefix&&(editing||Hd.engine(voice).equals("piper"));
+        boolean preparePrefix=prefix&&(editing||estelle||Hd.engine(voice).equals("piper"));
+        WarmText warm=new WarmText(text,id,project.cps);
         prewarmTimer=()->{
             prewarmTimer=null;if(!isForeground||preparing||reading!=null&&reading.playing)return;
-            prewarm=queue.submit(()->{try{if(preparePrefix)hd.prewarm(text,id);else hd.preload(id);}catch(Exception ignored){}});
+            warming=warm;
+            prewarm=queue.submit(()->{
+                warm.started=true;
+                try{if(preparePrefix)hd.prewarm(text,id,warm.cps,()->warm.requested);else hd.preload(id);}catch(Exception ignored){/* Preparation will surface real errors on demand. */}
+            });
         };
-        handler.postDelayed(prewarmTimer,preparePrefix?2000:650);
+        handler.postDelayed(prewarmTimer,estelle?(preparePrefix?800:400):preparePrefix?2000:650);
     }
     void changedText(){if(preparing)stop();scheduleWarm(true);}
     private void preloadVoice(){scheduleWarm(false);}
@@ -209,7 +236,7 @@ public final class MainActivity extends Activity {
         if(reading!=null&&(sig.equals(signature)||!silent&&reading.silent&&!stopped&&!reading.ended)){
             if(stopped||reading.ended)reading.seek(0);startPlaying();return;}
         if(!silent&&!project.fileAudio&&!Hd.hdEngine(project.engine)&&hdId().isEmpty()&&!talk.ready&&!talk.failure){note(t("scene.prep.ressources"),"info");return;}
-        cancelPrewarm();hideKeyboard();content.requestFocus();if(reading!=null){reading.close();reading=null;}stopped=true;preparing=true;playState();
+        keepOrCancelPrewarm(silent,text,hdId());hideKeyboard();content.requestFocus();if(reading!=null){reading.close();reading=null;}stopped=true;preparing=true;playState();
         int ticket=++generation;Project cfg=Project.fromJson(project.json());String lang=db.locale();
         boolean automatic=cfg.engine.equals("auto");List<String> choices=automatic?hd.automatic(lang):Hd.hdEngine(cfg.engine)?List.of(cfg.voice):List.of();
         JSONObject personal=object(db.settings,"motsPerso");Voice v=!silent&&!cfg.fileAudio&&!Hd.hdEngine(cfg.engine)?talk.choose(lang,automatic?"":cfg.voice):null;

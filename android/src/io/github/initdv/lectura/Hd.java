@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 import static io.github.initdv.lectura.Refs.*;
 
 /** Native text voices, serialized inference and bounded caches. No voice downloads on launch. */
@@ -36,6 +37,7 @@ final class Hd implements AutoCloseable {
     private static final String BASE="https://initdv.github.io/Lectura/models/";
     private static final long LIMIT=150L*1024*1024,PHRASE_LIMIT=80L*1024*1024;
     private static final int WARM_CHARS=320, PIPER_WARM_PHRASES=3;
+    private static final String ESTELLE_WAV="rendu-mimi-10|";
     final List<JSONObject> voices=new ArrayList<>();
     private final File models,phrases,whole;
     private final G2p g2p;
@@ -235,29 +237,40 @@ final class Hd implements AutoCloseable {
     private List<SpeechPlan.Fragment> spokenPlan(String text,VoicePacks.Spec spec){
         return SpeechPlan.plan(text,"fr",object(pronunciation,"fr"),spec!=null);
     }
-    void prewarm(String text,String id)throws Exception {
+    void prewarm(String text,String id,int cps,BooleanSupplier requested)throws Exception {
         JSONObject v=voice(id);if(!installed(v))return;
-        VoicePacks.Spec spec=pack(v);boolean piper=spec==null;
+        VoicePacks.Spec spec=pack(v);boolean piper=spec==null,estelle=spec==VoicePacks.ESTELLE;
+        List<SpeechPlan.Fragment> plan=spokenPlan(text,spec);
+        if(estelle&&text.length()<=240&&!plan.isEmpty()&&plan.size()<=2
+            &&plan.stream().allMatch(f->!f.spoken.isEmpty())&&plan.stream().mapToInt(f->f.spoken.length()).sum()<=WARM_CHARS){
+            // Even the WAV and its dates can be ready on a short, stable text. Same cache and
+            // rendering path as an explicit launch, no playback/network/secondary inference job.
+            synth(text,v,cps,plan,(n,total)->{}).pcm.close();return;
+        }
+        if(estelle&&wholeFile(text,id,cps,ESTELLE_WAV).isFile())return;
         JSONObject config=piper?Library.readJson(cfg(v)):null;int n=0,chars=0;
-        for(SpeechPlan.Fragment p:spokenPlan(text,spec)){
+        for(SpeechPlan.Fragment p:plan){
             Pcm.interrupted();
             if(p.spoken.isEmpty())continue;
             if((chars+=p.spoken.length())>WARM_CHARS)break;
             phrase(v,p.spoken,config);
-            if(++n>=(piper?PIPER_WARM_PHRASES:1))break;
+            if(++n>=(piper?PIPER_WARM_PHRASES:estelle?2:1)||requested.getAsBoolean())break;
         }
+    }
+    private File wholeFile(String text,String id,int cps,String revision){
+        return new File(whole,key("SHA-256",revision+id+"|"+cps+"|"+text)+".wav");
     }
     Synthesis synth(String text,String id,int cps,Progress progress)throws Exception {
         if(text.length()>SpeechPlan.MAX_TEXT)throw new IOException("Texte trop long pour la synthèse.");
         JSONObject v=voice(id);if(!installed(v))throw new IOException("Voix HD non installée.");
-        VoicePacks.Spec spec=pack(v);boolean estelle=spec==VoicePacks.ESTELLE;
-        // Estelle's projection changes only the assembled WAV, not the raw inference cache.
-        String revision=estelle?"rendu-mimi-10|":spec==VoicePacks.KOKORO?"rendu-kokoro-8|":"rendu-7|";
-        String key=key("SHA-256",revision+id+"|"+cps+"|"+text);
-        File wav=new File(whole,key+".wav"),json=new File(whole,key+".json");
+        return synth(text,v,cps,spokenPlan(text,pack(v)),progress);
+    }
+    private Synthesis synth(String text,JSONObject v,int cps,List<SpeechPlan.Fragment> plan,Progress progress)throws Exception {
+        String id=v.optString("id");VoicePacks.Spec spec=pack(v);boolean estelle=spec==VoicePacks.ESTELLE;
+        String revision=estelle?ESTELLE_WAV:spec==VoicePacks.KOKORO?"rendu-kokoro-8|":"rendu-7|";
+        File wav=wholeFile(text,id,cps,revision),json=new File(whole,wav.getName().replace(".wav",".json"));
         JSONObject config=spec==null?Library.readJson(cfg(v)):null;
         int rate=estelle?Pocket.RATE:config==null?24000:object(config,"audio").optInt("sample_rate",22050);
-        List<SpeechPlan.Fragment> plan=spokenPlan(text,spec);
         Synthesis saved=VoiceRender.cached(wav,json,plan,rate,progress);if(saved!=null)return saved;
         VoiceRender.Profile profile=estelle?VoiceRender.Profile.ESTELLE:spec==VoicePacks.KOKORO?VoiceRender.Profile.PACK:
             id.equals("siwis")?VoiceRender.Profile.SIWIS:VoiceRender.Profile.STANDARD;

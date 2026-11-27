@@ -373,8 +373,8 @@ describe('Jeu du visage', () => {
   });
 
   it('garde l’humeur pendant toute la phrase avec entrée et sortie douces, indépendamment des gestes', () => {
-    const segs = [seg(phrase, 0, 8100, { speechEndMs: 7440 })];
-    const humeur = { de: () => ({ expr: 'colere', force: 1 }) };
+    const segs = [seg(`Inacceptable, ${phrase}`, 0, 8100, { speechEndMs: 7440 })];
+    const humeur = { de: () => ({ moments: [{ pos: 0, fin: 12, emotion: 'colere', force: 1 }] }) };
     const direction = planAicha(segs, 8300, { humeur });
     expect(direction.visages).toMatchObject([{ start: 0, face: 'colere', force: 1 }]);
     expect(direction.visages[0].end).toBeCloseTo(7.56, 9);

@@ -54,6 +54,9 @@ export function compilerLexique(...sources) {
 
 const APRES = new Set(['pas', 'plus', 'jamais', 'guere', 'rien']); // second élément de la négation : « ne … pas »
 const NE = new Set(['ne', 'n']);
+const COUPE = /[,;:.!?…—()\r\n]/;
+const VIRAGE = /^(?:mais|but|pourtant|yet|however)$/;
+const SEULEMENT = /^(?:seulement|uniquement|only|just)$/;
 
 /**
  * Vrai si le groupe de mots [k, k + n[ est nié : « pas content », « jamais facile », « je n'aime pas », « don't like ».
@@ -61,7 +64,8 @@ const NE = new Set(['ne', 'n']);
  */
 function estNie(mots, k, n, lex, texte) {
   for (let i = k - 1; i >= Math.max(0, k - 3); i--) {
-    if (mots[i].pris || /[,;:.!?()]/.test(texte.slice(mots[i].j, mots[i + 1].i))) return false;
+    if (mots[i].pris || VIRAGE.test(mots[i].m) || COUPE.test(texte.slice(mots[i].j, mots[i + 1].i))) return false;
+    if (/^(?:pas|not)$/.test(mots[i].m) && SEULEMENT.test(mots[i + 1].m)) return false;
     if (lex.negations.has(mots[i].m)) return true;
     if (NE.has(mots[i].m) && mots[k + n] && APRES.has(mots[k + n].m)) return true;
   }
@@ -83,15 +87,17 @@ export function analyser(texte, lex) {
     for (let i = Math.max(0, k - 2); i < k; i++) poids *= lex.intensifs.get(mots[i].m) || 1;
     if (brut.length > 3 && brut === brut.toUpperCase() && brut !== brut.toLowerCase()) poids *= 1.3; // MAJUSCULES = on insiste
     if (!emotion) { moments.push({ pos, fin, emotion, poids: 0, mot: brut, geste: trouve.geste }); return; } // geste seul
-    if (estNie(mots, k, nb, lex, n)) {
+    const nie = estNie(mots, k, nb, lex, n);
+    if (nie) {
       if (POSITIFS.has(emotion)) { emotion = 'triste'; poids *= 0.7; }        // « pas content » → triste
       else if (NEGATIFS.has(emotion)) { emotion = 'content'; poids *= 0.45; } // « pas peur », « pas grave » → rassurant
       else return;                                                            // « pas étonnant » → rien
     }
-    moments.push({ pos, fin, emotion, poids, mot: brut, geste: trouve.geste || '' });
+    moments.push({ pos, fin, emotion, poids, mot: brut, geste: trouve.geste || '', nie });
   };
   for (let k = 0; k < mots.length; k++) {
-    let nb = Math.min(lex.maxMots, mots.length - k), trouve = null;
+    let nb = 1, trouve = null;
+    while (nb < lex.maxMots && k + nb < mots.length && !COUPE.test(n.slice(mots[k + nb - 1].j, mots[k + nb].i))) nb++;
     for (; nb >= 1 && !trouve; nb--) trouve = lex.exact.get(nb === 1 ? mots[k].m : mots.slice(k, k + nb).map((x) => x.m).join(' ')) || null;
     if (trouve) nb++;
     else { nb = 1; trouve = lex.prefixes.find((p) => mots[k].m.startsWith(p.debut)) || null; }
@@ -111,7 +117,7 @@ export function analyser(texte, lex) {
   }
   moments.sort((a, b) => a.pos - b.pos);
   const force = (s) => Math.max(0.35, Math.min(1.25, (0.55 + 0.35 * s) * (s < 0.5 ? 0.8 : fort)));
-  const sortie = moments.map((m) => ({ pos: m.pos, fin: m.fin, emotion: m.emotion, force: m.emotion ? force(m.poids) : 0, mot: m.mot, geste: m.geste || '' }));
+  const sortie = moments.map((m) => ({ pos: m.pos, fin: m.fin, emotion: m.emotion, force: m.emotion ? force(m.poids) : 0, mot: m.mot, geste: m.geste || '', ...(m.nie ? { nie: true } : {}) }));
   const scores = new Map();
   for (const m of moments) if (m.emotion) scores.set(m.emotion, (scores.get(m.emotion) || 0) + m.poids);
   if (!scores.size) return { emotion: 'neutre', force: 0, second: '', poids: 0, moments: sortie };

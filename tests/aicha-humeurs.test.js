@@ -38,8 +38,9 @@ describe('Direction au sein d’une réplique', () => {
     expect(bloc(texte).visages[0].transitions[0].leve).toBe(true);
     const autre = 'J’étais triste, puis heureux, puis en colère.';
     const [f] = bloc(autre).visages;
-    expect(f.face).toBe('triste');
-    expect(f.transitions.map(t => t.to.face)).toEqual(['content', 'colere']);
+    expect(f.face).toBe('neutre');
+    expect(f.transitions.map(t => t.to.face)).toEqual(['triste', 'content', 'colere']);
+    expect(poseAicha(bloc(autre), 430).smile).toBe(0);
     const fixe = t => poseAicha(bloc(autre), t * 1000, { reduit: true });
     for (const t of f.transitions) {
       for (const instant of [t.start, t.pivot, t.fin]) {
@@ -53,7 +54,9 @@ describe('Direction au sein d’une réplique', () => {
     const bloc = [debut.texte, fin.texte].join('\n');
     for (const direction of [plan(bloc, segs), plan(texte, [{ ...segs[0], speechEndMs: 1300 }, segs[1]])]) {
       expect(direction.visages).toHaveLength(2);
-      expect(direction.visages.every(v => !v.transitions)).toBe(true);
+      expect(direction.visages[0].transitions).toBeUndefined();
+      expect(direction.visages[1].transitions[0].from.face).toBe('neutre');
+      expect(direction.visages[1].transitions[0].leve).toBe(false);
     }
   });
 

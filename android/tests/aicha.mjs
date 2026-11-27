@@ -53,6 +53,23 @@ const scenarios = [
   { id: 'tristesse-joie-colere', duration: 6800, analyse: true, langue: 'fr', segs: [
     segment('J’étais triste, puis heureux, puis en colère.', 0, 6800),
   ], ms: [600, 900, 2650, 3080, 3320, 4000, 4790, 5700, 6540, 6590] },
+  { id: 'explication-en-parlant', duration: 19500, langue: 'fr', analyse: true, segs: [
+    segment('Je vais vous expliquer le principe.', 0, 2820, 2480),
+    segment('D’abord, ouvrez le menu, puis choisissez un fichier.', 2820, 6680, 6300),
+    segment('Par exemple, le texte est d’un côté, les images de l’autre côté.', 6680, 12440, 11960),
+    segment('Le mot « triste » désigne une émotion. Le son grave monte lentement.', 12440, 16100, 15840),
+    segment('Je ne suis pas inquiète, je suis soulagée.', 16100, 19500, 19180),
+  ], ms: [624, 1270, 3050, 3200, 4810, 7200, 7450, 9040, 11100, 13600, 15020, 17450, 18080, 18980] },
+  { id: 'faces-contextuelles', duration: 6600, langue: 'en', analyse: true, segs: [
+    segment('What happened?', 0, 1300, 1100),
+    segment('I did not see that coming.', 1300, 3420, 3110),
+    segment('This is not good news; I am not sad.', 3420, 4750, 4520),
+    segment('What a relief!', 4750, 6600, 6240),
+  ], ms: [420, 2220, 4000, 5400, 6370] },
+  { id: 'carte-prononciation', duration: 4200, langue: 'fr', analyse: true, segs: [{
+    ...segment('8h30, par exemple, je suis soulagée.', 0, 4200, 3880),
+    cursor: [...Array(22).fill(0), ...Array.from({ length: 32 }, (_, i) => i + 4)],
+  }], ms: [824, 1580, 2450, 3210, 3670, 3920] },
   ...['aicha', 'charlotte', 'doriane', 'monique', 'prisca'].map(id => {
     const def = JSON.parse(readFileSync(new URL(`../../characters/${id}.json`, import.meta.url)));
     return { id: `appui-${id}`, duration: 0, langue: 'fr', segs: [], ms: [0], attentes: [13080, 14000, 16300], ancre: def.appuiHanche };

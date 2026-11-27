@@ -7,6 +7,7 @@ import fr from '../src/i18n/fr.js';
 import en from '../src/i18n/en.js';
 import { DEFAUTS } from '../src/modules/storage.js';
 import { EXPRESSIONS, NEUTRE } from '../src/modules/expressions.js';
+import { intentions } from '../src/modules/aicha/intentions.js';
 import { VISAGES } from '../src/modules/aicha/visages.js';
 import { DIGITS, SEGMENTS, DIGIT_X, DIGIT_Y } from '../src/modules/robot-motion.js';
 import { THEMES } from '../src/modules/themes.js';
@@ -116,6 +117,7 @@ await Promise.all([
     'android.voice.noAudio': 'Download Estelle or choose an already installed voice.',
     'voix.hd.err.tropLong': 'Text too long for synthesis ({n} characters; maximum {max}). Split it into projects or import audio.',
   })),
+  writeFile(resolve(output, 'lectrices.json'), JSON.stringify(intentions, (_, value) => value instanceof RegExp ? value.source : value)),
   put('robot-stage.json', { digits: DIGITS, segments: SEGMENTS, digitX: DIGIT_X, digitY: DIGIT_Y }),
   put('defaults.json', defaults),
   put('themes.json', { app: themes, terminal: THEMES }), put('expressions.json', { neutral: NEUTRE, expressions: EXPRESSIONS, visages: VISAGES }),

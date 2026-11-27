@@ -41,16 +41,18 @@ final class AichaChecks {
             JSONObject group=groups.getJSONObject(i);List<Part> parts=new ArrayList<>();AichaMouth lips=new AichaMouth();
             JSONArray segments=group.getJSONArray("segs"),frames=group.getJSONArray("frames");
             String lang=group.getString("langue"),source=group.getString("texte");boolean emotions=group.getBoolean("emotions");
-            Mood mood=group.getBoolean("analyse")?new Mood(refs,lang,new Script.Keywords(refs,lang,new JSONObject()),emotions):null;
+            Mood mood=group.getBoolean("analyse")?new Mood(refs,lang,new Script.Keywords(refs,lang,new JSONObject()),emotions,true):null;
             Script.Segment before=null;
             for(int s=0;s<segments.length();s++){
                 JSONObject j=segments.getJSONObject(s);String text=j.getString("texte"),expr=j.getString("expression");
                 double start=j.getDouble("debutMs"),end=j.getDouble("finMs"),speechEnd=j.getDouble("speechEndMs");
                 boolean spoken=j.getBoolean("spoken");Script.Segment seg=new Script.Segment(text,j.getInt("start"),j.getInt("end"),Script.type(text));
                 seg.from=(long)start;seg.to=(long)end;seg.speechEnd=(long)speechEnd;seg.expression=expr;
+                JSONArray cursor=j.optJSONArray("cursor");
+                if(cursor!=null){seg.cursor=new int[cursor.length()];for(int k=0;k<cursor.length();k++)seg.cursor[k]=cursor.getInt(k);}
                 Mood.Analysis summary=mood!=null?mood.summary(seg):new Mood.Analysis();
                 if(mood==null&&!expr.equals("auto")){summary.expr=expr;summary.manual=true;}
-                parts.add(AichaFaces.part(seg,before,source,summary,emotions));before=seg;
+                parts.add(AichaFaces.part(seg,before,source,summary,emotions,refs.direction));before=seg;
                 if(spoken){String ph=lang.equals("en")?AichaMouth.english(text):g2p.phrase(text,group.getBoolean("siwis"));lips.add(ph,start,speechEnd);}
             }
             Plan p=plan(parts,group.getDouble("duration"),emotions);

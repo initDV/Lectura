@@ -80,8 +80,8 @@ final class AudioPreparation {
                 decoded=syn.pcm;segments=syn.segments;
             }
             Script.reportExpressions(text,segments,cfg.segments);if(segments.isEmpty())throw new IOException(labels.text("scene.err.texteVide"));
-            Mood mood=new Mood(refs,lang,words,cfg.emotions);
             boolean lectrice=AichaTrack.matches(refs.character(cfg.character));
+            Mood mood=new Mood(refs,lang,words,cfg.emotions,lectrice);
             double duration=decoded!=null?decoded.duration():Math.max(1,request.silent?text.length()*1000./cps:segments.get(segments.size()-1).to);
             G2p.Profile phones=spokenBy.equals("siwis")?G2p.Profile.SIWIS:spokenBy.equals("kokoro-siwis")?G2p.Profile.KOKORO:G2p.Profile.PIPER;
             AichaTrack aicha=lectrice?new AichaTrack(refs,text,segments,duration,mood,cfg.emotions,lang,phones,decoded):null;

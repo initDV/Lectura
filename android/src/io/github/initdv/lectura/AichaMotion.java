@@ -15,14 +15,12 @@ final class AichaMotion {
     private static final double MIN_WALK=2.05;
     private static final double[] GLASSES={2.62,3.52,3.94,4.88}, FATIGUE={5.64,6.74,7.18,7.99}, TERMINAL={9.62,10.24,10.73,11.46}, HIP_REST={12.08,13.15,15.54,16.86};
     private static final double[] BLINKS={1.19,4.02,7.15,10.76};
-    private static final List<String> TURNS=List.of("presente","confie","marque","ouvre","hoche","presente","nuance","confie"), FIGURES=List.of("illustre","compare","rejouit");
+    private static final List<String> TURNS=List.of("presente","confie","marque","ouvre","hoche","presente","nuance","confie"), FIGURES=List.of("illustre","explique","enumere","compare","rejouit");
     private static final int CASE=Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE;
     private static final Pattern HELLO=Pattern.compile("(?:^|[^\\p{L}])(?:bonjour|bonsoir|salut|coucou|hello|hi|hey)(?!\\p{L})",CASE);
-    private static final Pattern WALK=Pattern.compile("(?:\\b(?:avance|marchons)\\b|marche vers|walk forward|come closer|pas de côté|step aside|sidestep)",CASE);
+    private static final Pattern WALK=Pattern.compile("(?:m['’]avance|\\bmarchons\\b|avance (?:vers|avec)|marche vers|walk forward|come closer|pas de côté|step aside|sidestep)",CASE);
     private static final Pattern CONTRAST=Pattern.compile("(?:^|[^\\p{L}])(?:non|pourtant|mais|but)(?!\\p{L})",CASE);
     private static final Pattern YES=Pattern.compile("^\\P{L}*(?:oui|exactement|yes|exactly)(?!\\p{L})",CASE);
-    private static final Pattern EXPLAINS=Pattern.compile("(?:^|[^\\p{L}])(?:voici|par exemple|en clair|for example|let me show you)(?!\\p{L})",CASE);
-    private static final Pattern COMPARES=Pattern.compile("(?:^|[^\\p{L}])(?:d['’]un côté|de l['’]autre côté|deux (?:choix|options)|two (?:choices|options)|on (?:the )?(?:one|other) hand)(?!\\p{L})",CASE);
     private static final Pattern CHEERS=Pattern.compile("^\\P{L}*(?:bravo|youpi|hourra|ta[- ]?da|hooray|hurray|et voilà)(?!\\p{L})",CASE);
     // Android's Pattern rejects UNICODE_CHARACTER_CLASS. Match the Web's \s explicitly
     // (including NBSP and BOM, but not NEL) for cue boundaries and final punctuation.
@@ -51,15 +49,15 @@ final class AichaMotion {
     static final class Part extends Interval {
         final String text, face;
         final boolean spoken,manual,linked;
-        final double speechEnd,force;
+        final double speechEnd;
         final int offset;
         final int[] cursor;
-        final List<AichaFaces.Index> indices;
-        Part(String text,double start,double end,double speechEnd,boolean spoken,String face,double force,
-             boolean manual,boolean linked,List<AichaFaces.Index> indices,int offset,int[] cursor){
+        final AichaDirection.Notes notes;
+        Part(String text,double start,double end,double speechEnd,boolean spoken,String face,
+             boolean manual,boolean linked,AichaDirection.Notes notes,int offset,int[] cursor){
             super(start,end);this.text=text;this.speechEnd=speechEnd<0?end:speechEnd;
-            this.spoken=spoken;this.face=face;this.force=force;this.manual=manual;this.linked=linked;
-            this.indices=indices;this.offset=offset;this.cursor=cursor;
+            this.spoken=spoken;this.face=face;this.manual=manual;this.linked=linked;
+            this.notes=notes;this.offset=offset;this.cursor=cursor;
         }
     }
 
@@ -100,9 +98,9 @@ final class AichaMotion {
         }
         return ends;
     }
-    private static Walk gap(Plan p,double start,double end,double voiced,Walk quiet){
+    private static Walk gap(Plan p,double start,double end,double voiced,Walk quiet,boolean emotions){
         if(end-start<.44)return quiet;
-        p.cues.add(new Cue(start,min(start+2.4,end),"ecoute",1,"concentre",.55));
+        p.cues.add(new Cue(start,min(start+2.4,end),"ecoute",1,emotions?"concentre":"neutre",.55));
         return quiet==null&&voiced>0&&start>=1.35&&end-start>=MIN_WALK?new Walk(start,end,35,0,1):quiet;
     }
     private static Walk spokenWalk(Plan p,List<Cue> figures,double after,double stride,double depart,int foot){
@@ -111,9 +109,38 @@ final class AichaMotion {
             return new Walk(c.start,end,stride,depart,foot);
         return null;
     }
-    private static String figure(String text){return COMPARES.matcher(text).find()?"compare":EXPLAINS.matcher(text).find()?"illustre":"";}
     private static void cue(Plan p,Part seg,String kind,double a,double b,int side){
-        if(b-a>=.14)p.cues.add(new Cue(a,b,kind,side,seg.face,seg.force));
+        if(b-a>=.14)p.cues.add(new Cue(a,b,kind,side,seg.face,1));
+    }
+    private static final class Beat extends Interval {
+        final String kind;
+        Beat(double a,double b,String kind){super(a,b);this.kind=kind;}
+    }
+    private static List<Beat> semantic(AichaFaces.Phrase p,double from,double end){
+        var beats=new ArrayList<Beat>();var marks=p.part.notes.gestures;double previous=-1;
+        for(int i=0;i<marks.size();i++){
+            var hit=marks.get(i);double at=p.time(hit.pos);
+            if(at<from-.57)continue;
+            double begin=max(from,min(at-.36,end-.72)),a=max(begin,previous+.14);
+            if(a>begin+.25)continue;
+            double life=hit.kind.equals("compare")?1.68:hit.kind.equals("illustre")?1.54:hit.kind.equals("enumere")?1.05:1.36;
+            double b=min(end,min(a+life,i+1<marks.size()?max(a+.79,p.time(marks.get(i+1).pos)-.50):end));
+            if(b-a>=.60){beats.add(new Beat(a,b,hit.kind));previous=b;}
+        }
+        return beats;
+    }
+    private static int generic(Plan p,Part seg,double start,double span,double from,double end,
+                               int tour,boolean first,boolean hasBeats,boolean emotions){
+        if(end-from<(hasBeats?.44:.14))return tour;
+        String text=seg.text;double[] cuts=groups(text,start,span,from,end);
+        for(int i=1;i<cuts.length;i++,tour++){
+            double a=cuts[i-1],b=cuts[i];int lo=i==1&&first?0:(int)round(text.length()*(a-start)/span);
+            int hi=min(text.length(),(int)ceil(text.length()*(b-start)/span));
+            String group=text.substring(min(lo,hi),hi);
+            String k=emotions&&CONTRAST.matcher(group).find()?"nuance":emotions&&YES.matcher(group).find()?"hoche":TURNS.get(tour%TURNS.size());
+            cue(p,seg,k,a,b,tour%2==0?1:-1);
+        }
+        return tour;
     }
     static Plan plan(List<Part> segments,double duration,boolean emotions){
         Plan p=new Plan(duration);double past=0,voiced=0,salutEnd=0;int spoken=0,tour=0;
@@ -123,36 +150,33 @@ final class AichaMotion {
             boolean linked=previousVoice&&s.linked;previousVoice=false;
             double start=bound(s.start/1000,past,p.duration),end=bound(s.end/1000,start,p.duration);
             if(end<=start)continue;
-            quiet=gap(p,past,start,voiced,quiet);past=end;
-            if(!s.spoken){quiet=gap(p,start,end,voiced,quiet);continue;}
+            quiet=gap(p,past,start,voiced,quiet,emotions);past=end;
+            if(!s.spoken){quiet=gap(p,start,end,voiced,quiet,emotions);continue;}
             double speechEnd=bound(s.speechEnd/1000,start,end),span=speechEnd-start,last=min(end,speechEnd+.12);
             if(span>0)p.speech.add(new Interval(start,last));
-            if(span<.1){quiet=gap(p,start,end,voiced,quiet);continue;}
-            faces.add(new AichaFaces.Phrase(s,start,last,speechEnd,linked));previousVoice=true;
+            if(span<.1){quiet=gap(p,start,end,voiced,quiet,emotions);continue;}
+            var phrase=new AichaFaces.Phrase(s,start,last,speechEnd,linked);faces.add(phrase);previousVoice=true;
             double from=start+min(.09,.08*span);String text=s.text;Matcher m=END.matcher(text);
             String punctuation=emotions&&m.find()?m.group(1):"";
             boolean wave=emotions&&!waved&&spoken<3&&span>=.68&&HELLO.matcher(text.substring(0,min(44,text.length()))).find();
-            if(wave){salutEnd=min(last,from+1.86);cue(p,s,"salut",from,salutEnd,-1);from=salutEnd;waved=true;}
-            String accent=last-from<.26?"":punctuation.equals("?")?"question":emotions&&CHEERS.matcher(text).find()?"rejouit":punctuation.isEmpty()?"":"accent";
+            if(wave){
+                double pivot=s.notes.gestures.isEmpty()?last:max(from+.77,phrase.time(s.notes.gestures.get(0).pos)-.18);
+                salutEnd=min(last,min(from+1.86,pivot));cue(p,s,"salut",from,salutEnd,-1);from=salutEnd;waved=true;
+            }
+            var beats=semantic(phrase,from+(wave?.14:0),last);boolean hasBeats=!beats.isEmpty();
+            for(Beat beat:beats){
+                tour=generic(p,s,start,span,from,beat.start,tour,!wave&&from-start<=.1,true,emotions);
+                cue(p,s,beat.kind,beat.start,beat.end,tour++%2==0?1:-1);from=beat.end;
+            }
+            String accent=last-from<(hasBeats?.66:.26)?"":punctuation.equals("?")?"question":emotions&&CHEERS.matcher(text).find()?"rejouit":punctuation.isEmpty()?"":"accent";
             double fin=accent.isEmpty()?last:max(from,last-(accent.equals("rejouit")?1.64:1.16));
             if(!accent.isEmpty()&&fin-from<.61)fin=from;
-            if(accent.equals("accent")&&fin==from&&!wave){String f=figure(text);if(!f.isEmpty())accent=f;}
-            if(fin-from>=.14){
-                double[] cuts=groups(text,start,span,from,fin);
-                for(int i=1;i<cuts.length;i++,tour++){
-                    double a=cuts[i-1],b=cuts[i];int lo=i==1&&!wave?0:(int)round(text.length()*(a-start)/span);
-                    int hi=min(text.length(),(int)ceil(text.length()*(b-start)/span));
-                    String group=text.substring(min(lo,hi),hi);
-                    String k=emotions?figure(group):"";
-                    if(k.isEmpty())k=emotions&&CONTRAST.matcher(group).find()?"nuance":emotions&&YES.matcher(group).find()?"hoche":TURNS.get(tour%TURNS.size());
-                    cue(p,s,k,a,b,tour%2==0?1:-1);
-                }
-            }
+            tour=generic(p,s,start,span,from,fin,tour,!wave&&!hasBeats,hasBeats,emotions);
             if(!accent.isEmpty()){cue(p,s,accent,fin,last,tour%2==0?1:-1);tour++;}
             if(explicit==null&&emotions&&!wave&&span>=MIN_WALK&&WALK.matcher(text).find())explicit=new Walk(start,speechEnd,35,0,1);
-            voiced+=span;quiet=gap(p,last,end,voiced,quiet);spoken++;
+            voiced+=span;quiet=gap(p,last,end,voiced,quiet,emotions);spoken++;
         }
-        quiet=gap(p,past,p.duration,voiced,quiet);
+        quiet=gap(p,past,p.duration,voiced,quiet,emotions);
         List<Cue> figures=new ArrayList<>();for(Cue c:p.cues)if(FIGURES.contains(c.kind))figures.add(c);
         if(emotions&&voiced>0){
             Walk first=explicit!=null?explicit:quiet;
@@ -166,11 +190,11 @@ final class AichaMotion {
         for(Cue c:p.cues){
             while(next<figures.size()&&figures.get(next).start<c.end)next++;
             boolean figure=FIGURES.contains(c.kind),walking=false;
-            double free=max(c.end+.28,c.start+1.65);
+            double free=figure||c.kind.equals("salut")?c.end+.14:max(c.end+.28,c.start+1.65);
             boolean reserved=!figure&&next<figures.size()&&figures.get(next).start<free;
             if(figure)for(Walk w:p.walks)if(w.start<c.end&&c.start<w.end){walking=true;break;}
             c.hand=c.kind.equals("salut")?-1:!reserved&&!walking&&!c.kind.equals("ecoute")&&!c.kind.equals("hoche")
-                &&c.end-c.start>=(c.kind.equals("rejouit")?.46:.56)&&c.start>=rest?side:0;
+                &&c.end-c.start>=(c.kind.equals("rejouit")?.46:.56)&&c.start>=rest-1e-7?side:0;
             if(c.hand!=0){rest=free;side=-c.hand;}
         }
         AichaFaces.plan(p.moods,faces);
@@ -188,27 +212,29 @@ final class AichaMotion {
         double[] get(String nom){return profils.getOrDefault(nom,NEUTRE);}
     }
     private static final Map<String,double[][]> GESTURES=Map.ofEntries(
-        Map.entry("salut",new double[][]{{16,78,.94,6,0,0,0},{7.2,3.1,-2.1,.17},{.69,.29,.45,0,.10}}),
-        Map.entry("presente",new double[][]{{5,37,.84,3,0,0,0},{11.3,4.1,3.2,.55},{.33,.28,.31,.03,.22}}),
-        Map.entry("confie",new double[][]{{0,41,.66,-3,.77,0,0},{3.3,5.1,5.5,.11},{.29,.48,.17,.12,-.23}}),
-        Map.entry("marque",new double[][]{{5,34,.82,3,0,0,.9},{6.5,2.7,3.6,.18},{.19,.39,.48,.12,.30}}),
-        Map.entry("ouvre",new double[][]{{5,37,.84,3,0,.62,0},{5.5,-3.9,-5.3,-.37},{.53,.41,.52,0,.12}}),
-        Map.entry("hoche",new double[][]{{},{3.2,2.2,11.8,.26},{.32,.22,.17,.03,.10}}),
-        Map.entry("nuance",new double[][]{{0,34,.67,-3,.66,.12,0},{12,4.2,-2.7,-.32},{.07,.21,.62,.30,.53}}),
-        Map.entry("question",new double[][]{{4,28,.68,3,0,.15,0},{9.9,7.1,-6.7,-.36},{.21,.76,.64,.08,.36}}),
-        Map.entry("accent",new double[][]{{5,36,.80,3,0,.22,0},{7.2,-3.9,7.1,.18},{.49,.51,.54,0,.21}}),
-        Map.entry("illustre",new double[][]{{8,52,.98,17,.10,0,0},{13,3.6,3,.53},{.37,.34,.32,.04,.32},{27,-4.4}}),
-        Map.entry("compare",new double[][]{{8,60,.96,17,.09,.98,0},{15,4.2,4.4,.46},{.28,.48,.44,.09,.34},{23,5.0}}),
-        Map.entry("rejouit",new double[][]{{17,77,.98,11,.05,1,0},{9,-6.4,-8.3,-.48},{.90,.56,.79,0,.39},{19,3.5}}),
-        Map.entry("ecoute",new double[][]{{},{15.2,5.8,6.6,.78},{.06,.32,.24,.45,.18}}));
+        Map.entry("salut",new double[][]{{16,78,.94,6,0,0,0},{7.2,3.1,-2.1,.17}}),
+        Map.entry("presente",new double[][]{{7,43,.90,8,0,0,0},{11.3,4.1,3.2,.55}}),
+        Map.entry("confie",new double[][]{{0,41,.66,-3,.77,0,0},{3.3,5.1,5.5,.11}}),
+        Map.entry("marque",new double[][]{{5,34,.82,3,0,0,.9},{6.5,2.7,3.6,.18}}),
+        Map.entry("ouvre",new double[][]{{6,44,.90,8,0,.75,0},{5.5,-3.9,-5.3,-.37}}),
+        Map.entry("hoche",new double[][]{{},{3.2,2.2,11.8,.26}}),
+        Map.entry("nuance",new double[][]{{0,34,.67,-3,.66,.12,0},{12,4.2,-2.7,-.32}}),
+        Map.entry("question",new double[][]{{4,28,.68,3,0,.15,0},{9.9,7.1,-6.7,-.36}}),
+        Map.entry("accent",new double[][]{{5,36,.80,3,0,.22,0},{7.2,-3.9,7.1,.18}}),
+        Map.entry("illustre",new double[][]{{8,52,.98,17,.10,0,0},{13,3.6,3,.53},{27,-4.4}}),
+        Map.entry("explique",new double[][]{{9,54,.98,14,.08,.55,0},{9,3.1,3.8,.37},{15,-3.1}}),
+        Map.entry("enumere",new double[][]{{7,50,.76,9,.18,0,.98},{6,3.2,6.1,.18},{11,-2.1}}),
+        Map.entry("compare",new double[][]{{8,60,.96,17,.09,.98,0},{15,4.2,4.4,.46},{23,5.0}}),
+        Map.entry("rejouit",new double[][]{{17,77,.98,11,.05,1,0},{9,-6.4,-8.3,-.48},{19,3.5}}),
+        Map.entry("ecoute",new double[][]{{},{15.2,5.8,6.6,.78}}));
     private static final class Acting {
-        Cue cue;double face,gazeX,gazeY,neck,tilt,yaw,pitch,weight,hip,chest,torse,appui,ressort,smile,inner,outer,focus,asym;
+        Cue cue;double face,gazeX,gazeY,neck,tilt,yaw,pitch,weight,hip,chest,torse,appui,ressort;
         double phase(){return tilt+neck*1.65+yaw*.21+pitch*.25;}
     }
     private static Acting acting(Plan p,double t,double gain){
         Acting a=new Acting();Cue c=a.cue=at(p.cues,t);double span=c==null?1:c.end-c.start,u=c==null?-1:(t-c.start)/span;
         String kind=c==null?"":c.kind;boolean compare=kind.equals("compare");
-        double[][] g=GESTURES.getOrDefault(kind,GESTURES.get("ecoute"));double[] head=g[1],face=g[2],body=g.length>3?g[3]:null;
+        double[][] g=GESTURES.getOrDefault(kind,GESTURES.get("ecoute"));double[] head=g[1],body=g.length>2?g[2]:null;
         int side=c==null?1:body!=null&&c.hand!=0?c.hand:c.side;
         double intensity=gain*(.22+.78*smooth(.14,.91,span)),look=intensity*pulse(u,0,.155,.66,.95);
         double neck=intensity*pulse(u,min(.18,.068/span),.32,.61,.96),skull=intensity*pulse(u,min(.25,.105/span),.39,.65,1);
@@ -223,7 +249,7 @@ final class AichaMotion {
         a.chest=body!=null?.42*a.weight:(g[0].length>4&&g[0][4]>.4?-1.33:1.25)*side*support;
         a.torse=(body==null?10:body[0])*side*support*turn;
         a.ressort=kind.equals("rejouit")?intensity*(2.7*pulse(u,.025,.21,.31,.53)+3.15*pulse(u,.02,.24,.69,.99)):0;
-        a.smile=a.face*face[0];a.inner=a.face*face[1];a.outer=a.face*face[2];a.focus=a.face*face[3];a.asym=side*a.face*face[4];return a;
+        return a;
     }
     private static double[][] hands(Cue c,double t,double gain){
         double[][] hands=new double[2][7];
@@ -294,7 +320,7 @@ final class AichaMotion {
         AichaFaces.Window mood=at(p.moods,t);
         AichaFaces.Frame played=AichaFaces.sample(mood,t,expression,a.cue,visages);double[] face=played.face;
         double env=forced?1:bound(played.force*(mood!=null?mood.envelope(t):a.face),0,1.1);
-        double accent=forced||reduced||mood!=null&&mood.manual?0:1-(played.name.equals("neutre")?0:.92*bound(env)),jeu=reduced?0:env;
+        double jeu=reduced?0:env;
         Interval phrase=at(p.speech,t);double silence=1;
         if(phrase!=null){double span=phrase.end-phrase.start;
             silence-=pulse(t,phrase.start,phrase.start+min(.045,.30*span),phrase.end-min(.065,.38*span),phrase.end);
@@ -328,8 +354,8 @@ final class AichaMotion {
         v.blinkL=reduced?0:max(lids,blink(vie));v.blinkR=reduced?0:max(lids,blink(vie-.009));
         double spread=min(k,1.1);
         v.stepL=anchor(s.left,-spread);v.stepR=anchor(talon!=0?new Foot(0,0,0,22*talon,-10*talon,true):s.right,spread);
-        v.smile=bound(env*face[0]+accent*a.smile,-1,1);v.inner=bound(env*face[1]+accent*a.inner,-1.12,1.16);v.outer=bound(env*face[2]+accent*a.outer,-1.02,1.22);
-        v.asym=bound(env*face[5]+accent*a.asym,-.98,.98);v.focus=bound(env*face[4]+accent*a.focus);
+        v.smile=bound(env*face[0],-1,1);v.inner=bound(env*face[1],-1.12,1.16);v.outer=bound(env*face[2],-1.02,1.22);
+        v.asym=bound(env*face[5],-.98,.98);v.focus=bound(env*face[4]);
         v.lids=bound(env*face[3],-1,1);v.levres=silence*env*face[8];v.mouth=mouth;return v;
     }
 }

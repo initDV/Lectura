@@ -21,7 +21,7 @@ final class AichaTrack {
         for(Script.Segment s:segments){
             Pcm.interrupted();boolean spoken=s.type==Script.SPOKEN;
             double end=s.speechEnd<0?s.to:min(s.to,s.speechEnd);
-            parts.add(AichaFaces.part(s,before,source,mood.summary(s),emotions));before=s;
+            parts.add(AichaFaces.part(s,before,source,mood.summary(s),emotions,refs.direction));before=s;
             if(spoken&&end>s.from){String phones=french==null?AichaMouth.english(s.text):french.phrase(s.text,phonesProfile);lips.add(phones,s.from,end);}
         }
         plan=AichaMotion.plan(parts,duration,emotions);
@@ -37,14 +37,19 @@ final class AichaTrack {
         Envelope(Pcm pcm)throws IOException{
             int step=(int)max(1,round(pcm.rate*16/1000.));frameMs=step*1000./pcm.rate;duration=pcm.duration();
             rms=new float[(int)((pcm.frames+step-1)/step)];double peak=0;
-            short[] samples=new short[step*pcm.channels];
-            for(int i=0;i<rms.length;i++){
-                Pcm.interrupted();int n=pcm.read((long)i*step,samples,step);double amplitude=0;
-                for(int c=0;c<pcm.channels;c++){
-                    double sum=0;for(int j=0;j<n;j++)sum+=square(samples[j*pcm.channels+c]/32768.);
-                    amplitude=max(amplitude,sqrt(sum/n));
+            int block=32;
+            short[] samples=new short[step*block*pcm.channels];
+            for(int i=0;i<rms.length;i+=block){
+                Pcm.interrupted();int count=pcm.read((long)i*step,samples,step*block);
+                for(int j=0;j<block&&i+j<rms.length;j++){
+                    int start=j*step,n=min(step,count-start);
+                    double amplitude=0;
+                    for(int c=0;c<pcm.channels;c++){
+                        double sum=0;for(int k=start;k<start+n;k++)sum+=square(samples[k*pcm.channels+c]/32768.);
+                        amplitude=max(amplitude,sqrt(sum/n));
+                    }
+                    rms[i+j]=(float)amplitude;peak=max(peak,rms[i+j]);
                 }
-                rms[i]=(float)amplitude;peak=max(peak,rms[i]);
             }
             low=bound(peak*.06,.0018,.018);high=max(low*2,peak*.37);
         }

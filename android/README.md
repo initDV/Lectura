@@ -106,6 +106,10 @@ le voyant REC n’apparaissent. La capture PNG garde son propre cadrage.
 
 ## Vérifier
 
+Sur la branche de travail, la recette déclenchée par un push utilise une clé de test
+jetable et n’archive aucun APK. Le lancement manuel du workflow utilise le certificat
+permanent, vérifie la mise à jour et n’archive l’APK distribuable qu’après la recette.
+
 Le workflow produit, séparément de l’APK distribué, un APK d’instrumentation signé
 avec la même clé. Il installe puis exerce l’APK réel sur une image Android API 31
 KVM ; le rapport `Lectura-comparaison` contient les captures Pages et Android, les

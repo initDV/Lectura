@@ -22,9 +22,11 @@ jobs:
   android:
     if: github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura'
     runs-on: ubuntu-24.04
-    environment: android-signing
+    # A normal branch push exercises the same Android code without the release key.
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'android-signing' || 'android-recette' }}
     steps:
       - name: Exiger les secrets de signature permanente
+        if: github.event_name == 'workflow_dispatch'
         env:
           KEYSTORE_PRESENT: ${{ secrets.KEYSTORE_BASE64 != '' && 'yes' || 'no' }}
           PASSWORD_PRESENT: ${{ secrets.KEYSTORE_PASSWORD != '' && 'yes' || 'no' }}
@@ -47,7 +49,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Relever l’empreinte publique avant la première signature
-        if: hashFiles('android/signing-cert.sha256') == ''
+        if: github.event_name == 'workflow_dispatch' && hashFiles('android/signing-cert.sha256') == ''
         env:
           LECTURA_KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
           LECTURA_STORE_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -90,6 +92,7 @@ jobs:
           JS
           echo "LECTURA_TEST_SPEECH_WAV=$RUNNER_TEMP/lips-spoken.wav" >> "$GITHUB_ENV"
       - name: Compiler et signer avec le certificat permanent
+        if: github.event_name == 'workflow_dispatch'
         env:
           LECTURA_KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
           LECTURA_STORE_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -99,6 +102,18 @@ jobs:
         run: |
           LECTURA_BUILD="${GITHUB_SHA:0:8}" LECTURA_VERSION_CODE="$GITHUB_RUN_NUMBER" \
             LECTURA_TEST_APK="$RUNNER_TEMP/LecturaTests.apk" bash android/ci-signing.sh build "$RUNNER_TEMP/Lectura.apk"
+      - name: Compiler uniquement pour l’émulateur, avec une clé jetable
+        if: github.event_name == 'push'
+        env:
+          LECTURA_STORE_PASS: test-only
+        run: |
+          export LECTURA_KEYSTORE="$RUNNER_TEMP/lectura-test.p12"
+          keytool -genkeypair -keystore "$LECTURA_KEYSTORE" -storetype PKCS12 -storepass:env LECTURA_STORE_PASS \
+            -keyalg RSA -keysize 2048 -validity 7 -alias lectura -dname 'CN=Lectura tests uniquement'
+          digest=$(keytool -exportcert -keystore "$LECTURA_KEYSTORE" -storepass:env LECTURA_STORE_PASS -alias lectura | sha256sum)
+          LECTURA_SIGNING_CERT_SHA256="${digest%% *}" LECTURA_BUILD="${GITHUB_SHA:0:8}" LECTURA_VERSION_CODE="$GITHUB_RUN_NUMBER" \
+            LECTURA_TEST_APK="$RUNNER_TEMP/LecturaTests.apk" bash android/build.sh "$RUNNER_TEMP/Lectura.apk"
+          rm -f "$LECTURA_KEYSTORE"
       - name: Vérifier les bibliothèques 64 bits et le catalogue dans l’APK
         run: |
           python3 - "$RUNNER_TEMP/Lectura.apk" <<'PY'
@@ -134,7 +149,7 @@ jobs:
           print('::notice title=ABI et poids::ONNX et Sherpa présents en ARM64 et x86_64 ; aucun modèle vocal incorporé.')
           PY
       - name: Récupérer un candidat de référence sur demande
-        if: inputs.predecessor_run != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.predecessor_run != ''
         timeout-minutes: 2
         continue-on-error: true
         uses: actions/download-artifact@v4
@@ -144,6 +159,7 @@ jobs:
           run-id: ${{ inputs.predecessor_run }}
           path: ${{ runner.temp }}/lectura-predecessor
       - name: Comparer les certificats de signature
+        if: github.event_name == 'workflow_dispatch'
         timeout-minutes: 4
         id: certificates
         env:
@@ -162,8 +178,8 @@ jobs:
             # Test the actual public APK, with a bounded download and its pinned hash.
             mkdir -p "$(dirname "$previous")"
             curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 --max-time 85 --retry-max-time 170 \
-              'https://github.com/initDV/Lectura/releases/download/v1.1.4/Lectura.apk' -o "$previous"
-            printf '%s  %s\n' 'db981cae1c94aad6a380438a1c1ebb2a7a9ec7b2828ce23c08d11dc6356f9ba0' "$previous" | sha256sum -c -
+              'https://github.com/initDV/Lectura/releases/download/v1.1.5/Lectura.apk' -o "$previous"
+            printf '%s  %s\n' 'f8e94b6e33caf2545e5c7d3899c1f779cd8e5a14c23d61c0ac466980c6c6de79' "$previous" | sha256sum -c -
           fi
           if [[ -f "$previous" ]]; then
             old=$(fingerprint "$previous")
@@ -191,6 +207,7 @@ jobs:
             echo 'Précédent : artifact indisponible' >> "$LECTURA_REPORT/apk-certificates.txt"
           fi
       - name: Sources correspondantes et notices Android
+        if: github.event_name == 'workflow_dispatch'
         run: |
           mkdir -p "$RUNNER_TEMP/lectura-sources"
           git archive --format=tar.gz --prefix=Lectura/ HEAD > "$RUNNER_TEMP/lectura-sources/lectura.tar.gz"
@@ -198,6 +215,7 @@ jobs:
           curl -fsSL --retry 2 "https://codeload.github.com/zhuker/lamejs/tar.gz/$rev" -o "$RUNNER_TEMP/lectura-sources/lamejs.tar.gz"
           cp android/README.md android/licenses/*.md android/licenses/*.txt "$RUNNER_TEMP/lectura-sources/"
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
         with:
           name: Lectura-Android-sources
           path: ${{ runner.temp }}/lectura-sources
@@ -266,7 +284,7 @@ jobs:
             exit 1
           fi
       - uses: actions/upload-artifact@v4
-        if: always() && steps.certificates.outcome == 'success'
+        if: always() && steps.android_checks.outcome != 'skipped' && steps.android_checks.outcome != ''
         with:
           name: Lectura-comparaison
           path: ${{ runner.temp }}/lectura-report

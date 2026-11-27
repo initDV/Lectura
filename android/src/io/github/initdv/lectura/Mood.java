@@ -21,7 +21,8 @@ final class Mood {
     private static final Set<String> POS=Set.of("content","enthousiaste","rire","fier","tendre","emerveille","soulage","determine","malicieu","reconnaissant","amuse","rassurant","compatissant","excite","apaise","contemplatif");
     private static final Set<String> NEG=Set.of("triste","colere","peur","fatigue","gene","inquiet","ennuye","degoute","jaloux","intimide","impatient","confus","resigne","honteux");
     private static final Set<String> AFTER=Set.of("pas","plus","jamais","guere","rien");
-    private static final Pattern WORD=Pattern.compile("[\\p{L}\\p{N}]+"),PUNCT=Pattern.compile("[,;:.!?()]");
+    private static final Pattern WORD=Pattern.compile("[\\p{L}\\p{N}]+"),PUNCT=Pattern.compile("[,;:.!?…—()\r\n]");
+    private static final Set<String> TURN=Set.of("mais","but","pourtant","yet","however"),ONLY=Set.of("seulement","uniquement","only","just");
     private static final Pattern CONTENT=Pattern.compile("(?i)(?<![\\p{L}\\p{N}_])(réussi|réussie|réussite|bravo|félicitations|parfait|gagné|succès|well done|congratulations|success)(?![\\p{L}\\p{N}_])");
     private static final Pattern CODE=Pattern.compile("(^\\s*[$#>] )|`[^`]+`|\\s--?[a-z][\\w-]*|[{};]\\s*$|\\w+\\(.*\\)");
     private final Map<String,Hit> exact=new LinkedHashMap<>(),prefix=new LinkedHashMap<>();
@@ -34,18 +35,19 @@ final class Mood {
     private final Script.Keywords keywords;
     private final boolean automatic;
     private int maxWords=1;
-    Mood(Refs refs,String lang,Script.Keywords words,boolean automatic){
+    Mood(Refs refs,String lang,Script.Keywords words,boolean automatic){this(refs,lang,words,automatic,false);}
+    Mood(Refs refs,String lang,Script.Keywords words,boolean automatic,boolean lectrice){
         this.expressions=refs.expressions;this.keywords=words;this.automatic=automatic;
         JSONObject nativeConfig=refs.json("direction.json"),configured=object(nativeConfig,lang);
         gesturesByPose=object(nativeConfig,"poses");questions=object(configured,"questions");
         JSONObject contexts=object(configured,"contexts");
-        contexts.keys().forEachRemaining(id->readWords(id,array(contexts,id),1.55));
+        if(!lectrice)contexts.keys().forEachRemaining(id->readWords(id,array(contexts,id),1.55));
         JSONObject s=refs.json("data/sentiments_"+lang+".json"),em=object(s,"emotions");
         em.keys().forEachRemaining(k->{JSONObject d=object(em,k);readWords(k,array(d,"mots"),1);readWords(k,array(d,"forts"),1.6);});
         JSONObject gestures=object(s,"gestes");gestures.keys().forEachRemaining(k->{String n=key(k);if(n.isEmpty())return;
             Hit h=exact.computeIfAbsent(n,a->new Hit("",0,""));if(h.gesture.isEmpty())h.gesture=gestures.optString(k);maxWords=Math.max(maxWords,n.split(" ").length);});
         JSONObject additions=object(configured,"gestures");
-        additions.keys().forEachRemaining(gesture->{JSONArray phrases=array(additions,gesture);for(int i=0;i<phrases.length();i++){
+        if(!lectrice)additions.keys().forEachRemaining(gesture->{JSONArray phrases=array(additions,gesture);for(int i=0;i<phrases.length();i++){
             String n=key(phrases.optString(i));if(n.isEmpty())continue;
             exact.computeIfAbsent(n,name->new Hit("",0,"")).gesture=gesture;
             maxWords=Math.max(maxWords,n.split(" ").length);
@@ -69,7 +71,10 @@ final class Mood {
     private String playable(String id){return expressions.has(id)?id:"neutre";}
     private static final class Word {final String s;final int start,end;boolean used;Word(String s,int a,int b){this.s=s;start=a;end=b;}}
     static class Hit {String emotion,gesture;final double weight;Hit(String e,double w,String g){emotion=e;weight=w;gesture=g;}}
-    static final class Moment extends Hit {final int pos;double force;Moment(int p,String e,double w,String g){super(e,w,g);pos=p;}}
+    static final class Moment extends Hit {
+        final int pos,end;final boolean denied;double force;
+        Moment(int p,int end,String e,double w,String g,boolean denied){super(e,w,g);pos=p;this.end=end;this.denied=denied;}
+    }
     static final class Analysis {
         String expr="neutre",second="";double force=1,weight;boolean sentiment,manual;
         final List<Moment> moments=new ArrayList<>();
@@ -80,7 +85,8 @@ final class Mood {
     }
     private static double force(double score,double boost){return Math.max(.35,Math.min(1.25,(.55+.35*score)*(score<.5?.8:boost)));}
     private boolean denied(List<Word> a,int k,int n,String text){
-        for(int i=k-1;i>=Math.max(0,k-3);i--){Word w=a.get(i);if(w.used||PUNCT.matcher(text.substring(w.end,a.get(i+1).start)).find())return false;
+        for(int i=k-1;i>=Math.max(0,k-3);i--){Word w=a.get(i);if(w.used||TURN.contains(w.s)||PUNCT.matcher(text.substring(w.end,a.get(i+1).start)).find())return false;
+            if((w.s.equals("pas")||w.s.equals("not"))&&ONLY.contains(a.get(i+1).s))return false;
             if(negations.contains(w.s)||((w.s.equals("n")||w.s.equals("ne"))&&k+n<a.size()&&AFTER.contains(a.get(k+n).s)))return true;}
         return false;
     }
@@ -100,13 +106,13 @@ final class Mood {
             String emotion=hit.emotion,raw=text.substring(first.start,words.get(i+count-1).end);double w=hit.weight;
             for(int j=Math.max(0,i-2);j<i;j++)w*=intensifiers.getOrDefault(words.get(j).s,1d);
             if(raw.length()>3&&raw.equals(raw.toUpperCase(Locale.ROOT))&&!raw.equals(raw.toLowerCase(Locale.ROOT)))w*=1.3;
-            boolean skip=false;
-            if(!emotion.isEmpty()&&denied(words,i,count,normal)){
+            boolean skip=false,denied=!emotion.isEmpty()&&denied(words,i,count,normal);
+            if(denied){
                 if(POS.contains(emotion)){emotion="triste";w*=.7;}else if(NEG.contains(emotion)){emotion="content";w*=.45;}else skip=true;
             }
-            if(!skip)a.moments.add(new Moment(first.start,emotion,w,hit.gesture));for(int j=0;j<count;j++)words.get(i+j).used=true;i+=count-1;
+            if(!skip)a.moments.add(new Moment(first.start,words.get(i+count-1).end,emotion,w,hit.gesture,denied));for(int j=0;j<count;j++)words.get(i+j).used=true;i+=count-1;
         }
-        if(emojiPattern!=null){m=emojiPattern.matcher(text);while(m.find())a.moments.add(new Moment(m.start(),emoji.optString(m.group()),1.2,""));}
+        if(emojiPattern!=null){m=emojiPattern.matcher(text);while(m.find())a.moments.add(new Moment(m.start(),m.end(),emoji.optString(m.group()),1.2,"",false));}
         a.moments.sort(Comparator.comparingInt(x->x.pos)); int ex=0;for(int i=0;i<text.length();i++)if(text.charAt(i)=='!')ex++;
         double boost=1+.15*Math.min(3,ex); Map<String,Double> scores=new LinkedHashMap<>();
         for(Moment x:a.moments)if(!x.emotion.isEmpty()){x.force=force(x.weight,boost);scores.merge(x.emotion,x.weight,Double::sum);}

@@ -79,7 +79,19 @@ Après au moins 1,2 seconde de silence, et si elle est à l’arrêt, Aïcha ouv
 
 Essaie « J’ai cru que tu ne viendrais pas… mais te voilà ! » avec Aïcha ou Monique. L’inquiétude reste lisible au début ; pendant l’ellipse, les yeux et les sourcils bougent en premier. Le sourire vient sur « te voilà ». Dans l’atelier, **Réplique** (ou `?replique=1`) propose trois repères au même cadrage, sans voix à télécharger.
 
-La piste faciale reprend les indices du lexique et deux tournures françaises propres aux lectrices. Les points de suspension sur une même ligne peuvent réunir deux segments **uniquement pour le visage** ; les dates des sous-titres, la voix, la bouche et les gestes ne sont pas recoupés. Le passage est daté par rapport aux segments audio : faute d’horodatage mot par mot, l’offset du mot est estimé, avec la carte de prononciation sur Android si elle existe. Un saut dans la source, l’aperçu, la vidéo et la reprise utilisent la même interpolation. Sans émotions automatiques, aucun virage n’est ajouté. Le réglage par phrase et l’expression forcée restent prioritaires, y compris le choix « Neutre ». En mouvements réduits, seuls les traits du visage et la parole changent, sans lever le menton ni déplacer le regard.
+La piste faciale garde le début neutre tant que le premier indice n’a pas été dit. La voix et les gestes ne lui prêtent plus un sourire ou un froncement par défaut. Des tournures comme « je ne m’y attendais pas », « ne t’inquiète pas » ou « ouf » donnent respectivement la surprise, un air rassurant et le soulagement. « Le son grave monte lentement », « le mot “triste” » et « je ne suis pas triste » n’entraînent ni inquiétude, ni fatigue, ni sourire de rebond. Une question ouverte donne un air curieux ; une question fermée sans autre indice, un air pensif. Ces règles locales et le lexique ne prétendent pas comprendre l’ironie. Le build Android embarque les mêmes tournures que le Web et Linux (`intentions.js`).
+
+La ponctuation faible et les ellipses peuvent réunir deux segments courts du même propos **uniquement pour le visage** ; on ne change ni les sous-titres, ni le son, ni les visèmes. La position du mot est estimée dans le temps parlé de son segment, avec la carte de prononciation sur Android si elle existe. L’aperçu, les sauts et les exports utilisent la même piste. Le réglage par phrase et l’expression forcée (y compris « Neutre ») restent prioritaires. En mouvements réduits, seuls le visage et la parole changent, sans lever le menton ni déplacer le regard.
+
+### Expliquer en lisant
+
+```text
+Je vais vous expliquer le principe. D’abord, ouvrez le menu, puis choisissez un fichier.
+Par exemple, on met le texte d’un côté et les images de l’autre côté.
+Le son grave monte lentement. À cet instant, je ne m’y attendais pas. Ouf, tout va bien.
+```
+
+Pendant la parole, « expliquer » ou « par exemple » ouvrent la paume, « d’abord » et « puis » ponctuent les étapes de l’index, et « d’un côté… de l’autre » déplacent le regard et mettent les paumes en balance. Le bras se prépare avant le repère et revient au repos. Ces gestes gardent leur place face aux gestes génériques et aux pas automatiques. Les explicatifs n’imposent plus tous un appui à la hanche ; « voici » garde ce geste de présentation distinct. Aucun grand geste n’est ajouté sur un mot trop bref pour faire l’aller-retour.
 
 ## Cadrage sur téléphone
 

@@ -33,6 +33,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
@@ -1291,12 +1292,8 @@ public final class DeviceChecks extends Instrumentation {
                 if(!automatic)a.chooseVoice();
             });
             if(!automatic)click(a,label);
-            main(()->{require(a.voiceName().equals(label),"Voix du sélecteur "+a.voiceName());a.launch(false);});
-            long started=android.os.SystemClock.elapsedRealtime();
-            try{waitFor("Démarrage "+id,()->a.reading!=null&&a.reading.playing||!a.preparing&&a.reading==null,150000);}
-            catch(AssertionError e){throw new AssertionError("Préparation "+id+" trop lente",e);}
-            main(()->require(a.reading!=null&&a.synthesisVoice.equals(id),"Voix effective "+a.synthesisVoice+" ; "+a.journal.peekLast()));
-            long startup=android.os.SystemClock.elapsedRealtime()-started;
+            main(()->require(a.voiceName().equals(label),"Voix du sélecteur "+a.voiceName()));
+            long startup=firstSpeech(a,text,id,launchVoice(a),150000);
             if(automatic){
                 waitFor("Lecture Estelle à vitesse normale",()->a.reading.rate==1&&a.reading.time()>=250,10000);
                 main(()->{a.project.speed=1.25f;a.adjustRate();});
@@ -1316,9 +1313,96 @@ public final class DeviceChecks extends Instrumentation {
                 }
             });
             String cached=checkNewVoiceCache(ctx,id,text,cps);
+            if(automatic)cached+=" ; "+estelleWarmup(ctx,a,cps);
             return id+" à froid en avion, "+(automatic?"1× puis ":"")+"1,25× (PCM 24 kHz), démarrage "+startup+" ms, "+observed.length()+" observations, pic "+peak[0]
                 +"/32768, trois phrases non muettes et anciens caches ignorés ; "+cached;
         }finally{main(a::finish);}
+    }
+    private long launchVoice(MainActivity a)throws Exception {
+        long[] at={0};main(()->{at[0]=android.os.SystemClock.elapsedRealtime();require(a.scene.launch.performClick(),"Bouton Lancer");});return at[0];
+    }
+    // Observe the real MediaPlayer crossing the first 10 ms of audible PCM (-36 dBFS).
+    // This is playhead time (80 ms polling), not a microphone measurement of the speaker.
+    private long firstSpeech(MainActivity a,String text,String voice,long clicked,long timeout)throws Exception {
+        double[] first={-1};long[] elapsed={0};
+        waitFor("Première parole de "+voice,()->{
+            Reading r=a.reading;
+            if(r==null||!r.playing||r.pcm==null||!text.equals(r.text)||!voice.equals(a.synthesisVoice))return false;
+            if(first[0]<0)try{
+                Pcm pcm=r.pcm;int n=pcm.rate/100;
+                short[] wave=new short[n*pcm.channels];
+                for(int i=0;i<100&&first[0]<0;i++){
+                    int count=pcm.read((long)i*n,wave,n);if(count==0)break;
+                    double sum=0;for(int j=0;j<count*pcm.channels;j++)sum+=(double)wave[j]*wave[j];
+                    if(sum/(count*pcm.channels)>520*520)first[0]=(i+1)*10.;
+                }
+                require(first[0]>0,"La première seconde doit contenir de la parole");
+            }catch(IOException e){throw new AssertionError("PCM du démarrage",e);}
+            if(r.time()<first[0])return false;
+            elapsed[0]=android.os.SystemClock.elapsedRealtime()-clicked;return true;
+        },timeout);
+        return elapsed[0];
+    }
+    private File estelleWav(Context ctx,String text,int cps)throws Exception {
+        String key=oldKey("SHA-256","rendu-mimi-10|estelle|"+cps+"|"+text);
+        return new File(new File(ctx.getCacheDir(),"synthese"),key+".wav");
+    }
+    private String estelleWarmup(Context ctx,MainActivity a,int cps)throws Exception {
+        String waiting="Par exemple, ouvre ton carnet. Deux options : le texte ou l’image.";
+        main(()->{
+            Project p=new Project(a.db.settings);p.engine="auto";p.cps=cps;p.text=waiting;p.speed=1;p.character="aicha";p.emotions=true;
+            a.open(p);a.stage.aicha.reduced=false;
+        });
+        long[] clicked={0};
+        waitFor("Reprise d’un préchauffage Estelle actif",()->{
+            if(a.warming==null||!a.warming.started||a.prewarm.isDone())return false;
+            var warm=a.warming;var task=a.prewarm;
+            clicked[0]=android.os.SystemClock.elapsedRealtime();a.scene.launch.performClick();
+            require(a.preparing&&a.warming==warm&&warm.requested&&a.prewarm==task&&!task.isCancelled(),"Le clic a annulé la synthèse utile");
+            return true;
+        },10000);
+        long partial=firstSpeech(a,waiting,"estelle",clicked[0],65000);
+        // These figures must occur after real PCM reaches the player, not only in an idle preview.
+        for(String kind:List.of("explique","compare")){
+            waitFor("Geste "+kind+" pendant la lecture Estelle",()->{
+                Reading r=a.reading;if(r==null||!r.playing||r.aicha==null)return false;
+                var c=r.aicha.plan.cues.stream().filter(q->q.kind.equals(kind)&&q.hand!=0).findFirst().orElseThrow();
+                double time=r.time()/1000,span=c.end-c.start;
+                if(time<c.start+.38*span||time>c.start+.59*span)return false;
+                a.stage.updatePose(android.os.SystemClock.uptimeMillis()-a.stage.initial);
+                var palm=a.stage.artwork.get(c.hand>0?"paume-r":"paume-l");
+                var wrist=a.stage.artwork.get(c.hand>0?"poignet-r":"poignet-l");
+                float[] point={0,0};wrist.transform.mapPoints(point);
+                return point[1]<84&&palm.children.get(0).alpha==0;
+            },12000);
+        }
+        String stale="Une bougie éclaire encore le mur du fond. On l’aperçoit par la fenêtre.";
+        String ready="D’abord, ouvre le rideau. Un rayon de soleil traverse la pièce.";
+        main(()->{a.stop();a.scene.edit.setText(stale);});
+        long[] edited={0};
+        waitFor("Annuler un texte périmé en cours de calcul",()->{
+            if(a.warming==null||!a.warming.started||a.prewarm.isDone())return false;
+            var task=a.prewarm;
+            edited[0]=android.os.SystemClock.elapsedRealtime();a.scene.edit.setText(ready);
+            require(task.isCancelled(),"L’édition n’a pas invalidé le préchauffage périmé");return true;
+        },10000);
+        waitFor("WAV Estelle prêt avant Lancer",()->a.warming!=null&&a.warming.text.equals(ready)&&a.prewarm.isDone(),65000);
+        long preparation=android.os.SystemClock.elapsedRealtime()-edited[0];
+        File wav=estelleWav(ctx,ready,cps),dates=new File(wav.getPath().replace(".wav",".json"));
+        require(!estelleWav(ctx,stale,cps).exists(),"Un rendu abandonné est devenu utilisable");
+        require(Pcm.mono16Frames(wav,24000)>24000&&Library.readJson(dates).getJSONArray("spans").length()==2,
+            "Les deux phrases doivent avoir un WAV et des dates avant Lancer");
+        byte[] cached=Files.readAllBytes(wav.toPath());
+        long warm=firstSpeech(a,ready,"estelle",launchVoice(a),10000);
+        main(()->{
+            require(a.reading.pcm.file.equals(wav)&&noNetwork(ctx),"Le WAV anticipé n’est pas lu en avion");
+            a.stop();
+        });
+        long replay=firstSpeech(a,ready,"estelle",launchVoice(a),10000);
+        require(Arrays.equals(cached,Files.readAllBytes(wav.toPath())),"La relecture a changé le PCM précalculé");
+        main(a::stop);
+        return "Lancer → parole : calcul repris "+partial+" ms, après préchauffage "+warm+" ms, relecture "+replay
+            +" ms (préchauffage après édition "+preparation+" ms) ; texte périmé annulé, WAV intact et gestes avec son";
     }
     private static int packWave(Pcm wav)throws Exception {
         require(wav.channels==1&&wav.rate==24000&&Pcm.mono16Frames(wav.file,24000)==wav.frames,"En-tête WAV du pack");
