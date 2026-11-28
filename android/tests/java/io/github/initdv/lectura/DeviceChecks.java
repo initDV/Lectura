@@ -99,6 +99,7 @@ public final class DeviceChecks extends Instrumentation {
                 check("avion",()->airplane(ctx));
                 check("surfaces",()->surfaces(ctx));
                 check("fixtures",()->refsAndModels(refs));
+                check("atlas-natif",()->AtlasChecks.run(this,ctx,refs,fixtures().getJSONObject("atlas")));
                 check("prosodie-pcm",()->prosody(refs));
                 check("diction-estelle-kokoro",()->VoiceDictionChecks.run(refs));
                 check("jeu-du-personnage",()->performance(refs));

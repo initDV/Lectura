@@ -1,14 +1,22 @@
 package io.github.initdv.lectura;
 
 import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.DashPathEffect;
+import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.RadialGradient;
+import android.graphics.RectF;
+import android.graphics.Shader;
+import android.graphics.Typeface;
 import android.util.Xml;
 import org.xmlpull.v1.XmlPullParser;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -20,14 +28,18 @@ final class Svg {
     private static final Pattern TOKEN = Pattern.compile(NUMBER+"|[A-Za-z]");
     private static final Pattern TRANSFORM = Pattern.compile("([A-Za-z]+)\\(([^)]*)\\)");
     private static final Set<String> SHAPES = Set.of("svg","g","rect","line","circle","ellipse","path","polyline","polygon","defs","clipPath","use");
+    private static final Set<String> ATLAS_SHAPES = Set.of("text","tspan","linearGradient","radialGradient","stop");
     private static final Pattern LOCAL_CLIP = Pattern.compile("url\\(#([\\w-]+)\\)");
     private static final Pattern INLINE_HIDDEN = Pattern.compile("display\\s*:\\s*none");
     final Node root;
+    private final boolean diagram;
     final float[] box;
     final HashMap<String,Node> ids = new HashMap<>();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-    Svg(InputStream in) {
+    Svg(InputStream in) { this(in,false); }
+    Svg(InputStream in,boolean diagram) {
+        this.diagram=diagram;
         try {
             XmlPullParser xml = Xml.newPullParser();
             xml.setInput(in,"UTF-8"); xml.nextTag();
@@ -39,7 +51,7 @@ final class Svg {
     }
     private Node read(XmlPullParser x) throws Exception {
         String kind = x.getName();
-        if (!SHAPES.contains(kind)) {
+        if (!SHAPES.contains(kind)&&!(diagram&&ATLAS_SHAPES.contains(kind))) {
             int depth=x.getDepth(); while (!(x.next()==XmlPullParser.END_TAG && x.getDepth()==depth)) if (x.getEventType()==XmlPullParser.END_DOCUMENT) break;
             return null;
         }
@@ -49,6 +61,9 @@ final class Svg {
         int evt;
         while ((evt=x.next())!=XmlPullParser.END_TAG && evt!=XmlPullParser.END_DOCUMENT) {
             if (evt==XmlPullParser.START_TAG) { Node child=read(x); if (child!=null) n.add(child); }
+            else if(evt==XmlPullParser.TEXT&&(kind.equals("text")||kind.equals("tspan"))){
+                Node run=new Node("literal");run.label=x.getText();n.add(run);
+            }
         }
         n.staticTransform=matrix(n.attr("transform"));
         n.opacity=n.f("opacity",1);
@@ -71,6 +86,7 @@ final class Svg {
                 throw new IllegalArgumentException("Masque SVG invalide : "+n.attr("clip-path"));
             n.mask=ref.children.get(0);
         }
+        if(n.kind.equals("text"))n.original=lettering(n);
         for(Node child:n.children)connect(child);
     }
     Node get(String id) { return ids.get(id); }
@@ -90,7 +106,8 @@ final class Svg {
         if (style==null || n.inherited!=parent) { n.inherited=parent; n.style=style=new Style(parent,n); }
         Path p=n.outline();
         float width=n.strokeWidth<0?style.width:n.strokeWidth;
-        boolean fill=p!=null&&style.fill!=0,stroke=p!=null&&style.stroke!=0&&width>0;
+        Shader fillShader=diagram&&p!=null?gradient(style.fillRef,n,p):null;
+        boolean fill=p!=null&&(style.fill!=0||fillShader!=null),stroke=p!=null&&style.stroke!=0&&width>0;
         // A single paint can carry the opacity directly. A group (or a fill
         // overlapping a stroke) still needs isolated compositing.
         boolean layer=alpha<.999f&&(fill&&stroke||n.reference!=null||!n.children.isEmpty());
@@ -102,11 +119,15 @@ final class Svg {
         if(n.mask!=null)c.clipPath(n.mask.outline());
         if(layer)c.saveLayerAlpha(null,Math.round(255*alpha));
         if(fill){
-            paint.setStyle(Paint.Style.FILL);paint.setColor(style.fill);paint.setAlpha(Math.round(style.fillOpacity*opacity));c.drawPath(p,paint);
+            paint.setStyle(Paint.Style.FILL);paint.setColor(fillShader==null?style.fill:Color.WHITE);paint.setShader(fillShader);
+            paint.setAlpha(Math.round(style.fillOpacity*opacity));c.drawPath(p,paint);paint.setShader(null);
         }
         if(stroke){
             paint.setStyle(Paint.Style.STROKE);paint.setColor(style.stroke);paint.setAlpha(Math.round(style.strokeOpacity*opacity));
-            paint.setStrokeWidth(width);paint.setStrokeMiter(4);paint.setStrokeCap(style.cap);paint.setStrokeJoin(style.join);c.drawPath(p,paint);
+            paint.setStrokeWidth(width);paint.setStrokeMiter(4);paint.setStrokeCap(style.cap);paint.setStrokeJoin(style.join);
+            if(diagram)paint.setPathEffect(style.dash);
+            c.drawPath(p,paint);
+            if(diagram)paint.setPathEffect(null);
         }
         // The hand definition is a leaf reference (do not recurse through another <use>).
         if(n.reference!=null&&!reference)drawNode(c,n.reference,style,true);
@@ -114,20 +135,83 @@ final class Svg {
         if(layer)c.restore();
         if(scoped)c.restore();
     }
+    // Atlas artwork uses unit-box gradients with numeric or percentage stops.
+    private Shader gradient(String ref,Node node,Path path){
+        if(ref==null)return null;
+        if(ref.equals(node.gradientRef))return node.gradient;
+        node.gradientRef=ref;node.gradient=null;
+        Node n=get(ref);
+        if(n==null||(!n.kind.equals("linearGradient")&&!n.kind.equals("radialGradient"))||n.children.size()<2)return null;
+        RectF b=new RectF();path.computeBounds(b,true);if(b.isEmpty())return null;
+        int count=n.children.size();int[] colors=new int[count];float[] offsets=new float[count];
+        for(int i=0;i<count;i++){
+            Node stop=n.children.get(i);
+            int alpha=Math.round(255*Refs.clamp(stop.f("stop-opacity",1),0,1));
+            colors[i]=(alpha<<24)|(Refs.color(stop.attr("stop-color"))&0xffffff);
+            offsets[i]=Math.max(i==0?0:offsets[i-1],Refs.clamp(ratio(stop,"offset",0),0,1));
+        }
+        Shader g=n.kind.equals("radialGradient")
+            ?new RadialGradient(ratio(n,"cx",.5f),ratio(n,"cy",.5f),Math.max(.001f,ratio(n,"r",.5f)),colors,offsets,Shader.TileMode.CLAMP)
+            :new LinearGradient(ratio(n,"x1",0),ratio(n,"y1",0),ratio(n,"x2",1),ratio(n,"y2",0),colors,offsets,Shader.TileMode.CLAMP);
+        Matrix m=new Matrix();m.setScale(b.width(),b.height());m.postTranslate(b.left,b.top);g.setLocalMatrix(m);
+        return node.gradient=g;
+    }
+    private static float ratio(Node n,String key,float fallback){
+        String s=n.attr(key);if(!s.endsWith("%"))return n.f(key,fallback);
+        try{return Float.parseFloat(s.substring(0,s.length()-1))/100;}catch(NumberFormatException e){return fallback;}
+    }
+    private static final class TextLine {
+        final float x,y;final StringBuilder text=new StringBuilder();
+        TextLine(float x,float y){this.x=x;this.y=y;}
+    }
+    private static TextLine letteringRuns(Node n,List<TextLine> lines,TextLine line){
+        for(Node child:n.children){
+            if(child.kind.equals("literal")){line.text.append(child.label);continue;}
+            if(!child.kind.equals("tspan"))continue;
+            if(!child.attr("x").isEmpty()||!child.attr("y").isEmpty()||!child.attr("dy").isEmpty()){
+                line=new TextLine(child.f("x",line.x),child.f("y",line.y)+child.f("dy"));lines.add(line);
+            }
+            line=letteringRuns(child,lines,line);
+        }
+        return line;
+    }
+    private static Path lettering(Node n){
+        List<TextLine> lines=new ArrayList<>();TextLine first=new TextLine(n.f("x"),n.f("y"));lines.add(first);letteringRuns(n,lines,first);
+        Paint p=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.SUBPIXEL_TEXT_FLAG);
+        int weight=Math.round(n.f("font-weight",n.attr("font-weight").equals("bold")?700:400));
+        p.setTypeface(Typeface.create(n.attr("font-family").contains("monospace")?Typeface.MONOSPACE:Typeface.SANS_SERIF,Math.max(1,Math.min(1000,weight)),false));
+        p.setTextSize(n.f("font-size",16));
+        String anchor=n.attr("text-anchor");Path path=new Path(),run=new Path();
+        for(TextLine line:lines){
+            String label=line.text.toString().trim().replaceAll("\\s+"," ");if(label.isEmpty())continue;
+            float width=p.measureText(label);run.rewind();
+            p.getTextPath(label,0,label.length(),line.x-width*(anchor.equals("middle")?.5f:anchor.equals("end")?1:0),line.y,run);
+            path.addPath(run);
+        }
+        return path;
+    }
     private static final class Style {
         static final Style DEFAULT = new Style();
         int fill=0xff000000,stroke=0;
+        String fillRef;DashPathEffect dash;
         float fillOpacity=1,strokeOpacity=1,width=1;
         Paint.Cap cap=Paint.Cap.BUTT;
         Paint.Join join=Paint.Join.MITER;
         Style() {}
         Style(Style p,Node n) {
-            fill=ink(n.attr("fill"),p.fill); stroke=ink(n.attr("stroke"),p.stroke);
+            String ink=n.attr("fill");fill=ink(ink,p.fill);stroke=ink(n.attr("stroke"),p.stroke);
+            Matcher url=LOCAL_CLIP.matcher(ink);fillRef=ink.isEmpty()?p.fillRef:url.matches()?url.group(1):null;
+            String pattern=n.attr("stroke-dasharray");
+            dash=p.dash;
+            if(!pattern.isEmpty()){
+                dash=null;float[] a=numbers(pattern);
+                if(a.length>=2&&a.length%2==0){boolean valid=true;for(float f:a)valid&=f>0;if(valid)dash=new DashPathEffect(a,0);}
+            }
             fillOpacity=n.f("fill-opacity",p.fillOpacity); strokeOpacity=n.f("stroke-opacity",p.strokeOpacity); width=n.f("stroke-width",p.width);
             String s=n.attr("stroke-linecap"); cap=s.isEmpty()?p.cap:s.equals("round")?Paint.Cap.ROUND:s.equals("square")?Paint.Cap.SQUARE:Paint.Cap.BUTT;
             s=n.attr("stroke-linejoin"); join=s.isEmpty()?p.join:s.equals("round")?Paint.Join.ROUND:s.equals("bevel")?Paint.Join.BEVEL:Paint.Join.MITER;
         }
-        static int ink(String v,int fallback) { return v.isEmpty()?fallback:v.equals("none")?0:Refs.color(v); }
+        static int ink(String v,int fallback) { return v.isEmpty()?fallback:(v.equals("none")||v.startsWith("url("))?0:Refs.color(v); }
     }
     static final class Node {
         final String kind;
@@ -136,6 +220,8 @@ final class Svg {
         Node parent,reference,mask;
         Matrix staticTransform,transform;
         Path original,current;
+        String label,gradientRef;
+        Shader gradient;
         Style style,inherited;
         boolean hidden,inlineHidden;
         float alpha=-1,opacity=1,strokeWidth=-1;

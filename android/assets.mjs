@@ -2,6 +2,7 @@
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { empaqueterAtlas } from './atlas-assets.mjs';
 import { empaqueterPersonnages } from '../tools/character-catalogue.mjs';
 import fr from '../src/i18n/fr.js';
 import en from '../src/i18n/en.js';
@@ -43,6 +44,7 @@ await mkdir(output, { recursive: true });
 await mkdir(resolve(res, 'mipmap-xxxhdpi'), { recursive: true });
 empaqueterPersonnages(fileURLToPath(new URL('characters/', root)), resolve(output, 'characters'));
 await Promise.all([
+  empaqueterAtlas(output, read),
   cp(new URL('data/', root), resolve(output, 'data'), { recursive: true }),
   cp(new URL('android/data/prononciation.json', root), resolve(output, 'prononciation.json')),
   cp(new URL('android/data/direction.json', root), resolve(output, 'direction.json')),
@@ -55,6 +57,8 @@ await Promise.all([
     'apropos.confidentialite.texte': 'Tes textes, projets et lectures restent sur cet appareil. Lectura utilise Internet seulement pour télécharger les voix HD à ta demande. Aucun compte ni traceur.',
     'voix.err.aucune': 'Aucune voix locale disponible. Installe une voix dans les réglages du téléphone ou télécharge une voix Lectura HD.',
     'android.terminal.fontSystem': 'Système',
+    'android.atlas.recul': 'Reculer de 5 secondes',
+    'android.atlas.avance': 'Avancer de 5 secondes',
     'android.video.resolution': 'Résolution de la vidéo',
     'android.video.scene': 'La vidéo reprend la scène affichée, avec des marges si le format est différent.',
     'android.video.uhdTitle': 'Enregistrement 4K indisponible',
@@ -88,6 +92,8 @@ await Promise.all([
     'apropos.confidentialite.texte': 'Your text, projects and playback stay on this device. Lectura only uses the Internet to download HD voices on request. No accounts or trackers.',
     'voix.err.aucune': 'No local voice available. Install one in your phone settings or download a Lectura HD voice.',
     'android.terminal.fontSystem': 'System',
+    'android.atlas.recul': 'Back 5 seconds',
+    'android.atlas.avance': 'Forward 5 seconds',
     'android.video.resolution': 'Video resolution',
     'android.video.scene': 'The video follows the scene on screen, with padding if the aspect ratios differ.',
     'android.video.uhdTitle': '4K recording unavailable',

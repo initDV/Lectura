@@ -249,20 +249,33 @@ public final class MainActivity extends Activity {
             if(ticket!=generation)return;
             loadingText.setText(t("voix.hd.synthesePhrase","i",Math.min(n+1,total),"n",total));bar.setProgress((int)(1000*n/Math.max(1,total)));
         });
+        boolean withAtlas=stage.atlasMode;
         preparation=queue.submit(()->new AudioPreparation(refs,hd,talk).run(request,this::t,progress,
-            prepared->pcmDelivery.post(()->{if(generation!=ticket||scene==null){prepared.close();return;}try{
+            prepared->{
+                AtlasPlan atlas=withAtlas?prepareAtlas(prepared.segments):null;
+                return pcmDelivery.post(()->{if(generation!=ticket||scene==null){prepared.close();return;}try{
                 reading=new Reading(text,prepared.segments,prepared.terminal,silent,prepared.pcm,talk,v,cfg,1,this::readingFinished,this::readingError);
                 String voiceUsed=prepared.voiceUsed;synthesisVoice=voiceUsed;
                 if(!silent&&!cfg.fileAudio&&!choices.isEmpty()&&!choices.get(0).equals(voiceUsed)){
                     JSONObject fallback=hd.voice(voiceUsed);note(t("android.voice.fallback","nom",fallback==null?voiceUsed:fallback.optString("nom")),"warn",5000);
                 }
-                reading.performance=prepared.performance;reading.aicha=prepared.aicha;
+                reading.performance=prepared.performance;reading.aicha=prepared.aicha;reading.atlas=atlas;
                 if(stage.sprite!=null&&stage.sprite.robotStage!=null&&!stage.sprite.reduced&&cfg.emotions)
                     reading.choreograph(RobotChoreo.plan(prepared.segments,reading.mediaDuration));
                 preparing=false;sig=signature;clearOverlay();reading.volume(volume(),muted);reading.speed(project.speed);
                 if(silent)note(t("scene.apercuActif"),"info");if(isForeground)startPlaying();else playState();
-            }catch(Exception e){if(reading==null)prepared.close();sceneError(e);}},prepared::close),
+            }catch(Exception e){if(reading==null)prepared.close();sceneError(e);}},prepared::close);
+            },
             e->handler.post(()->{if(ticket==generation)sceneError(e);})));
+    }
+    AtlasPlan prepareAtlas(List<Script.Segment> parts){
+        try{return refs.atlas().compile(parts);}
+        catch(java.util.concurrent.CancellationException ignored){return null;}
+        catch(RuntimeException e){handler.post(()->log("atlas",e));return null;} // A missing drawing never prevents reading.
+    }
+    void setAtlas(boolean enabled){
+        if(stage==null)return;
+        db.set("modeAtlas",enabled);stage.setAtlas(enabled);scene.update();
     }
     FrameLayout sceneOverlay;
     LinearLayout sceneOverlay(String title){
@@ -424,7 +437,9 @@ public final class MainActivity extends Activity {
             dismiss();if(project.text.trim().isEmpty()){note(t("scene.err.texteVide"),"warn");return;}
             writeDoc(format.equals("srt")?"application/x-subrip":"text/vtt",project.base()+"."+format,Script.subtitles(subtitleTimings(),format.equals("vtt")));
         });
-        ui.menuGroup(r,t("menu.scene"),2);choice(r,t("scene.apercuSansSon"),"eye",false,()->{dismiss();launch(true);});
+        ui.menuGroup(r,t("menu.scene"),2);
+        choice(r,t("scene.atlas"),"sparkle",stage.atlasMode,()->{dismiss();setAtlas(!stage.atlasMode);});
+        choice(r,t("scene.apercuSansSon"),"eye",false,()->{dismiss();launch(true);});
         choice(r,t("scene.capture"),"camera",false,()->{dismiss();capturePng();});
         choice(r,t(exports.active()?"scene.arreterEnregistrement":"scene.enregistrer"),exports.active()?"stop":"record",false,()->{dismiss();record();});
         choice(r,t("scene.pleinEcran"),"fullscreen",false,()->{dismiss();fullscreen();});

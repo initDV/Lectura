@@ -35,7 +35,15 @@ Pour voir le rayon et les couleurs se séparer :
 - Une seule planche à la fois. Les commandes et commentaires, les notions sans planche, deux sujets concurrents ou une mention incertaine ne déclenchent pas de nouveau dessin. Une locution de suite peut prolonger une planche déjà active dans le passage contigu ; elle ne la déclenche jamais seule. Un blanc ou un autre sujet rend la place au texte. Pause, reprise et sauts utilisent la même position de lecture pour tous les gestes. En mouvements réduits, les étapes restent indiquées par des poses fixes, sans déplacement ni survol d’introduction.
 - Le fond et les planches sont locaux et précachés. Le code Atlas est importé seulement si le mode est actif. Le PNG et la vidéo utilisent le même compositeur, qui alterne texte et hologramme dans un seul cadre. Ni l’éditeur ni le menu ne sont capturés.
 
-## Vérification
+## Atlas Android natif
+
+Dans la scène Android, le même choix **Menu → Atlas** fonctionne sans changer de projet ni relancer la lecture. Les boutons **−5 s** et **+5 s** sont disponibles pendant la lecture ou la pause. La largeur réservée à l’Atlas (66 %) ne modifie pas les réglages du cadrage classique. La capture PNG et la vidéo reprennent le même rendu Atlas que la scène, avec des marges si le format change.
+
+`android/atlas-assets.mjs` embarque les SVG et prépare un index des expressions et des gestes depuis les fichiers Web. L’application ne charge aucun site ni script. La sélection des planches est préparée dans le worker à partir de `Reading.timeline`, les vecteurs sont lus à la demande, et le texte reste visible si un dessin n’est pas disponible. Les gestes du prisme, du réseau ou du verre utilisent toujours le temps source, pas un compteur d’images. Le lecteur natif prend en charge le sous-ensemble SVG du catalogue (formes, libellés, dégradés et tirets) ; les ornements tels que les motifs et marqueurs SVG ne sont pas reproduits à l’identique.
+
+Le scénario d’instrumentation `atlas-natif` compare le calage Android aux fixtures calculées par la PWA, rend toutes les planches en mode avion, puis vérifie le menu, la pause, les sauts et le retour au texte sur un WAV avec SRT. Il compare aussi les surfaces PNG et vidéo. `bash android/build.sh --check` compile l’instrumentation sans l’exécuter ; le workflow Android la lance sur API 31.
+
+## Vérification Web
 
 ```sh
 npm run build

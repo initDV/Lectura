@@ -18,7 +18,8 @@ final class ScenePage {
     final TextView minus,plus,speed,voice,launch,stop;
     final android.widget.ImageView mute;
     final View capture;
-    final LinearLayout actions;
+    final LinearLayout actions,atlasSeeks;
+    final TextView back5,next5;
     ScenePage(MainActivity a,Stage stage){
         this.a=a;u=a.ui;this.stage=stage;scroll=u.scroll();scroll.setFillViewport(true);
         LinearLayout box=u.col();box.setFocusableInTouchMode(true);box.setDescendantFocusability(LinearLayout.FOCUS_BEFORE_DESCENDANTS);
@@ -53,6 +54,10 @@ final class ScenePage {
         mute=(android.widget.ImageView)u.iconButton("volume",a.t("scene.muet"),u.mutedText,20,()->{a.muted=!a.muted;a.adjustVolume();});actions.addView(mute,u.lp(44,44));u.gap(actions,6);
         SeekBar volume=u.range(100,(int)Math.round(a.volume()*100),u.fill,n->{a.db.set("volume",n/100.);a.adjustVolume();});
         volume.setContentDescription(a.t("scene.volume"));actions.addView(volume,new LinearLayout.LayoutParams(0,u.d(44),1));
+        atlasSeeks=u.row();atlasSeeks.setGravity(Gravity.CENTER_HORIZONTAL);panel.addView(atlasSeeks,u.lp(Ui.MATCH,48));
+        back5=u.button("−5 s","rewind",()->a.seek(-5000));back5.setContentDescription(a.t("android.atlas.recul"));
+        next5=u.button("+5 s","forward",()->a.seek(5000));next5.setContentDescription(a.t("android.atlas.avance"));
+        atlasSeeks.addView(back5,u.lp(Ui.WRAP,48));u.gap(atlasSeeks,8);atlasSeeks.addView(next5,u.lp(Ui.WRAP,48));
         scroll.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->layout());update();voice();
     }
     private TextView round(String id,String label,float delta){
@@ -81,6 +86,9 @@ final class ScenePage {
         launch.setText(a.t(playing?"scene.pause":paused?"scene.reprendre":"scene.lancer"));u.setIcon(launch,playing?"pause":"play",20,0xffffffff,8);
         u.enable(launch,!a.preparing,.5f);u.enable(stop,playing||paused||a.preparing,.5f);mute.setImageDrawable(u.iconDrawable(a.muted?"mute":"volume",20,u.mutedText));
         mute.setSelected(a.muted);mute.setContentDescription(a.t(a.muted?"scene.sonActif":"scene.muet"));
+        atlasSeeks.setVisibility(stage.atlasMode?View.VISIBLE:View.GONE);
+        boolean seekable=a.reading!=null&&(!a.stopped||a.reading.ended)&&!a.preparing;
+        u.enable(back5,seekable,.5f);u.enable(next5,seekable,.5f);
         if(scroll.getWidth()>0)layout();
     }
 }

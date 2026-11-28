@@ -18,6 +18,7 @@ final class Reading implements AutoCloseable {
     Performance performance;
     AichaTrack aicha;
     RobotChoreo choreography;
+    AtlasPlan atlas; // Prepared against the same immutable source segments as timeline.
     private double aichaMs=-1,aichaLevel;
     final boolean silent;
     final double mediaDuration;

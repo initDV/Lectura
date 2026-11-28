@@ -22,6 +22,7 @@ final class Refs {
     final AichaMotion.Visages visages;
     final AichaDirection direction;
     final Typeface mono;
+    private AtlasPlan.Catalogue atlas;
     final ArrayList<JSONObject> characters = new ArrayList<>();
     Refs(Context c) {
         context = c;
@@ -36,6 +37,10 @@ final class Refs {
         for (int i = 0; i < index.length(); i++) characters.add(json("characters/" + index.optString(i) + ".json"));
     }
     InputStream open(String file) throws IOException { return context.getAssets().open(file); }
+    synchronized AtlasPlan.Catalogue atlas(){
+        if(atlas==null)atlas=new AtlasPlan.Catalogue(json("atlas/index.json"));
+        return atlas;
+    }
     String text(String file) {
         try (InputStream in = open(file)) { return new String(read(in, 4_000_000), StandardCharsets.UTF_8); }
         catch (IOException e) { throw new IllegalStateException(file, e); }

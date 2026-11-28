@@ -23,6 +23,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Future;
 import org.json.JSONObject;
 import static io.github.initdv.lectura.Refs.*;
 
@@ -54,6 +55,11 @@ final class Stage extends FrameLayout {
     private Reading lastReading;
     private SceneLayout screen;
     private boolean closePortrait;
+    boolean atlasMode;
+    private AtlasProjection projection;
+    private Reading atlasRequested;
+    private Future<?> atlasTask;
+    private final boolean atlasReduced;
 
     Stage(MainActivity a,JSONObject def){
         super(a);this.a=a;ui=a.ui;project=a.project;reduced=a.reduced();
@@ -65,7 +71,7 @@ final class Stage extends FrameLayout {
         terminalBold=Typeface.create(termFont,700,false);terminalMedium=Typeface.create(termFont,500,false);
         title=a.db.settings.optString("titreTerminal");radius=Math.round(ui.radiusLg);
         titlePaint.setTypeface(ui.mono(500));titlePaint.setColor(termComment);
-        boolean reduce=reduced||a.db.settings.optBoolean("reduireAnimations");
+        boolean reduce=reduced||a.db.settings.optBoolean("reduireAnimations");atlasReduced=reduce;
         double gain=project.motion.equals("calme")?.6:project.motion.equals("vif")?1.3:1;
         if(AichaTrack.matches(def)){
             sprite=null;artwork=a.svg(def.optString("svg"));
@@ -78,7 +84,8 @@ final class Stage extends FrameLayout {
         settings=ui.iconButton("settings",a.t("android.cadrage.titre"),ui.bg,22,a::framing);settings.setBackground(ui.touch(ui.accent,99,0,0));settings.setElevation(ui.f(4));
         FrameLayout.LayoutParams fab=ui.fp(48,48,Gravity.LEFT|Gravity.BOTTOM);fab.leftMargin=fab.bottomMargin=ui.d(12);addView(settings,fab);
         eye=ui.iconButton("eye",a.t("scene.oeil.masquer"),ui.violet,20,()->mask(!masked));FrameLayout.LayoutParams ep=ui.fp(44,44,Gravity.RIGHT|Gravity.TOP);ep.topMargin=ui.d(5);ep.rightMargin=ui.d(7);addView(eye,ep);
-        updateFraming();
+        if(a.db.settings.optBoolean("modeAtlas"))setAtlas(true);
+        else updateFraming();
     }
     void closePortrait(boolean yes){
         if(closePortrait==yes)return;
@@ -86,7 +93,7 @@ final class Stage extends FrameLayout {
     }
     void updateFraming(){
         screen=new SceneLayout(getWidth()/ui.density,getHeight()/ui.density,closePortrait,
-            a.db.settings.optJSONObject(SceneLayout.PREFERENCE),artwork.box,aicha!=null);
+            a.db.settings.optJSONObject(SceneLayout.PREFERENCE),artwork.box,aicha!=null,atlasMode);
         face.invalidate();
     }
     SceneLayout screenLayout(){return screen;}
@@ -96,14 +103,49 @@ final class Stage extends FrameLayout {
     }
     void mask(boolean yes){masked=yes;eye.setSelected(yes);eye.setContentDescription(a.t(yes?"scene.oeil.afficher":"scene.oeil.masquer"));
         ((android.widget.ImageView)eye).setImageDrawable(ui.iconDrawable(yes?"eye-off":"eye",20,ui.violet));face.invalidate();}
-    void present(boolean yes){presenting=yes;removeCallbacks(singleClick);clickAt=0;menu.setVisibility(yes?GONE:VISIBLE);settings.setVisibility(yes?GONE:VISIBLE);refresh();}
+    void setAtlas(boolean yes){
+        if(yes==atlasMode)return;
+        atlasMode=yes;
+        if(yes&&projection==null)projection=new AtlasProjection(a.refs);
+        if(!yes){cancelAtlasPlan();projection.update(null,0,atlasReduced);}
+        updateChrome();screenText.reset();updateFraming();
+        face.setContentDescription(a.t(yes?"scene.texte.label":"scene.terminal"));
+    }
+    private void updateChrome(){
+        menu.setVisibility(presenting?GONE:VISIBLE);settings.setVisibility(presenting||atlasMode?GONE:VISIBLE);
+        eye.setVisibility(atlasMode?GONE:VISIBLE);
+    }
+    void present(boolean yes){presenting=yes;removeCallbacks(singleClick);clickAt=0;updateChrome();refresh();}
     private void onSingle(){if(presenting)a.launch(false);}
-    @Override protected void onDetachedFromWindow(){super.onDetachedFromWindow();removeCallbacks(singleClick);}
+    @Override protected void onDetachedFromWindow(){super.onDetachedFromWindow();removeCallbacks(singleClick);cancelAtlasPlan();}
+    private void cancelAtlasPlan(){
+        if(atlasTask!=null)atlasTask.cancel(true);
+        atlasTask=null;atlasRequested=null;
+    }
+    private void atlasPose(Reading r,double ms){
+        if(!atlasMode)return;
+        if(atlasRequested!=null&&atlasRequested!=r)cancelAtlasPlan();
+        if(r!=null&&r.atlas==null&&atlasRequested==null){
+            atlasRequested=r;
+            // Enabled in the middle of a reading: keep the text visible while the worker compiles its plan.
+            atlasTask=a.queue.submit(()->{
+                AtlasPlan plan=a.prepareAtlas(r.timeline.parts);
+                a.handler.post(()->{
+                    if(a.stage!=this||a.reading!=r||!atlasMode)return;
+                    if(r.atlas==null)r.atlas=plan;
+                    refresh();
+                });
+            });
+        }
+        projection.update(r==null?null:r.atlas,ms,atlasReduced);
+    }
+    AtlasPlan.Card atlasCard(){return atlasMode?projection.card():null;}
     void updatePose(double now){
         Reading r=a.reading;
         if(r!=lastReading){lastReading=r;screenText.reset();}
         if(r!=null&&!a.preparing){
             double ms=r.time(),cursor=r.chars(ms);r.terminal.shown=(int)cursor;
+            atlasPose(a.stopped||r.ended?null:r,ms);
             if(aicha!=null){
                 boolean idle=a.stopped&&!r.ended;
                 aicha.update(idle?null:r.aicha,ms,idle?0:r.aichaMouthLevel(ms,cursor),now,r.ended,a.forced);
@@ -118,6 +160,7 @@ final class Stage extends FrameLayout {
             sprite.letter=voicing?Reading.letterAt(r.text,cursor):"";sprite.quietMouth=!voicing;
             sprite.talk=voicing?(sprite.viseme>0?1:.15)*RigPose.ease((ms-seg.from)/65)*RigPose.ease((end-ms)/85):0;
         }else{
+            atlasPose(null,0);
             if(aicha!=null){aicha.update(null,0,0,now,false,a.forced);return;}
             sprite.choreography=null;sprite.direct(null,-1,a.forced);sprite.quietMouth=false;sprite.viseme=0;sprite.shape=48;sprite.letter="";sprite.talk=0;
         }
@@ -128,7 +171,9 @@ final class Stage extends FrameLayout {
         private float startY,origin;private boolean dragged,terminalTouch;
         Face(){super(a);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);setContentDescription(a.t("scene.terminal"));}
         @Override public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(info);
-            Reading r=a.reading;if(r!=null&&!masked)info.setText(r.text.substring(Math.max(0,r.terminal.shown-700),r.terminal.shown));}
+            AtlasPlan.Card card=atlasCard();
+            if(card!=null){info.setClassName("android.widget.ImageView");info.setContentDescription(card.name+". "+card.description);return;}
+            Reading r=a.reading;if(r!=null&&(atlasMode||!masked))info.setText(r.text.substring(Math.max(0,r.terminal.shown-700),r.terminal.shown));}
         @Override protected void onWindowVisibilityChanged(int visibility){
             super.onWindowVisibilityChanged(visibility);
             if(visibility==VISIBLE)invalidate();else removeCallbacks(redraw);
@@ -152,7 +197,7 @@ final class Stage extends FrameLayout {
             // always comes from the playback clock, never from a frame counter.
             long delay=recording||playing?26:idle||settling?60:0;
             if(delay>0&&a.dimmedScene&&!recording)delay=Math.max(delay,125);
-            if(delay==0&&r!=null&&!masked&&!reduced)delay=500-now%500;
+            if(delay==0&&r!=null&&(atlasMode?!atlasReduced&&atlasCard()==null:!masked&&!reduced))delay=500-now%500;
             if(delay>0)postOnAnimationDelayed(redraw,Math.max(0,start+delay-SystemClock.uptimeMillis()));
         }
         @Override public boolean performClick(){super.performClick();if(presenting){long now=SystemClock.uptimeMillis();boolean twice=clickAt>0&&now-clickAt<280;removeCallbacks(singleClick);
@@ -160,7 +205,7 @@ final class Stage extends FrameLayout {
         @Override public boolean onTouchEvent(MotionEvent e){
             switch(e.getActionMasked()){
                 case MotionEvent.ACTION_DOWN: startY=e.getY();origin=screenText.scroll;dragged=false;
-                    terminalTouch=!masked&&screenText.maxScroll>0&&screen.terminalBodyAt(e.getX()/ui.density,startY/ui.density);
+                    terminalTouch=(atlasMode?atlasCard()==null:!masked)&&screenText.maxScroll>0&&screen.terminalBodyAt(e.getX()/ui.density,startY/ui.density);
                     if(terminalTouch)getParent().requestDisallowInterceptTouchEvent(true);return terminalTouch||presenting;
                 case MotionEvent.ACTION_MOVE: if(Math.abs(e.getY()-startY)>ui.f(5))dragged=true;
                     if(terminalTouch){screenText.scroll=Refs.clamp(origin+(startY-e.getY())/ui.density,0,screenText.maxScroll);invalidate();}return true;
@@ -175,12 +220,29 @@ final class Stage extends FrameLayout {
         SceneLayout frame=screen;
         if(frame.width<=0||frame.height<=0)return;
         c.save();clip.rewind();clip.addRoundRect(0,0,frame.width,frame.height,radius,radius,Path.Direction.CW);
-        c.clipPath(clip);c.drawColor(background);
-        if(aicha!=null)aicha.paintBackdrop(c,frame.width,frame.height,frame.baseX,frame.baseY,frame.baseScale);
-        else decor.screen(c,frame.backdropWidth,frame.height,frame.closePortrait);
-        drawWindow(c,frame.termX,0,frame.termWidth,frame.termHeight,now);
+        c.clipPath(clip);
+        if(frame.atlas){
+            projection.background(c,frame.width,frame.height);
+            drawAtlasWindow(c,frame,now);
+        }else{
+            c.drawColor(background);
+            if(aicha!=null)aicha.paintBackdrop(c,frame.width,frame.height,frame.baseX,frame.baseY,frame.baseScale);
+            else decor.screen(c,frame.backdropWidth,frame.height,frame.closePortrait);
+            drawWindow(c,frame.termX,0,frame.termWidth,frame.termHeight,now);
+        }
         // Compose the entire animated figure last, without a clip at the terminal's left edge.
         if(frame.actorScale>0)artwork.draw(c,frame.actorX,frame.actorY,frame.actorScale);
+        c.restore();
+    }
+    private void drawAtlasWindow(Canvas c,SceneLayout frame,double now){
+        float l=frame.termX,t=frame.bodyTop(),r=frame.bodyRight(),b=frame.bodyBottom();
+        c.save();c.clipRect(l,t,r,b);
+        rect(c,l,t,l+1,b,AtlasProjection.RULE);
+        // Exactly one content rectangle: no texture or overlay remains on top of the text.
+        if(!projection.draw(c,l+1,t,r-l-1,b-t)&&a.reading!=null){
+            float pad=clamp((r-l)*.035f,10,22);
+            screenText.draw(c,a.reading.terminal,l+pad,t,r-pad,b,clamp((r-l)*.075f,11,project.fontSize),now);
+        }
         c.restore();
     }
     private void drawWindow(Canvas c,float x,float y,float w,float h,double now){
@@ -207,7 +269,7 @@ final class Stage extends FrameLayout {
     void drawVideoFrame(Canvas c,int w,int h,double now){
         // Fit the live scene, not the surrounding Android controls. One uniform scale
         // preserves the crop, terminal layout and proportions even in a different ratio.
-        c.drawColor(background|0xff000000);
+        c.drawColor(atlasMode?AtlasProjection.BACKGROUND:background|0xff000000);
         SceneLayout frame=screen;
         if(frame.width<=0||frame.height<=0)return;
         float scale=Math.min(w/frame.width,h/frame.height);
@@ -215,6 +277,7 @@ final class Stage extends FrameLayout {
         drawScreen(c,now);c.restore();
     }
     void drawPng(Canvas c,int w,int h){
+        if(atlasMode){drawVideoFrame(c,w,h,SystemClock.uptimeMillis()-initial);return;}
         // Still images keep their independent 38/62 composition.
         float s=Math.min(w,h)/720f,left=w*.38f;
         float[] box=artwork.box;
@@ -262,7 +325,7 @@ final class Stage extends FrameLayout {
         if(b<=a)return;style(cat!=null&&!cat.startsWith("__")?terminalBold:termFont,size,ink(cat,terminal));c.drawText(line.text,a,b,x,baseline(paint,y),paint);
     }
     private int ink(String cat,Script.Terminal data){
-        if(cat==null)return termFg;
+        if(cat==null)return atlasMode?AtlasProjection.TEXT:termFg;
         switch(cat){
             case "__com":return termComment;case "__prompt":return termPrompt;case "__cmd":return termCommand;
             default:return cat.startsWith("__")?color(term,cat.substring(2)):data.keywords.colors.getOrDefault(cat,termFg);
@@ -298,7 +361,7 @@ final class Stage extends FrameLayout {
         }
         void draw(Canvas c,Script.Terminal data,float x,float top,float right,float bottom,float size,double now){
             int width=(int)(right-x);if(width<=0)return;
-            p.setTypeface(termFont);p.setTextSize(size);p.setColor(termFg);float lh=size*1.55f;
+            p.setTypeface(termFont);p.setTextSize(size);p.setColor(atlasMode?AtlasProjection.TEXT:termFg);float lh=size*1.55f;
             boolean geometryChanged=width!=cacheWidth||cacheSize!=size;
             boolean reflow=data.shown!=shown||geometryChanged;
             if(reflow){
@@ -313,7 +376,7 @@ final class Stage extends FrameLayout {
             }
             float limit=Math.max(0,total+24-(bottom-top));
             if(reflow||limit!=maxScroll){maxScroll=limit;scroll=limit;}
-            cursor=reduced||((long)(now/500))%2==0;float yy=top+12-scroll;
+            cursor=(atlasMode?atlasReduced:reduced)||((long)(now/500))%2==0;float yy=top+12-scroll;
             c.save();c.clipRect(x-14,top,right+14,bottom);
             for(StaticLayout l:rows){float h=l.getLineCount()*lh;if(yy+h>top&&yy<bottom){c.save();c.translate(x,yy+(lh-(p.descent()-p.ascent()))*.5f);l.draw(c);c.restore();}yy+=h;}
             if(maxScroll>0){float h=bottom-top,thumb=h*h/(total+24),offset=(h-thumb)*(scroll/maxScroll);round(c,right+10,top+offset,right+13,top+offset+thumb,1.5f,0x66757580);}

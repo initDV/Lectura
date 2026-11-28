@@ -5,9 +5,16 @@ import { calerGestes, compilerScenario, repererGestes } from './gestes.js';
 
 const normaliser = (s) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 const mots = (s) => [...s.matchAll(/[\p{L}\p{N}_][\p{L}\p{N}\p{M}_]*/gu)];
-const cles = (s) => mots(s).map(([mot]) => normaliser(mot));
+export const cles = (s) => mots(s).map(([mot]) => normaliser(mot));
 const doute = /\b(?:ne|n|pas|ni|jamais|aucun|aucune|sans(?! fil\b)|hypothese|peut etre|si|not|never|changeons de sujet|autre sujet|passons a)\b/u;
 const renvoi = /\b(?:dans cet exemple|sur ce dessin|sur cette figure|sur ce schema|ce meme dessin|cette meme figure|ce meme schema|cette meme planche)\b/u;
+
+const exclus = /[?？]|^(?:titre|liste|index|glossaire)\s*:/iu;
+const citationsAtlas = /«[^»]*»|“[^”]*”|"[^"\n]*"|`[^`\n]*`/gu;
+const liaison = /^[\p{L}\p{N}\p{M}_'’\u2010\u2011\s-]+$/u;
+const rupture = /\b(?:mais|cependant|tandis que|alors que)\b/u;
+// L’APK reçoit ces mêmes règles, avec les expressions et scénarios déjà tokenisés.
+export const REGLES_ATLAS = Object.freeze({ doute, renvoi, exclus, citations: citationsAtlas, liaison, rupture });
 
 export function compilerPlanches(planches) {
   const motifs = new Map(), rappels = new Map(), scenarios = new Map();
@@ -27,14 +34,14 @@ export function compilerPlanches(planches) {
   function choisir(segment, antecedent) {
     const { texte } = segment;
     const tokens = mots(texte), liste = tokens.map(([mot]) => normaliser(mot)), ligne = liste.join(' ');
-    if (doute.test(ligne) || /[?？]|^(?:titre|liste|index|glossaire)\s*:/iu.test(texte)) return null;
-    const citations = [...texte.matchAll(/«[^»]*»|“[^”]*”|"[^"\n]*"|`[^`\n]*`/gu)];
+    if (doute.test(ligne) || exclus.test(texte)) return null;
+    const citations = [...texte.matchAll(citationsAtlas)];
     const finMot = (i) => tokens[i].index + tokens[i][0].length;
     const correspond = (suite, i) => {
       if (!suite.every((cle, j) => cle === liste[i + j])) return false;
       const debut = tokens[i].index, fin = finMot(i + suite.length - 1);
       return !citations.some((m) => debut < m.index + m[0].length && fin > m.index) &&
-        /^[\p{L}\p{N}\p{M}_'’\u2010\u2011\s-]+$/u.test(texte.slice(debut, fin));
+        liaison.test(texte.slice(debut, fin));
     };
     const indice = (suites, de, a) => {
       for (let i = de; i < a; i++) if (suites.some(s => i + s.length <= a && correspond(s, i))) return i;
@@ -49,7 +56,7 @@ export function compilerPlanches(planches) {
           const a = contexte.avant.length ? indice(contexte.avant, Math.max(0, i - 16), i) : i;
           const b = contexte.apres.length ? indice(contexte.apres, fin, Math.min(liste.length, fin + 16)) : fin - 1;
           if (a < 0 || b < 0 || /;/u.test(texte.slice(tokens[a].index, finMot(b))) ||
-            /\b(?:mais|cependant|tandis que|alors que)\b/u.test(liste.slice(a, b).join(' '))) continue;
+            rupture.test(liste.slice(a, b).join(' '))) continue;
         }
         candidats.push({ fiche, i, fin });
       }

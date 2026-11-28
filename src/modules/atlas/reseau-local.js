@@ -8,6 +8,8 @@ const CIRCULATION = 'donnees circulent|paquet circule|paquets circulent|data flo
 const ECHANGE = variantes(`${CIRCULATION}|echangent des donnees|echange des donnees|echanger des donnees|echange de donnees|echanges de donnees|envoie des donnees|envoient des donnees|envoie un message|envoient des messages|transmet des donnees|transmettent des donnees|envoie un paquet|transfere des donnees|exchange data|exchanges data|sends data|send data|sends a packet|sends a message|transfer data|transfers data`);
 const FLUX = variantes(CIRCULATION);
 
+export const MOTS_RESEAU = Object.freeze({ routeur: ROUTEUR, appareil: APPAREIL, lien: LIEN, echange: ECHANGE, flux: FLUX });
+
 /** `trouver` utilise les mêmes bornes de mots et exclusions de citations que le choix d'une planche. */
 export function repererReseau(s, trouver) {
   const routeur = trouver(ROUTEUR), liens = trouver(LIEN), echange = trouver(ECHANGE);
@@ -73,7 +75,8 @@ const points = [
   [[161, 147], [124, 183], [92, 183]],
   [[260, 147], [297, 184], [314, 184]],
 ];
-const cables = points.map(chemin), trajet = chemin([...points[0].slice().reverse(), ...points[1]]);
+const parcours = [...points[0].slice().reverse(), ...points[1]];
+const cables = points.map(chemin), trajet = chemin(parcours);
 
 function position({ etapes, longueur }, u) {
   const d = longueur * borner(u);
@@ -90,22 +93,29 @@ function trait(ctx, cable, fin = 1, debut = 0) {
   ctx.lineTo(...position(cable, fin)); ctx.stroke();
 }
 
+export const DESSIN_RESEAU = {
+  cables: points, parcours,
+  appareils: [
+    // Écran, ordinateur portable, téléphone, tablette. Le branchement rejoint chaque contour.
+    ['M26 32h74q6 0 6 6v42q0 6-6 6H26q-6 0-6-6V38q0-6 6-6Z', 'M46 97h34m-17 0V86M33 46h44m-44 9h24', 93, 74],
+    ['M321 34h71q7 0 7 7v43h-85V41q0-7 7-7ZM314 84h85l10 9q2 3-3 3H307q-4 0-2-3Z', 'M328 47h41m-41 9h22m0 33h14', 386, 72],
+    ['M49 145h34q9 0 9 9v65q0 9-9 9H49q-9 0-9-9v-65q0-9 9-9Z', 'M60 156h12m-21 12h30m-30 9h18m-8 40h10', 79, 202],
+    ['M322 155h72q8 0 8 8v49q0 8-8 8h-72q-8 0-8-8v-49q0-8 8-8Z', 'M327 169h44m-44 9h26m-26 24h30', 389, 201],
+  ],
+  dessus: 'M147 122 210 95 273 122 210 149Z',
+  gauche: 'M147 122 210 149v28l-63-27Z',
+  droite: 'M210 149 273 122v28l-63 27Z',
+  fentes: 'M230 152l6-3m3 0 6-3m3 0 6-3',
+  ondes: 'M188 80q22-19 44 0m-36 9q14-12 28 0m-20 8q6-5 12 0',
+};
+
 let geometrie;
 function formes() {
-  const path = (d) => new Path2D(d);
-  return geometrie ??= {
-    appareils: [
-      // Écran, ordinateur portable, téléphone, tablette. Le branchement rejoint chaque contour.
-      ['M26 32h74q6 0 6 6v42q0 6-6 6H26q-6 0-6-6V38q0-6 6-6Z', 'M46 97h34m-17 0V86M33 46h44m-44 9h24', 93, 74],
-      ['M321 34h71q7 0 7 7v43h-85V41q0-7 7-7ZM314 84h85l10 9q2 3-3 3H307q-4 0-2-3Z', 'M328 47h41m-41 9h22m0 33h14', 386, 72],
-      ['M49 145h34q9 0 9 9v65q0 9-9 9H49q-9 0-9-9v-65q0-9 9-9Z', 'M60 156h12m-21 12h30m-30 9h18m-8 40h10', 79, 202],
-      ['M322 155h72q8 0 8 8v49q0 8-8 8h-72q-8 0-8-8v-49q0-8 8-8Z', 'M327 169h44m-44 9h26m-26 24h30', 389, 201],
-    ].map(([a, b, x, y]) => ({ silhouette: path(a), details: path(b), voyant: [x, y] })),
-    dessus: path('M147 122 210 95 273 122 210 149Z'),
-    gauche: path('M147 122 210 149v28l-63-27Z'),
-    droite: path('M210 149 273 122v28l-63 27Z'),
-    fentes: path('M230 152l6-3m3 0 6-3m3 0 6-3'),
-    ondes: path('M188 80q22-19 44 0m-36 9q14-12 28 0m-20 8q6-5 12 0'),
+  if (geometrie) return geometrie;
+  const { appareils } = DESSIN_RESEAU;
+  return geometrie = {
+    ...Object.fromEntries(Object.entries(DESSIN_RESEAU).filter(([, d]) => typeof d === 'string').map(([nom, d]) => [nom, new Path2D(d)])),
+    appareils: appareils.map(([a, b, x, y]) => ({ silhouette: new Path2D(a), details: new Path2D(b), voyant: [x, y] })),
   };
 }
 

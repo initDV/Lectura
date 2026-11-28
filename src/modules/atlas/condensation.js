@@ -13,21 +13,21 @@ export function memePoseCondensation(a, b) {
   return a?.froid === b?.froid && a?.gouttes === b?.gouttes && a?.fusion === b?.fusion && a?.glisse === b?.glisse;
 }
 
+const gouttesFixes = [[85, 9, 4.9, 0], [111, 16, 4.1, .13], [163, 15, 5.4, .32], [181, 9, 4.6, .51]];
+export const DESSIN_CONDENSATION = { gouttesFixes, formes: {
+  verre: 'M171 57 186 191Q190 207 240 209Q290 207 294 191L309 57',
+  eau: 'M179 125C185 148 295 148 301 125L293 190Q290 201 240 204Q190 201 187 190Z',
+  reflets: 'M183 75l9 82m1 12 2 16m7 12q17 6 38 6',
+  paroi: 'M309 59 294 191Q293 198 285 201',
+  fleche: 'M117 136h38m-9-7 9 7-9 7',
+  traitFroid: 'M333 82l-10 13',
+} };
 let geometrie;
 function formes() {
-  const path = (d) => new Path2D(d);
-  return geometrie ??= {
-    verre: path('M171 57 186 191Q190 207 240 209Q290 207 294 191L309 57'),
-    eau: path('M179 125C185 148 295 148 301 125L293 190Q290 201 240 204Q190 201 187 190Z'),
-    reflets: path('M183 75l9 82m1 12 2 16m7 12q17 6 38 6'),
-    paroi: path('M309 59 294 191Q293 198 285 201'),
-    fleche: path('M117 136h38m-9-7 9 7-9 7'),
-    traitFroid: path('M333 82l-10 13'),
-  };
+  return geometrie ??= Object.fromEntries(Object.entries(DESSIN_CONDENSATION.formes).map(([nom, d]) => [nom, new Path2D(d)]));
 }
 
 const bord = (y) => 309 - (y - 59) * 15 / 132;
-const gouttesFixes = [[85, 9, 4.9, 0], [111, 16, 4.1, .13], [163, 15, 5.4, .32], [181, 9, 4.6, .51]];
 
 function goutte(ctx, x, y, r, allumage = 1) {
   if (r < .1) return;

@@ -15,7 +15,7 @@ it('livre exactement le même catalogue en PWA et dans les assets natifs, même 
   const lire = (p) => JSON.parse(bytes(p));
   const node = (...args) => execFileSync(process.execPath, args, { cwd: dossier, encoding: 'utf8' });
   try {
-    for (const fichier of ['tools/build.mjs', 'tools/character-catalogue.mjs', 'tools/fetch_voice.mjs', 'android/assets.mjs', 'android/data',
+    for (const fichier of ['tools/build.mjs', 'tools/character-catalogue.mjs', 'tools/fetch_voice.mjs', 'android/assets.mjs', 'android/atlas-assets.mjs', 'android/data',
       'android/AndroidManifest.xml', 'package.json', 'index.html', 'offline.html', 'manifest.webmanifest', 'sw.js', 'LICENSE', 'THIRD_PARTY_LICENSES.md', 'src', 'characters',
       'data', 'icons', 'fonts', 'app', 'privacy', 'robots.txt', 'sitemap.xml', 'google121a4ae782cb28f.html']) {
       const dest = join(dossier, fichier);
@@ -59,6 +59,13 @@ it('livre exactement le même catalogue en PWA et dans les assets natifs, même 
       './data/fond-atlas.svg', './src/modules/atlas/calage.js', './src/modules/atlas/projection.js', './src/modules/atlas/planches.json',
       './src/modules/atlas/reseau-local.js', './src/modules/atlas/scenarios.js', './src/modules/atlas/gestes.js', './src/modules/atlas/condensation.js']));
     expect(readdirSync(join(dossier, 'dist'))).not.toContain('atlas');
+    const planches = lire('src/modules/atlas/planches.json');
+    const atlas = lire('assets/atlas/index.json');
+    expect(atlas.fiches.map(({ id }) => id)).toEqual(planches.map(({ id }) => id));
+    expect(new Set(readdirSync(join(dossier, 'assets/atlas')))).toEqual(new Set(['index.json', ...planches.map(({ id }) => `${id}.svg`)]));
+    for (const { id, svg } of planches) expect(bytes(`assets/atlas/${id}.svg`).toString(), id).toBe(svg);
+    expect(atlas.fiches.every(p => !p.svg && p.expressions.length > 0)).toBe(true);
+    expect(atlas.fiches.find(p => p.id === atlas.reseau.id)).toBeDefined();
     expect(lire('assets/expressions.json').visages).toEqual(VISAGES);
     const visages = 'src/modules/aicha/visages.js';
     const source = bytes(visages).toString(), web = bytes(`dist/${visages}`).toString();
