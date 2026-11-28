@@ -4,7 +4,7 @@
 import { store } from '../state.js';
 import { h } from './dom.js';
 import { t } from '../modules/i18n.js';
-import { drawScene, capturePng, downloadBlob, renderDecor } from '../modules/capture.js';
+import { drawScene, capturePng, downloadBlob, renderDecor, renderFondAtlas } from '../modules/capture.js';
 import { startRecording, supportedMime, FORMATS } from '../modules/recorder.js';
 import { SvgFrame } from '../modules/svgframe.js';
 import { fileBase } from '../modules/project.js';
@@ -42,11 +42,14 @@ export function creerExport(o) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const sc = o.pourCanvas(), frame = new SvgFrame(sc.svg);
       sc.terminal.revealTo(0);
-      const decorImage = !sc.peindreDecor && store.settings?.decor ? await renderDecor(store.settings.decor) : null;
-      drawScene(ctx, f.w, f.h, { ...sc, persoImage: await frame.pret(sc.avance), decorImage });
+      const [persoImage, decorImage, fondAtlasImage] = await Promise.all([
+        frame.pret(sc.avance), !sc.peindreDecor && store.settings?.decor ? renderDecor(store.settings.decor) : null,
+        renderFondAtlas(),
+      ]);
+      drawScene(ctx, f.w, f.h, { ...sc, persoImage, decorImage, fondAtlasImage });
       const source = o.source(), flux = source.stream, son = Boolean(flux?.getAudioTracks().length);
       const r = await startRecording({ canvas, audioStream: flux, fps: 30 });
-      rec = { ...r, ctx, w: f.w, h: f.h, frame, decorImage, son };
+      rec = { ...r, ctx, w: f.w, h: f.h, frame, decorImage, fondAtlasImage, son };
       o.badge.hidden = false;
       const prevenir = !son && source.kind !== 'apercu';
       notify(t(prevenir ? 'scene.videoSansSon' : 'scene.videoDebut'), prevenir ? 'warn' : 'info', 7000);
@@ -82,7 +85,8 @@ export function creerExport(o) {
       if (!rec) return;
       const sc = o.pourCanvas();
       rec.frame.update(sc.avance);
-      drawScene(rec.ctx, rec.w, rec.h, { ...sc, avance: rec.frame.avance, persoImage: rec.frame.image, decorImage: rec.decorImage }, now);
+      drawScene(rec.ctx, rec.w, rec.h, { ...sc, avance: rec.frame.avance, persoImage: rec.frame.image,
+        decorImage: rec.decorImage, fondAtlasImage: rec.fondAtlasImage }, now);
     },
     /** Quitte l'écran : on jette l'enregistrement en cours. */
     abandonner() { if (rec) { rec.stop().catch(() => {}); rec = null; } },

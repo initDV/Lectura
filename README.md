@@ -62,6 +62,8 @@ Tout se passe sur un seul écran : la scène en haut (robot à gauche, terminal 
 3. **Lancer** : le robot parle et le terminal affiche les lignes dans l'ordre. **Arrêter** coupe la voix.
 4. **Capturer l'écran** masque les commandes pour filmer. Un appui = lecture/pause, deux appuis = retour.
 
+**Atlas (Web) :** dans la scène, **Menu → Atlas** agrandit la zone de texte à droite du personnage. L’hologramme remplace le texte **dans le même cadre**. Sans hologramme, le texte défile à la position de lecture, sans la barre du terminal. La voix continue sans interruption. Choisis **Atlas** de nouveau pour retrouver le terminal classique. Les 100 planches montrent leurs éléments au fil de la lecture. [Essayer les animations Atlas](docs/ATLAS-PWA.md).
+
 ### Écrire le texte
 
 | La ligne commence par | Elle est | À l'écran | Prononcée |

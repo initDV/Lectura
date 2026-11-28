@@ -79,8 +79,15 @@ function construire() {
   remplacer('sw.js', /const VERSION = '[^']*';/, `const VERSION = 'lectura-v${version}-${h}';`);
   remplacer('sw.js', /const SHELL = \[[^\]]*\];/, `const SHELL = ${JSON.stringify(['./', ...fichiers.map((f) => `./${f}`)])};`);
 
-  // Poids du premier chargement (objectif du cahier des charges : moins de 300 Ko gzip).
-  const initial = fichiers.filter((f) => /\.(js|css|html|webmanifest)$/.test(f) || f.startsWith('fonts/') && f.endsWith('.woff2'));
+  // Poids du shell (objectif : moins de 300 Kio gzip). Le rendu et les planches Atlas
+  // sont précachés pour fonctionner hors ligne, mais importés par la scène seulement en mode Atlas.
+  const estAtlas = (f) => f.startsWith('src/modules/atlas/');
+  const initial = fichiers.filter((f) => !estAtlas(f) && (/\.(js|css|html|webmanifest)$/.test(f) || f.startsWith('fonts/') && f.endsWith('.woff2')));
+  const atlas = fichiers.filter(estAtlas);
+  if (atlas.length) {
+    const poids = atlas.reduce((a, f) => a + gzipSync(readFileSync(join(dist, f))).length, 0);
+    console.log(`  (Atlas : ${atlas.length} fichiers, ${poids} o gzip — précachés, importés en mode Atlas)`);
+  }
   const optionnels = lister(dist).map((p) => relative(dist, p).split(sep).join('/')).filter((p) => p.startsWith('src/vendor/aac/'));
 
   if (optionnels.length) {

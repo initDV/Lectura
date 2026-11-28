@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 720 480">
+  <defs>
+    <radialGradient id="halo" cx="0" cy="0" r="1" gradientTransform="translate(.51 1) scale(.7213 1.4142)">
+      <stop stop-color="#21374a"/>
+      <stop offset=".66" stop-color="#0e1825"/>
+      <stop offset="1" stop-color="#0d151f"/>
+    </radialGradient>
+    <pattern id="grille" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="1" fill="#6d8da6" fill-opacity=".24"/>
+    </pattern>
+  </defs>
+  <rect width="720" height="480" fill="url(#halo)"/>
+  <rect width="720" height="480" fill="url(#grille)"/>
+</svg>

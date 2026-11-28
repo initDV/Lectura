@@ -128,6 +128,7 @@ export default {
   'nav.personnages': 'Personnages',
   'nav.retour': 'Retour à la scène',
   'scene.menu': 'Menu',
+  'scene.atlas': 'Atlas',
   'scene.oeil.masquer': 'Masquer le texte du terminal',
   'scene.oeil.afficher': 'Afficher le texte du terminal',
   'scene.capturer': 'Capturer l’écran',

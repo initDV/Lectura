@@ -10,13 +10,13 @@ import { canInstall, promptInstall, isStandalone, isIos } from '../modules/pwa.j
 import { ouvrirModale } from './modale.js';
 
 /**
- * @param {{ projet: any, enregistrement: boolean, format: string, onTitre: (v:string)=>void, onFormat: (f:string)=>void,
- *   actions: Record<string, ()=>void> }} a  actions : enregistrer, exporter, importerTexte, importerSrt, exporterSrt,
+ * @param {{ projet: any, enregistrement: boolean, format: string, atlas: boolean, onTitre: (v:string)=>void, onFormat: (f:string)=>void,
+ *   actions: Record<string, ()=>void> }} a  actions : atlas, enregistrer, exporter, importerTexte, importerSrt, exporterSrt,
  *   exporterVtt, apercu, capture, video, pleinEcran
  */
 export function ouvrirMenu(a) {
   ouvrirModale(t('scene.menu'), (fermer) => {
-    const bouton = (ic, texte, cle) => h('li', null, h('button', { type: 'button', onClick: () => { fermer(); a.actions[cle](); } },
+    const bouton = (ic, texte, cle, presse = null) => h('li', null, h('button', { type: 'button', 'aria-pressed': presse, onClick: () => { fermer(); a.actions[cle](); } },
       icon(ic), h('span', { class: 'grow', text: texte })));
     const lien = (ic, route) => h('li', null, h('a', { href: `#/${route}`, onClick: fermer }, icon(ic), h('span', { class: 'grow', text: t(`nav.${route}`) })));
     const titre = h('input', { type: 'text', value: a.projet.titre, maxLength: 200, placeholder: t('editeur.sansTitre'), autocomplete: 'off', 'aria-label': t('editeur.titreProjet') });
@@ -28,6 +28,7 @@ export function ouvrirMenu(a) {
       : canInstall() ? h('ul', { class: 'choix' }, h('li', null, h('button', { type: 'button', onClick: async () => { fermer(); await promptInstall(); } }, icon('download'), h('span', { class: 'grow', text: t('accueil.installer.texte') }))))
         : isIos() ? h('p', { class: 'muted small', text: t('accueil.installer.ios') }) : null;
     return [
+      h('ul', { class: 'choix' }, bouton('sparkle', t('scene.atlas'), 'atlas', String(a.atlas))),
       h('h3', { text: t('menu.projet') }),
       h('div', { class: 'field' }, titre),
       h('ul', { class: 'choix' },

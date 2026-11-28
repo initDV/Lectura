@@ -71,6 +71,8 @@ Chaque échec affiche un message en français avec les boutons pour passer à la
   les numéros de ligne) ; licences, bibliothèques et police restent intactes. Aucune dépendance npm n'est nécessaire pour construire.
 - `tools/serve.mjs` est un serveur statique sans dépendance : on peut développer sans `npm install`.
 - Budget au build : moins de 300 Kio pour le code, les styles et la police du shell, mesurés en gzip (la police WOFF2 est déjà compressée).
+  Le module optionnel `src/modules/atlas/` et ses planches sont comptés à part : le service worker les précache pour le hors-ligne,
+  mais la scène ne les importe qu’en mode Atlas.
 - Conséquence : ~70 petits fichiers au premier chargement. Sur HTTP/2 (GitHub Pages, Cloudflare) c'est sans effet
   mesurable, et le service worker les garde ensuite hors ligne.
 

@@ -44,17 +44,20 @@ export async function render(root) {
   let preparation = null, chargementPerso = null, aicha = null, essaiLecture = 0, robotRig = null, direction = null, pausedFrame = null;
   let raf = 0, vivant = true, exprManuelle = '', derniereExpr = '', dernierSeg = null, dernierRang = 0, muet = false, clic = 0, arrete = true, signature = '', masque = false;
 
+  let modeAtlas = store.settings.modeAtlas === true, projection, chargementAtlas;
   const charPane = h('div', { class: 'char-pane' });
   const sceneEmpilee = matchMedia('(max-width: 480px) and (orientation: portrait), (max-width: 720px) and (max-aspect-ratio: 3/5)');
   const cadrerDecor = () => charPane.querySelector('svg.decor')?.setAttribute('preserveAspectRatio', sceneEmpilee.matches ? 'none' : 'xMidYMax slice');
-  const termBody = h('div', { class: 'term-body', 'aria-label': t('scene.terminal'), 'aria-live': 'off' });
+  const nomZoneTexte = () => t(modeAtlas ? 'scene.texte.label' : 'scene.terminal');
+  const termBody = h('div', { class: 'term-body', 'aria-label': nomZoneTexte(), 'aria-live': 'off' });
   const oeil = h('button', { type: 'button', class: 'oeil', 'aria-pressed': 'false', onClick: basculerTexte });
   const fenetre = h('div', { class: 'term-window' }, h('div', { class: 'term-bar' }, h('i'), h('i'), h('i'), h('span', { text: store.settings.titreTerminal }), oeil), termBody);
   const overlay = h('div', { class: 'overlay', hidden: true });
   const badgeRec = h('div', { class: 'rec-badge', hidden: true, text: 'REC' });
   const menuBtn = h('button', { type: 'button', class: 'menu-btn', 'aria-label': t('scene.menu'), title: t('scene.menu'), 'aria-haspopup': 'dialog', onClick: menu }, icon('menu'));
   const fabBtn = h('button', { type: 'button', class: 'fab-settings', 'aria-label': t('reglages.themeApp') || 'Réglages', title: t('reglages.themeApp') || 'Réglages', onClick: () => go('reglages') }, icon('settings'));
-  const stage = h('div', { class: 'stage' }, menuBtn, fabBtn, charPane, h('div', { class: 'term-pane' }, fenetre), overlay, badgeRec);
+  const termPane = h('div', { class: 'term-pane' }, fenetre);
+  const stage = h('div', { class: modeAtlas ? 'stage stage-atlas' : 'stage' }, menuBtn, fabBtn, charPane, termPane, overlay, badgeRec);
   const toucher = () => { store.modifie = true; };
   const controls = createControls({
     texte: projet.texte, vitesse: projet.audio.voix.vitesse, volume: store.settings.volume ?? 1,
@@ -74,8 +77,8 @@ export async function render(root) {
 
   const temps = () => (prep ? prep.source.timeMs() : 0);
   const pret = () => !!prep && ['PRET', 'LECTURE', 'PAUSE', 'FIN'].includes(store.etat);
-  const pourCanvas = () => ({ projet, svg: perso.svg, terminal, titreTerminal: store.settings.titreTerminal, texteMasque: masque,
-    peindreDecor: aicha?.decor.peindre, avance: aicha?.decor.avance });
+  const pourCanvas = () => ({ projet, svg: perso.svg, terminal, titreTerminal: store.settings.titreTerminal, texteMasque: masque && !modeAtlas,
+    modeAtlas, peindreAtlas: modeAtlas ? projection?.peindre : null, peindreDecor: aicha?.decor.peindre, avance: aicha?.decor.avance });
   const exportScene = creerExport({ projet, badge: badgeRec, pret: () => pret() && !!terminal, pourCanvas, source: () => prep.source, pause, chercher, jouer, format: () => store.settings.formatVideo });
   const majUi = () => controls.update({ etat: varianteCommandes(store.etat, arrete), muet });
   let _brut = '', _propre = '';
@@ -274,12 +277,19 @@ export async function render(root) {
     }
     dernierePosPonc = pos;
   }
+  function projeter(timeline, ms = 0) {
+    projection?.image(timeline, ms);
+    // Le cadre ne bouge pas, et le texte continue à défiler derrière la planche.
+    fenetre.classList.toggle('atlas-dessin', !!projection?.peindre);
+  }
   function image(now) {
     if (!vivant) return;
     raf = requestAnimationFrame(image);
+    const lecturePreparee = prep && terminal && store.etat !== 'PREPARATION' && store.etat !== 'ERREUR';
+    if (modeAtlas && !lecturePreparee) projeter(null);
     if (!character && !aicha) return;
     let robot = null, quietMouth = false;
-    if (prep && terminal && store.etat !== 'PREPARATION' && store.etat !== 'ERREUR') {
+    if (lecturePreparee) {
       const s = prep.source, lecture = store.etat === 'LECTURE', ms = s.timeMs();
       const chars = store.etat === 'FIN' ? textePropre().length : s.charPos ? s.charPos() : prep.timeline.charAt(ms);
       terminal.revealTo(chars);
@@ -289,6 +299,7 @@ export async function render(root) {
       const anime = direction && (!arrete || store.etat === 'FIN');
       // Web Speech fournit un curseur réel/estimé par mot ; sa projection dans la timeline respecte les plages parlées.
       const sceneMs = s.kind === 'voix-systeme' && ms < (s.finAudio ?? s.dureeMs) ? prep.timeline.timeAt(chars) : ms;
+      if (modeAtlas) projeter(prep.timeline, sceneMs);
       if (aicha) {
         if (arrete && store.etat !== 'FIN') aicha.repos(now, exprManuelle);
         else aicha.image(prep, { ms, sceneMs, lecture, fin: store.etat === 'FIN', expression: exprManuelle, now: exportScene.actif ? undefined : now });
@@ -339,13 +350,33 @@ export async function render(root) {
     const actif = typeof force === 'boolean' ? force : !scene.classList.contains('presenting');
     scene.classList.toggle('presenting', actif);
     controls.setCapture(actif);
+    if (modeAtlas) termBody.scrollTop = termBody.scrollHeight;
     if (actif) { window.scrollTo(0, 0); notify(t('scene.presentationAide'), 'info', 3500); }
   }
+  function chargerAtlas() {
+    if (projection) { projection.charger(); return; }
+    chargementAtlas ??= import('../modules/atlas/projection.js').then(({ creerProjection }) => {
+      if (!vivant || !modeAtlas) return;
+      projection = creerProjection(fenetre, store.settings.reduireAnimations);
+      projection.charger();
+    }).catch((err) => logError('atlas', err)).finally(() => { chargementAtlas = null; });
+  }
+  function basculerAtlas() {
+    // La disposition change sans toucher au personnage vivant ni à la source en cours.
+    modeAtlas = !modeAtlas;
+    stage.classList.toggle('stage-atlas', modeAtlas);
+    termBody.setAttribute('aria-label', nomZoneTexte());
+    termBody.scrollTop = termBody.scrollHeight;
+    if (modeAtlas) chargerAtlas();
+    else projeter(null);
+    majReglages({ modeAtlas }).catch((err) => report('reglages', err));
+  }
   function menu() {
-    ouvrirMenu({ projet, enregistrement: exportScene.actif, format: store.settings.formatVideo,
+    ouvrirMenu({ projet, atlas: modeAtlas, enregistrement: exportScene.actif, format: store.settings.formatVideo,
       onTitre: (v) => { projet.titre = v; toucher(); },
       onFormat: (f) => majReglages({ formatVideo: f }).catch((err) => report('reglages', err)),
       actions: {
+        atlas: basculerAtlas,
         enregistrer: () => actionsProjet.enregistrer(projet), exporter: () => actionsProjet.exporterLectura(projet),
         importerTexte: async () => { if (await actionsProjet.importerTexte(projet)) { controls.setTexte(projet.texte); toucher(); annulerPreparation(); prechauffer(); } },
         importerSrt: async () => { if (await actionsProjet.importerSousTitres(projet)) { controls.setTexte(projet.texte); toucher(); annulerPreparation(); prechauffer(); } },
@@ -377,6 +408,7 @@ export async function render(root) {
   const off = bus.on('app:state', majUi);
   basculerTexte(false);
   majUi();
+  if (modeAtlas) chargerAtlas();
   raf = requestAnimationFrame(image);
   chargerPerso().catch((err) => { if (vivant && !preparation) erreur(err); });
   nomVoix(projet).then((nom) => controls.setVoix(nom)).catch((err) => report('voix', err));
@@ -391,7 +423,7 @@ export async function render(root) {
     sceneEmpilee.removeEventListener('change', cadrerDecor);
     cancelAnimationFrame(raf); clearTimeout(clic); off();
     window.removeEventListener('keydown', clavier);
-    exportScene.abandonner(); aicha?.decor.dispose();
+    exportScene.abandonner(); projection?.dispose(); aicha?.decor.dispose();
     try { prep?.source.dispose(); } catch (err) { logError('scene', err); }
     getEngine('webspeech').then((m) => m.stop());
     audio.close();

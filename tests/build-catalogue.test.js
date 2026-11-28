@@ -55,7 +55,10 @@ it('livre exactement le même catalogue en PWA et dans les assets natifs, même 
     }
     const precache = JSON.parse(bytes('dist/sw.js').toString().match(/const SHELL = (\[[^\]]*\]);/)[1]);
     expect(precache.filter((url) => url.startsWith('./characters/')).map((url) => url.slice('./characters/'.length)).sort()).toEqual(attendus);
-    expect(precache).toEqual(expect.arrayContaining(['./src/modules/aicha/stage.js', './src/modules/aicha/visages.js', './src/modules/aicha/humeurs.js']));
+    expect(precache).toEqual(expect.arrayContaining(['./src/modules/aicha/stage.js', './src/modules/aicha/visages.js', './src/modules/aicha/humeurs.js',
+      './data/fond-atlas.svg', './src/modules/atlas/calage.js', './src/modules/atlas/projection.js', './src/modules/atlas/planches.json',
+      './src/modules/atlas/reseau-local.js', './src/modules/atlas/scenarios.js', './src/modules/atlas/gestes.js', './src/modules/atlas/condensation.js']));
+    expect(readdirSync(join(dossier, 'dist'))).not.toContain('atlas');
     expect(lire('assets/expressions.json').visages).toEqual(VISAGES);
     const visages = 'src/modules/aicha/visages.js';
     const source = bytes(visages).toString(), web = bytes(`dist/${visages}`).toString();
