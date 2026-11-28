@@ -6,11 +6,18 @@ import { t } from '../modules/i18n.js';
 
 /**
  * @param {string} titre @param {(fermer: ()=>void) => (Node|null)[]} contenu
+ * @param {()=>void} [nettoyer] Libère les ressources propres à cette fenêtre, quel que soit le mode de fermeture.
  * @returns {{ fermer: ()=>void, feuille: HTMLElement }}
  */
-export function ouvrirModale(titre, contenu) {
+export function ouvrirModale(titre, contenu, nettoyer) {
   const avant = /** @type {HTMLElement|null} */ (document.activeElement);
-  const fermer = () => { fond.remove(); document.removeEventListener('keydown', clavier, true); avant?.focus?.(); };
+  let fermee = false;
+  const fermer = () => {
+    if (fermee) return;
+    fermee = true;
+    fond.remove(); document.removeEventListener('keydown', clavier, true); avant?.focus?.();
+    nettoyer?.();
+  };
   const clavier = (e) => { if (e.key === 'Escape') { e.stopPropagation(); fermer(); } };
   const croix = h('button', { type: 'button', class: 'btn-discret', 'aria-label': t('commun.fermer'), onClick: fermer }, icon('x'));
   const feuille = h('div', { class: 'feuille', role: 'dialog', 'aria-modal': 'true', 'aria-label': titre }, h('h2', null, titre, croix), ...contenu(fermer));

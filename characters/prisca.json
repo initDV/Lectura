@@ -1,0 +1,9 @@
+{
+  "id": "prisca",
+  "nom": "Prisca",
+  "svg": "prisca.svg",
+  "rig": "aicha",
+  "appuiHanche": [20.6, 78.3],
+  "mouvements": { "style": "fluide" },
+  "voixSuggeree": { "hauteur": 1, "vitesse": 1 }
+}

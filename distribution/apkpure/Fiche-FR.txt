@@ -1,0 +1,23 @@
+NOM DE L’APPLICATION
+Lectura
+
+DESCRIPTION COURTE
+Fais lire tes textes par 43 personnages, même hors ligne.
+
+DESCRIPTION LONGUE
+Transforme un texte en scène animée avec Lectura. Choisis parmi 43 personnages, colle un texte ou ouvre un script et lance la lecture. Le terminal affiche les mots au rythme de l’audio, tandis que le personnage adapte sa bouche et ses expressions.
+
+Lis en mode avion avec une voix système locale, une voix Lectura HD déjà installée ou ton propre fichier audio. Tu peux télécharger des voix HD, dont Siwis et Estelle sur les appareils compatibles. Après le téléchargement initial du pack, la synthèse se fait hors ligne, sur ton téléphone.
+
+Prépare une leçon, une histoire ou une démonstration. Règle la vitesse, personnalise le terminal et importe ou exporte des sous-titres SRT ou VTT. Enregistre ta scène avec son en vidéo verticale 9:16 ou paysage 16:9, selon les codecs de ton appareil. Retrouve et partage les exports dans « Mes vidéos ».
+
+Lectura pour Android est 100% gratuit, sans compte, sans publicité. Tes projets restent sur ton appareil, sauf les fichiers que tu choisis d’exporter ou de partager. Compatible avec Android 12 et versions ultérieures.
+
+CATÉGORIE
+Productivité (choisir Outils si Productivité n’est pas proposée)
+
+MOTS-CLÉS
+lecture à voix haute, synthèse vocale, hors ligne, personnages animés, voix HD, export vidéo, sous-titres, terminal
+
+NOUVEAUTÉS
+Lectura pour Android : 43 personnages, voix HD à télécharger, lecture hors ligne, bibliothèque locale et exports vidéo avec son.

@@ -1,5 +1,5 @@
 // @ts-check
-// Lip-sync gratuit (amplitude → 4 niveaux) + analyse 3 bandes (Pro).
+// Lip-sync (amplitude → 4 niveaux) + analyse 3 bandes.
 export class LipSync {
   constructor(audioCtx, sourceNode) {
     this.an = audioCtx.createAnalyser();
@@ -25,7 +25,7 @@ export class LipSync {
     this.level = l;
     return { level: l, n };
   }
-  bands() { // Pro : énergie graves / médiums / aigus
+  bands() { // énergie graves / médiums / aigus
     this.an.getByteFrequencyData(this.fd);
     const hz = (i) => (i * this.rate) / this.an.fftSize;
     let lo = 0, mi = 0, hi = 0, nl = 0, nm = 0, nh = 0;
@@ -38,7 +38,7 @@ export class LipSync {
   reset() { this.env = 0; this.level = 0; }
 }
 
-/** Pro : forme de bouche d'après les 3 bandes. 'large' = sifflantes (s, f, ch), 'rond' = voyelles graves (o, ou). */
+/** Forme de bouche d'après les 3 bandes. 'large' = sifflantes (s, f, ch), 'rond' = voyelles graves (o, ou). */
 export function mouthShape({ low, mid, high }) {
   if (high > 0.18 && high > mid * 1.15 && high > low * 0.9) return 'large';
   if (low > 0.3 && low > mid * 1.6 && high < 0.08) return 'rond';

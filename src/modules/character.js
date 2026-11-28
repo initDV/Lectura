@@ -2,7 +2,7 @@
 // character.js : animation du robot (code de référence B3, étendu sans le contourner).
 // Référence conservée : hauteurs de bouche VIS, respiration, balancement des bras, clignement, API setExpression /
 // setViseme / setTalking / start / stop / tick. Ajouts : expressions combinées (yeux, sourcils, bouche, tête, bras,
-// corps) fondues en douceur, regard, gestes ponctuels, style de mouvement par personnage, forme de bouche (Pro).
+// corps) fondues en douceur, regard, gestes ponctuels, style de mouvement par personnage, forme de bouche par bandes.
 import { EXPRESSIONS, NEUTRE, poseDe, approcher } from './expressions.js';
 import { grouperTete, grouperAvantBras, brasDevant } from './rig.js';
 import { appliquer as appliquerBouche, formeDe, VISEMES, visemeDe } from './mouth.js';
@@ -21,7 +21,7 @@ export function motionParams(m = {}) {
   return { vitesse: (m.vitesseIdle ?? 1) * s.v, amplitude: (m.amplitudeBras ?? 1) * s.a, pas: s.pas || 0, flotte: s.flotte || 0, ondule: s.ondule || 0 };
 }
 
-const BOUCHES = { normal: 48, large: 58, rond: 32 };          // largeur de la bouche (Pro : lip-sync par bandes)
+const BOUCHES = { normal: 48, large: 58, rond: 32 };          // largeur de la bouche (lip-sync par bandes)
 const GESTES = {
   hoche: 650, secoue: 750, sursaut: 380, coucou: 1400,
   // Nouveaux gestes expressifs (2026-11-16) : plus de variété selon l'émotion.
@@ -135,7 +135,7 @@ export class Character {
     } else {
       this.bouche = null;
     }
-    this.gain = 1; this.rich = false; this.shape = 'normal'; this.gesteFin = 0; this.gesteBras = 1; this.raf = 0;
+    this.gain = 1; this.shape = 'normal'; this.gesteFin = 0; this.gesteBras = 1; this.raf = 0;
     this.pose = { ...NEUTRE }; this.cible = { ...NEUTRE }; this.phase = 0; this.dernier = 0;
     this.geste = { type: '', t0: 0 }; this.regard = [0, 0]; this.coup = [0, 0]; this.coupFin = 0; this.nextCoup = 1500;
     this.reaction = { type: '', t0: 0, duree: 0 };
@@ -144,7 +144,7 @@ export class Character {
     this.scene = { type: '', t0: 0, duree: 0 };
   }
   /**
-   * neutre | content | concentre | surpris (+ expressions Pro). `force` dose l'expression, `mix` + `poids` en mélangent
+   * neutre | content | concentre | surpris (+ expressions avancées). `force` dose l'expression, `mix` + `poids` en mélangent
    * une seconde (expression combinée). Le visage et le corps glissent vers la nouvelle pose en ~0,3 s.
    */
   setExpression(n, force = 1, mix = '', poids = 0) {
@@ -170,7 +170,7 @@ export class Character {
     this.visemeNom = nom || (car ? (this._visemeDe ? this._visemeDe(car) : '') : '');
   }
   setTalking(v) { this.talk = Math.max(0, Math.min(1, v)); }
-  setMouthShape(shape) { this.shape = BOUCHES[shape] ? shape : 'normal'; } // Pro : 'normal' | 'large' | 'rond'
+  setMouthShape(shape) { this.shape = BOUCHES[shape] ? shape : 'normal'; }
   setReduced(v) { this.reduce = !!v; }
   /** Réaction ponctuation (Bloc 2) : impulsion visuelle courte. Aucun effet sur la voix, la bouche, les sentiments. */
   reagir(type, t = performance.now()) {
@@ -178,7 +178,6 @@ export class Character {
     if (DUREES[type]) this.reaction = { type, t0: t, duree: DUREES[type] };
   }
   setGain(g) { this.gain = g; }                                     // réglage « mouvements » du projet
-  setRich(v) { this.rich = !!v; }                                   // Pro : gestes plus amples
   /** Geste ponctuel : 'bras' (mot-clé important), 'hoche' (oui), 'secoue' (non), 'sursaut', 'coucou' (salut de la main). */
   gesture(t = performance.now(), type = 'bras') {
     if (this.geste.type && t - this.geste.t0 < GESTES[this.geste.type] * 0.8) return;
@@ -191,7 +190,8 @@ export class Character {
   start() { const loop = (t) => { this.tick(t); this.raf = requestAnimationFrame(loop); }; this.raf = requestAnimationFrame(loop); }
   stop() { cancelAnimationFrame(this.raf); }
 
-  tick(t) {
+  tick(t, robot = null, quietMouth = false) {
+    const avec = (a, b) => robot ? a + (b - a) * robot.blend : a;
     const dt = this.dernier ? Math.max(0, Math.min(100, t - this.dernier)) : 0;
     if (!this.dernier) this.snap(); else approcher(this.pose, this.cible, 1 - Math.exp(-dt / 110), 1 - Math.exp(-dt / 190));
     this.dernier = t;
@@ -246,12 +246,14 @@ export class Character {
     const dy = (p.flotte ? -(Math.sin(s * 0.9) + 1) * p.flotte * k : 0) - Math.abs(Math.sin(s * 3.2)) * o.bounce * k + saut + Math.cos(t * 0.047) * tr * 0.4 + rDy;
     const tout = Math.abs(dx) + Math.abs(dy) > 0.004 ? `translate(${f2(dx)} ${f2(dy)}) ` : '';
     const pench = Math.abs(o.lean) > 0.02 ? ` rotate(${f2(o.lean * this.scale)} ${this.bassin[0]} ${this.bassin[1]})` : '';
-    e.body.setAttribute('transform', `${tout}translate(${f2(dodeline * 1.0)} ${f2(o.bodyY - br * 1.3)})${pench}`);
-    if (e.legs) e.legs.setAttribute('transform', `${tout}rotate(${f2(dodeline * 0.8)} 120 354)`);
+    e.body.setAttribute('transform', robot ? '' : `${tout}translate(${f2(dodeline * 1.0)} ${f2(o.bodyY - br * 1.3)})${pench}`);
+    if (e.legs) e.legs.setAttribute('transform', robot ? '' : `${tout}rotate(${f2(dodeline * 0.8)} 120 354)`);
     // Tête : pose de l'expression + balancement + léger mouvement pendant la parole + geste ponctuel.
     const hr = o.headR + rHeadR + sceneHeadR + Math.sin(s * 1.1) * Math.max(o.sway, 2.5 * this.scale) * k + Math.sin(s * 2.1) * 1.3 * this.talk * k * this.scale;
     const hy = o.headY + gy + br * 0.55 + Math.sin(s * 4.2) * 0.9 * this.talk * k + rHeadY, hx = o.headX + gx;
-    e.head.setAttribute('transform', `translate(${f2(hx)} ${f2(hy)}) rotate(${f2(hr)} ${this.cou[0]} ${this.cou[1]})`);
+    const [nx, ny] = this.cou;
+    const nod = robot ? ` translate(${nx} ${ny}) scale(1 ${robot.nod.toFixed(4)}) translate(${-nx} ${-ny})` : '';
+    e.head.setAttribute('transform', `translate(${f2(avec(hx, 0))} ${f2(avec(hy, robot?.drop))}) rotate(${f2(avec(hr, robot?.head))} ${nx} ${ny})${nod}`);
     // Geste scénarisé : séquence multi-articulations (gratter, lunettes). Interpolation entre keyframes.
     if (this.scene.type) {
       const u = (t - this.scene.t0) / this.scene.duree;
@@ -299,8 +301,8 @@ export class Character {
       }
     }
     // Bras : épaule et coude de l'expression + balancement pendant la parole (référence) + geste + parasite ; « pas » = mouvement saccadé.
-    const cran = (a) => (p.pas ? Math.round(a / p.pas) * p.pas : a), base = `${tout}translate(0 ${f2(o.bodyY)})${pench} `;
-    const g = t < this.gesteFin ? Math.sin(Math.PI * (1 - (this.gesteFin - t) / 700)) * (this.rich ? 42 : 24) * k : 0;
+    const cran = (a) => (p.pas ? Math.round(a / p.pas) * p.pas : a), base = robot ? '' : `${tout}translate(0 ${f2(o.bodyY)})${pench} `;
+    const g = t < this.gesteFin ? Math.sin(Math.PI * (1 - (this.gesteFin - t) / 700)) * 42 * k : 0;
     // Humains : gesticulent naturellement avec les mains en parlant. Le robot a un balancement
     // plus mécanique ; l'humain bouge plus, plus lentement, plus organique.
     const amp = (this.estHumain ? 12 : 7) * this.talkLisse * k * p.amplitude * o.swing;
@@ -309,14 +311,14 @@ export class Character {
     const f2b = this.estHumain ? 0.7 : 1.1;
     const aL = epL + cran(Math.sin(s * f1) * amp + (this.gesteBras < 0 ? g : 0)) + paraL;
     const aR = -o.armR + cran(-Math.sin(s * f2b + 1) * amp - (this.gesteBras > 0 ? g : 0)) + paraR + sceneArmR;
-    e.armL.setAttribute('transform', `${base}rotate(${f2(aL)} ${this.pivL[0]} ${this.pivL[1]})`);
-    e.armR.setAttribute('transform', `${base}rotate(${f2(aR)} ${this.pivR[0]} ${this.pivR[1]})`);
+    e.armL.setAttribute('transform', `${base}rotate(${f2(avec(aL, robot?.armL))} ${this.pivL[0]} ${this.pivL[1]})`);
+    e.armR.setAttribute('transform', `${base}rotate(${f2(avec(aR, robot?.armR))} ${this.pivR[0]} ${this.pivR[1]})`);
     const fL = coL + cran(Math.sin(s * 1.4 + 2) * amp * 0.8 + (this.gesteBras < 0 ? g * 0.9 : 0)) + paraFL;
     const fR = -o.foreR + cran(-Math.sin(s * 1.2) * amp * 0.8 - (this.gesteBras > 0 ? g * 0.9 : 0)) + paraFR + sceneForeR;
-    e.foreL.setAttribute('transform', `rotate(${f2(fL)} ${this.coudeL[0]} ${this.coudeL[1]})`);
-    e.foreR.setAttribute('transform', `rotate(${f2(fR)} ${this.coudeR[0]} ${this.coudeR[1]})`);
+    e.foreL.setAttribute('transform', `rotate(${f2(avec(fL, robot?.foreL))} ${this.coudeL[0]} ${this.coudeL[1]})`);
+    e.foreR.setAttribute('transform', `rotate(${f2(avec(fR, robot?.foreR))} ${this.coudeR[0]} ${this.coudeR[1]})`);
     // Bouche : la hauteur suit le niveau de lip-sync, l'expression fixe un minimum, une largeur et un décalage.
-    const h = Math.max(VIS[this.viseme], o.h), w = o.w * (this.rich ? BOUCHES[this.shape] / 48 : 1), m = e.mouth;
+    const h = quietMouth ? (this.estHumain ? 0 : VIS[0]) : Math.max(VIS[this.viseme], o.h), w = o.w * (BOUCHES[this.shape] / 48), m = e.mouth;
     // Bouche : deux modèles selon le personnage.
     if (this.bouche) {
       // Humains : lèvres dessinées (courbes, dents, langue) via mouth.js.
@@ -341,14 +343,14 @@ export class Character {
     const sy = t < this.blinkUntil ? 0.15 : o.lid, rx = o.gx + this.regard[0], ry = o.gy + this.regard[1], y = this.yeuxY;
     const driftX = Math.sin(s * 0.55) * 1.3 * k + Math.sin(s * 1.5) * 0.6 * k + rGx + sceneGx;
     const driftY = Math.cos(s * 0.45) * 0.8 * k + rGy;
-    const vers = `translate(${f2(rx + driftX)} ${f2(ry + driftY)})`;
+    const vers = `translate(${f2(avec(rx + driftX, robot?.gazeX))} ${f2(avec(ry + driftY, robot?.gazeY))})`;
     for (const eye of [e.eyeL, e.eyeR]) {
       eye.setAttribute('r', f2(o.r * this.rBase / 11)); // rBase : adapte le rayon au personnage
       eye.setAttribute('transform', sy > 0.995 ? vers : `${vers} translate(0 ${y}) scale(1 ${f2(sy)}) translate(0 ${-y})`);
     }
     for (const r of this.reflets) { r.setAttribute('transform', vers); r.setAttribute('opacity', sy > 0.6 ? '1' : '0'); }
     // Sourcils : hauteur de chacun + inclinaison symétrique (positive = triste, négative = fâché).
-    e.browL.setAttribute('transform', `translate(0 ${f2(o.browL + rBrow)}) rotate(${f2(-o.rot * this.scale)} ${this.sourcilG[0]} ${this.sourcilG[1]})`);
-    e.browR.setAttribute('transform', `translate(0 ${f2(o.browR + rBrow)}) rotate(${f2(o.rot * this.scale)} ${this.sourcilD[0]} ${this.sourcilD[1]})`);
+    e.browL.setAttribute('transform', `translate(0 ${f2(avec(o.browL + rBrow, (robot?.brow ?? 0) * .71))}) rotate(${f2(-o.rot * this.scale)} ${this.sourcilG[0]} ${this.sourcilG[1]})`);
+    e.browR.setAttribute('transform', `translate(0 ${f2(avec(o.browR + rBrow, robot?.brow))}) rotate(${f2(o.rot * this.scale)} ${this.sourcilD[0]} ${this.sourcilD[1]})`);
   }
 }

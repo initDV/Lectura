@@ -9,6 +9,7 @@ import { autoTiming, segmentsValides, reportExpressions, estimateDurationMs, Tim
 import { FileSource, SpeechSource, SilentSource } from './player.js';
 import { SpeechQueue } from './voice/queue.js';
 import { getEngine, voiceKey } from './voice/engine.js';
+import { PIPER_RENDER_VERSION } from './voice/audio-cache.js';
 import { getAudio } from './storage.js';
 import { PERSO_DEFAUT } from './project.js';
 import { encodeWav } from './audio.js';
@@ -25,11 +26,10 @@ async function json(url, quoi) {
   }
 }
 
-/** Dictionnaire de mots-clés : base (gratuit) + enrichi et catégories personnalisées (Pro). */
+/** Dictionnaire de mots-clés : base, enrichi français et catégories personnalisées. */
 export async function loadDict() {
   const langue = getLang(), base = await json(`data/keywords_${langue === 'en' ? 'en' : 'fr'}.json`, 'les mots-clés');
-  if (!store.pro) return base;
-  const extras = [await json('data/keywords_fr_pro.json', 'les mots-clés enrichis')];
+  const extras = [await json('data/keywords_fr_extended.json', 'les mots-clés enrichis')];
   const perso = store.settings?.motsPerso;
   if (perso && Object.keys(perso).length) extras.push({ categories: perso });
   return mergeDicts(base, ...extras);
@@ -43,14 +43,11 @@ export async function loadLexique() {
   return lexiques.get(langue);
 }
 
-/** Personnage du projet ; un personnage Pro sans licence est remplacé par le Professeur (avec message). */
+/** Personnage du projet ; repli uniquement si le dessin demandé est indisponible. */
 export async function loadProjectCharacter(projet) {
   let def = await getCharacter(projet.personnageId);
   if (!def || def.erreur) {
     notify(t('scene.persoIntrouvable', { id: projet.personnageId }), 'warn');
-    def = await getCharacter(PERSO_DEFAUT);
-  } else if (def.pro && !store.pro) {
-    notify(t('scene.persoPro', { nom: def.nom }), 'warn');
     def = await getCharacter(PERSO_DEFAUT);
   }
   if (!def) throw new Error('Aucun personnage disponible : le fichier characters/robot_lectura.json est introuvable.');
@@ -72,10 +69,10 @@ async function sourceVoixSysteme(projet) {
 
 const CACHE_SYNTHESE = 'lectura-synthese', MAX_SYNTHESES = 6;
 
-/** Clé d'une synthèse : texte + voix + vitesse + vitesse de frappe. Change « v1 » si la voix ou la phonétisation évolue. */
+/** Clé d'une synthèse : texte + voix + vitesse + vitesse de frappe. La révision est commune avec le cache de phrases. */
 async function cleSynthese(projet) {
   const v = projet.audio.voix;
-  const brut = JSON.stringify(['v1', projet.texte, v.id, v.vitesse, projet.terminal.vitesseCps]);
+  const brut = JSON.stringify([PIPER_RENDER_VERSION, projet.texte, v.id, v.vitesse, projet.terminal.vitesseCps]);
   const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(brut)));
   return new URL(`./__synthese/${[...h].map((x) => x.toString(16).padStart(2, '0')).join('')}`, location.href).href;
 }
@@ -89,18 +86,23 @@ async function elaguer(cache) {
   }
 }
 
-async function sourcePiper(projet, audio, onProgress) {
+async function sourcePiper(projet, audio, onProgress, signal) {
   const v = projet.audio.voix;
   const cle = await cleSynthese(projet);
   let cache = null, wav = null, segs = null;
   try { // synthèse déjà faite pour ce texte, cette voix et cette vitesse : on la reprend, sans rien recalculer
     cache = await caches.open(CACHE_SYNTHESE);
     const [a, j] = await Promise.all([cache.match(`${cle}.wav`), cache.match(`${cle}.json`)]);
-    if (a && j) { wav = await a.blob(); segs = await j.json(); onProgress?.(1, 1, t('scene.prep.audio')); }
+    if (a && j) {
+      const dates = await j.json();
+      if (segmentsValides(projet.texte, dates)) { wav = await a.blob(); segs = dates; onProgress?.(1, 1, t('scene.prep.audio')); }
+    }
   } catch { cache = null; wav = null; segs = null; }
+  signal?.throwIfAborted();
   if (!wav) {
     const moteur = await getEngine('piper');
-    const r = await moteur.synthesize(projet.texte, { voixId: v.id, vitesse: v.vitesse, cpsFrappe: projet.terminal.vitesseCps, onProgress });
+    const r = await moteur.synthesize(projet.texte, { voixId: v.id, vitesse: v.vitesse, cpsFrappe: projet.terminal.vitesseCps, onProgress, signal });
+    signal?.throwIfAborted();
     wav = encodeWav(r.samples, r.sampleRate); segs = r.segments;
     try { // mémorise pour la prochaine fois ; un échec (stockage plein) ne bloque jamais la lecture
       if (cache) {
@@ -110,26 +112,28 @@ async function sourcePiper(projet, audio, onProgress) {
       }
     } catch { /* ignoré */ }
   }
-  await audio.load(wav);
-  return { source: new FileSource(audio), segments: segs.map((s, i) => ({ id: i + 1, expression: 'auto', ...s })), vitesseBase: v.vitesse };
+  signal?.throwIfAborted();
+  await audio.load(wav, signal);
+  return { source: new FileSource(audio), blob: wav, segments: segs.map((s, i) => ({ id: i + 1, expression: 'auto', ...s })), vitesseBase: v.vitesse };
 }
 
-async function sourceFichier(projet, audio) {
+async function sourceFichier(projet, audio, signal) {
   const blob = store.audioBlob || (await getAudio(projet.id));
   if (!blob) throw new Error(t('scene.err.sansAudio'));
-  const duree = await audio.load(blob);
+  const duree = await audio.load(blob, signal);
   const ok = projet.timing === 'sous-titres' && segmentsValides(projet.texte, projet.segments); // dates d'un .srt/.vtt
-  return { source: new FileSource(audio), segments: ok ? projet.segments : autoTiming(projet.texte, duree) };
+  return { source: new FileSource(audio), blob, segments: ok ? projet.segments : autoTiming(projet.texte, duree) };
 }
 
 /**
  * @param {any} projet
- * @param {{audio: import('./audio.js').AudioEngine, apercu?: boolean, perso?: {def:any, svg:any}|null, onProgress?: (fait:number, total:number, etape:string)=>void}} o
+ * @param {{audio: import('./audio.js').AudioEngine, apercu?: boolean, perso?: {def:any, svg:any}|null, analyserAudio?: (blob:Blob, audio:import('./audio.js').AudioEngine, signal?:AbortSignal)=>Promise<((ms:number)=>number)|null>, signal?: AbortSignal, onProgress?: (fait:number, total:number, etape:string)=>void}} o
  */
-export async function prepare(projet, { audio, apercu = false, perso: dejaCharge = null, onProgress }) {
+export async function prepare(projet, { audio, apercu = false, perso: dejaCharge = null, analyserAudio, onProgress, signal }) {
   if (!projet.texte.trim()) throw new Error(t('scene.err.texteVide'));
   onProgress?.(0, 1, t('scene.prep.ressources'));
   const [dict, perso, lexique] = await Promise.all([loadDict(), dejaCharge || loadProjectCharacter(projet), loadLexique()]);
+  signal?.throwIfAborted();
   const matcher = buildMatcher(dict);
   let res;
   if (apercu) {
@@ -137,14 +141,22 @@ export async function prepare(projet, { audio, apercu = false, perso: dejaCharge
     res = { source: new SilentSource(duree, projet.texte), segments: autoTiming(projet.texte, duree, 1) };
   } else if (projet.audio.source === 'fichier') {
     onProgress?.(0, 1, t('scene.prep.audio'));
-    res = await sourceFichier(projet, audio);
+    res = await sourceFichier(projet, audio, signal);
   } else if (projet.audio.voix.moteur === 'piper') {
-    res = await sourcePiper(projet, audio, onProgress);
+    res = await sourcePiper(projet, audio, onProgress, signal);
   } else {
     res = await sourceVoixSysteme(projet);
   }
-  const segments = reportExpressions(res.segments, res.segments === projet.segments ? [] : projet.segments);
-  if (!segments.length) throw new Error(t('scene.err.texteVide'));
-  // vitesseBase = vitesse déjà « cuite » dans la source (voix) ; la scène applique ensuite vitesse ÷ vitesseBase.
-  return { dict, matcher, lexique, def: perso.def, svg: perso.svg, source: res.source, segments, timeline: new Timeline(projet.texte, segments), vitesseBase: res.vitesseBase || 1 };
+  try {
+    const segments = reportExpressions(res.segments, res.segments === projet.segments ? [] : projet.segments);
+    if (!segments.length) throw new Error(t('scene.err.texteVide'));
+    const enveloppe = analyserAudio && 'blob' in res ? await analyserAudio(res.blob, audio, signal) : null;
+    signal?.throwIfAborted();
+    // vitesseBase = vitesse déjà « cuite » dans la source (voix) ; la scène applique ensuite vitesse ÷ vitesseBase.
+    return { dict, matcher, lexique, def: perso.def, svg: perso.svg, source: res.source, segments, enveloppe,
+      timeline: new Timeline(projet.texte, segments), vitesseBase: res.vitesseBase || 1 };
+  } catch (err) {
+    res.source.dispose();
+    throw err;
+  }
 }

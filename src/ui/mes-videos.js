@@ -1,65 +1,98 @@
 // @ts-check
-// mes-videos.js : liste des vidéos sauvegardées dans l'application, accessibles hors ligne.
-import { h } from './dom.js';
+import { clear, field, h } from './dom.js';
 import { ouvrirModale } from './modale.js';
 import { t, taille } from '../modules/i18n.js';
 import { downloadBlob } from '../modules/capture.js';
 import { notify, report } from '../modules/errors.js';
-import { listerVideos, lireVideo, supprimerVideo } from '../modules/video-store.js';
+import { fichierMedia, listerMedias, lireMedia, renommerMedia, supprimerMedia } from '../modules/video-store.js';
 
-async function partagerOuTelecharger(blob, nom, mime) {
+const bouton = (cle, action) => h('button', { type: 'button', class: 'btn', text: t(cle), onClick: action });
+const absent = () => notify(t('mv.introuvable'), 'warn');
+
+async function exporter(id, partager) {
   try {
-    const fichier = new File([blob], nom, { type: mime });
-    if (typeof navigator.share === 'function' && typeof navigator.canShare === 'function' && navigator.canShare({ files: [fichier] })) {
-      await navigator.share({ files: [fichier], title: nom });
+    const media = await lireMedia(id);
+    if (!media) return absent();
+    const fichier = fichierMedia(media);
+    if (partager && typeof navigator.share === 'function' && navigator.canShare?.({ files: [fichier] })) {
+      await navigator.share({ files: [fichier], title: media.titre });
     } else {
-      downloadBlob(blob, nom);
-      notify(t('dl.partage.indispo'), 'info');
+      downloadBlob(fichier, fichier.name);
+      if (partager) notify(t('dl.partage.indispo'), 'info');
     }
-  } catch (err) { if (err && err.name !== 'AbortError') report('partage', err); }
+  } catch (err) { if (err?.name !== 'AbortError') report('mediatheque', err); }
 }
 
-async function ouvrirLecteur(id) {
+function ouvrirLecteur(media, retour) {
+  const url = URL.createObjectURL(media.blob);
+  const audio = media.type === 'audio';
+  const player = h(audio ? 'audio' : 'video', {
+    src: url, controls: true, autoplay: true, 'aria-label': media.titre,
+    style: audio ? 'width:100%;' : 'width:100%;max-height:70vh;background:#000;border-radius:8px;',
+  });
+  ouvrirModale(t('mv.lecteur'), (fermer) => [
+    h('p', { text: media.titre }), player,
+    bouton('mv.retour', () => { fermer(); retour(); }),
+  ], () => { player.pause(); URL.revokeObjectURL(url); });
+}
+
+function ouvrirRenommage(media, retour) {
+  const input = h('input', { type: 'text', maxLength: 120, value: media.titre, required: true, autocomplete: 'off' });
+  const envoyer = h('button', { type: 'submit', class: 'btn btn-primary', text: t('editeur.enregistrer') });
+  const modale = ouvrirModale(t('mv.renommer'), (fermer) => [h('form', { class: 'stack', onSubmit: async (event) => {
+    event.preventDefault();
+    if (envoyer.disabled) return;
+    if (!input.value.trim()) { input.setCustomValidity(t('mv.nomVide')); input.reportValidity(); return; }
+    envoyer.disabled = true;
+    try {
+      if (!(await renommerMedia(media.id, input.value))) absent();
+      if (modale.feuille.isConnected) { fermer(); retour(); }
+    } catch (err) { report('mediatheque', err); envoyer.disabled = false; }
+  } }, field(t('mv.nom'), input), h('div', { class: 'row' }, envoyer, bouton('commun.annuler', () => { fermer(); retour(); })))]);
+  input.addEventListener('input', () => input.setCustomValidity(''));
+  input.focus(); input.select();
+  return modale;
+}
+
+export async function ouvrirMesVideos(filtre = 'tous') {
   try {
-    const blob = await lireVideo(id);
-    if (!blob) return notify(t('mv.introuvable'), 'error');
-    const url = URL.createObjectURL(blob);
-    ouvrirModale(t('mv.lecteur'), (fermer) => [
-      h('video', {
-        src: url, controls: true, autoplay: true,
-        style: 'width:100%;max-height:70vh;background:#000;border-radius:8px;',
-        onEnded: () => {},
-      }),
-      h('button', { type: 'button', class: 'btn', style: 'margin-top:.5rem;', text: t('commun.fermer'), onClick: () => { URL.revokeObjectURL(url); fermer(); } }),
-    ]);
-  } catch (err) { report('lecture-video', err); }
-}
-
-export async function ouvrirMesVideos() {
-  const rendre = async () => {
-    const videos = await listerVideos();
-    return ouvrirModale(t('mv.titre'), (fermer) => {
-      if (!videos.length) return [h('p', { class: 'hint', text: t('mv.vide') })];
-      return videos.map((v) => h('div', {
-        style: 'border:1px solid #333;padding:.55rem;margin:.4rem 0;border-radius:.4rem;',
-      },
-        h('strong', { text: v.titre }),
-        h('p', { class: 'hint', style: 'margin:.15rem 0;', text: `${new Date(v.date).toLocaleString()} · ${String(v.format).toUpperCase()} · ${taille(v.taille)}` }),
-        h('div', { style: 'display:flex;gap:.35rem;margin-top:.35rem;flex-wrap:wrap;' },
-          h('button', { type: 'button', class: 'btn', style: 'flex:1;min-width:0;', text: t('mv.lire'), onClick: () => { fermer(); ouvrirLecteur(v.id); } }),
-          h('button', { type: 'button', class: 'btn', style: 'flex:1;min-width:0;', text: t('mv.partager'), onClick: async () => {
-            const blob = await lireVideo(v.id);
-            if (!blob) return notify(t('mv.introuvable'), 'error');
-            await partagerOuTelecharger(blob, `${v.titre}.${v.format}`, blob.type);
-          } }),
-          h('button', { type: 'button', class: 'btn', style: 'flex:1;min-width:0;', text: t('mv.supprimer'), onClick: async () => {
-            await supprimerVideo(v.id);
-            notify(t('mv.supprimee'), 'ok');
-            fermer(); rendre();
-          } }),
+    let medias = await listerMedias();
+    const select = h('select', { 'aria-label': t('mv.filtre'), onChange: () => { filtre = select.value; rendre(); } },
+      ...['tous', 'audio', 'video'].map((valeur) => h('option', { value: valeur }, t(`mv.${valeur}`))));
+    select.value = filtre;
+    const liste = h('div', { class: 'stack' });
+    const retour = () => ouvrirMesVideos(filtre);
+    const { fermer, feuille } = ouvrirModale(t('mv.titre'), () => [h('label', null, t('mv.filtre'), ' ', select), liste]);
+    function rendre() {
+      clear(liste);
+      const visibles = medias.filter((m) => filtre === 'tous' || m.type === filtre);
+      if (!visibles.length) liste.append(h('p', { class: 'hint', text: t(medias.length ? 'mv.filtreVide' : 'mv.vide') }));
+      for (const m of visibles) liste.append(h('article', { class: 'card stack' },
+        h('strong', { text: m.titre }),
+        h('p', { class: 'hint', text: `${new Date(m.date).toLocaleString()} · ${m.format.toUpperCase()} · ${taille(m.taille)}` }),
+        h('div', { class: 'row', style: 'flex-wrap:wrap;' },
+          bouton('mv.lire', async () => {
+            try {
+              const media = await lireMedia(m.id);
+              if (!media) return absent();
+              if (feuille.isConnected) { fermer(); ouvrirLecteur(media, retour); }
+            } catch (err) { report('mediatheque', err); }
+          }),
+          bouton('mv.partager', () => exporter(m.id, true)),
+          bouton('mv.enregistrer', () => exporter(m.id, false)),
+          bouton('mv.renommer', () => { fermer(); ouvrirRenommage(m, retour); }),
+          bouton('mv.supprimer', async () => {
+            if (!confirm(t('mv.confirmer', { titre: m.titre }))) return;
+            try {
+              if (await supprimerMedia(m.id)) notify(t('mv.supprimee'), 'ok');
+              medias = await listerMedias();
+              rendre();
+            } catch (err) { report('mediatheque', err); }
+          }),
         ),
       ));
-    });
-  };
-  return rendre();
+    }
+    rendre();
+    return { fermer, feuille };
+  } catch (err) { report('mediatheque', err); }
 }

@@ -1,7 +1,7 @@
 // @ts-check
 // Bus d'événements + état partagé de l'application (aucune dépendance).
 // Événements : audio:ready audio:play audio:pause audio:end audio:error tts:sentence-start tts:sentence-end
-// tts:boundary timeline:tick terminal:line character:expression license:changed net:online net:offline
+// tts:boundary timeline:tick terminal:line character:expression net:online net:offline
 // sw:update-available app:state ui:toast settings:changed
 
 class Bus {
@@ -38,7 +38,5 @@ export const store = {
   /** @type {Blob|null} */ audioBlob: null, // fichier audio du projet courant
   modifie: false, // brouillon non sauvegardé
   apercu: false, // la scène est lancée en « aperçu » (sans son, vitesse du terminal)
-  pro: false,
-  /** @type {any} */ licence: null,
   enLigne: typeof navigator !== 'undefined' ? navigator.onLine : true,
 };

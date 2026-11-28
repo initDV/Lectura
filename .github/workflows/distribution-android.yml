@@ -1,0 +1,117 @@
+name: Distribution contrôlée — Lectura Android v1.0.0
+
+on:
+  # Ce circuit est réservé aux artefacts historiques de la v1.0.0,
+  # pas aux changements de la page de téléchargement des versions suivantes.
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Opération de distribution, sans construction du candidat Web'
+        required: true
+        type: choice
+        options: [release, audit-page, deploy-page]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ inputs.operation == 'deploy-page' && 'pages' || 'lectura-distribution-android' }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    if: github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Vérifier le périmètre de cette distribution
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor 3c5ca6d5a02c1475ca121958bde923f44004af97 HEAD
+          git diff --exit-code 3c5ca6d5a02c1475ca121958bde923f44004af97 HEAD -- . \
+            ':!app/index.html' ':!tools/distribution/pages-android.py' \
+            ':!tools/distribution/release-android.sh' ':!.github/workflows/distribution-android.yml'
+          bash -n tools/distribution/release-android.sh
+          python3 -m py_compile tools/distribution/pages-android.py
+          grep -F 'https://github.com/initDV/Lectura/releases/download/v1.0.0/Lectura.apk' app/index.html
+
+  release:
+    needs: guard
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Publier exclusivement l’APK d’origine du run 45220486453
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash tools/distribution/release-android.sh
+
+  snapshot:
+    needs: guard
+    if: github.event_name == 'workflow_dispatch' && (inputs.operation == 'audit-page' || inputs.operation == 'deploy-page')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      deployments: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Recopier Pages octet pour octet et ajouter uniquement /app/
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ inputs.operation == 'deploy-page' && 'snapshot' || 'audit' }}
+        run: |
+          python3 tools/distribution/pages-android.py "$MODE" \
+            "$RUNNER_TEMP/pages-release" "$RUNNER_TEMP/pages-sha256.json" app/index.html
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: preuve-pages-sha256
+          path: ${{ runner.temp }}/pages-sha256.json
+          if-no-files-found: error
+      - if: inputs.operation == 'deploy-page'
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: ${{ runner.temp }}/pages-release
+
+  deploy:
+    needs: snapshot
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'deploy-page'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.publication.outputs.page_url }}app/
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: preuve-pages-sha256
+          path: ${{ runner.temp }}/proof
+      - name: Confirmer la référence Pages et la Release Android
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/distribution/pages-android.py guard
+      - id: publication
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+      - name: Vérifier la page publique et l’intégrité de la PWA
+        run: python3 tools/distribution/pages-android.py verify "$RUNNER_TEMP/proof/pages-sha256.json"

@@ -11,7 +11,6 @@ const ROUTES = {
   projets: () => import('./ui/projets.js'),
   personnages: () => import('./ui/personnages.js'),
   reglages: () => import('./ui/reglages.js'),
-  pro: () => import('./ui/pro.js'),
   apropos: () => import('./ui/apropos.js'),
 };
 let nettoyer = null, jeton = 0, courante = '';

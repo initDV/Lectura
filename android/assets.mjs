@@ -1,0 +1,133 @@
+// Build-time only. The APK contains drawings/data, never the web application or a JS runtime.
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { empaqueterAtlas } from './atlas-assets.mjs';
+import { empaqueterPersonnages } from '../tools/character-catalogue.mjs';
+import fr from '../src/i18n/fr.js';
+import en from '../src/i18n/en.js';
+import { DEFAUTS } from '../src/modules/storage.js';
+import { EXPRESSIONS, NEUTRE } from '../src/modules/expressions.js';
+import { intentions } from '../src/modules/aicha/intentions.js';
+import { VISAGES } from '../src/modules/aicha/visages.js';
+import { DIGITS, SEGMENTS, DIGIT_X, DIGIT_Y } from '../src/modules/robot-motion.js';
+import { THEMES } from '../src/modules/themes.js';
+import * as phonemes from '../src/modules/voice/g2p_lexique.js';
+
+const output = resolve(process.argv[2]);
+const res = resolve(process.argv[3]);
+const root = new URL('../', import.meta.url);
+const read = (p) => readFile(new URL(p, root), 'utf8');
+const put = (p, object) => writeFile(resolve(output, p), JSON.stringify(object));
+const table = async (file, name) => {
+  const source = (await read(file)).match(new RegExp(`^const ${name} = (\\{[\\s\\S]*?^\\});`, 'm'))?.[1];
+  if (!source) throw Error(`Table ${name} introuvable dans ${file}`);
+  return (await import(`data:text/javascript,${encodeURIComponent(`export default ${source}`)}`)).default;
+};
+const themes = {};
+for (const [, key, block] of (await read('src/ui/styles/themes.css')).matchAll(/\[data-theme="([^"]+)"\]\s*\{([^}]+)\}/g)) {
+  themes[key] = Object.fromEntries([...block.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+}
+const voiceScript = await read('tools/fetch_voice.mjs');
+const piper = (await import(`data:text/javascript,${encodeURIComponent('export default ' + voiceScript.match(/const VOIX = (\[[\s\S]+?\]);/)[1])}`)).default;
+const voices = [
+  { id: 'estelle', nom: 'Estelle · F · Pocket TTS', moteur: 'pocket', modele: 'estelle' },
+  { id: 'kokoro-siwis', nom: 'Siwis · F · Kokoro', moteur: 'kokoro', modele: 'kokoro-siwis' },
+  ...piper.filter((v) => ['siwis', 'tom'].includes(v.id)),
+  ...piper.filter((v) => !['siwis', 'tom'].includes(v.id)),
+];
+const version = (await read('android/AndroidManifest.xml')).match(/\bandroid:versionName="(\d+\.\d+\.\d+)"/)?.[1];
+if (!version) throw Error('Version Android absente du manifeste.');
+const defaults = { ...DEFAUTS, moteurVoix: 'auto', voixId: '', qualiteVideo: '720p' };
+const androidStrings = (labels, overrides) => ({ ...labels, ...overrides });
+await mkdir(output, { recursive: true });
+await mkdir(resolve(res, 'mipmap-xxxhdpi'), { recursive: true });
+empaqueterPersonnages(fileURLToPath(new URL('characters/', root)), resolve(output, 'characters'));
+await Promise.all([
+  empaqueterAtlas(output, read),
+  cp(new URL('data/', root), resolve(output, 'data'), { recursive: true }),
+  cp(new URL('android/data/prononciation.json', root), resolve(output, 'prononciation.json')),
+  cp(new URL('android/data/direction.json', root), resolve(output, 'direction.json')),
+  cp(new URL('icons/favicon.svg', root), resolve(output, 'favicon.svg')),
+  cp(new URL('icons/192.png', root), resolve(res, 'mipmap-xxxhdpi/lectura.png')),
+  cp(new URL('fonts/OFL-JetBrainsMono.txt', root), resolve(output, 'OFL-JetBrainsMono.txt')),
+  cp(new URL('LICENSE', root), resolve(output, 'LICENSE')),
+  cp(new URL('THIRD_PARTY_LICENSES.md', root), resolve(output, 'THIRD_PARTY_LICENSES.md')),
+  put('fr.json', androidStrings(fr, {
+    'apropos.confidentialite.texte': 'Tes textes, projets et lectures restent sur cet appareil. Lectura utilise Internet seulement pour télécharger les voix HD à ta demande. Aucun compte ni traceur.',
+    'voix.err.aucune': 'Aucune voix locale disponible. Installe une voix dans les réglages du téléphone ou télécharge une voix Lectura HD.',
+    'android.terminal.fontSystem': 'Système',
+    'android.atlas.recul': 'Reculer de 5 secondes',
+    'android.atlas.avance': 'Avancer de 5 secondes',
+    'android.video.resolution': 'Résolution de la vidéo',
+    'android.video.scene': 'La vidéo reprend la scène affichée, avec des marges si le format est différent.',
+    'android.video.uhdTitle': 'Enregistrement 4K indisponible',
+    'android.video.uhdUnsupported': 'Aucun encodeur disponible pour la 4K en {detail} à 30 i/s sur cet appareil. Essaie en HD ou dans l’autre orientation.',
+    'android.video.uhdFailed': 'L’enregistrement 4K en {detail} a échoué. Aucune vidéo n’a été créée. Essaie en HD.',
+    'android.video.useHd': 'Choisir la résolution HD',
+    'android.cadrage.titre': 'Cadrage de la scène',
+    'android.cadrage.aide': 'Règle la fenêtre du terminal et le personnage indépendamment, avec un aperçu en direct.',
+    'android.cadrage.ajuster': 'Ajuster sur la scène',
+    'android.cadrage.exports': 'La vidéo reprend les réglages en direct. La capture PNG garde son propre cadrage.',
+    'android.cadrage.largeur': 'Largeur du terminal',
+    'android.cadrage.hauteur': 'Hauteur du terminal',
+    'android.cadrage.taille': 'Taille du personnage',
+    'android.cadrage.horizontal': 'Position horizontale',
+    'android.cadrage.vertical': 'Position verticale',
+    'android.cadrage.reset': 'Réinitialiser le cadrage',
+    'android.voice.auto': 'Automatique · Estelle en priorité',
+    'android.voice.autoHelp': 'Sans Estelle : Siwis, Tom ou une voix système locale déjà installée.',
+    'android.voice.main': 'Voix principale',
+    'android.voice.backup': 'Secours Piper',
+    'android.voice.use': 'Utiliser cette voix',
+    'android.voice.installedSize': 'Espace après installation : {taille}',
+    'android.voice.notSupported': 'Ce moteur vocal n’est pas disponible sur cet appareil.',
+    'android.voice.extract': 'Vérification et installation de la voix…',
+    'android.voice.sources': 'Voix locales Lectura',
+    'android.voice.fallback': 'Voix prioritaire indisponible · secours : {nom}',
+    'android.voice.noAudio': 'Télécharge Estelle ou choisis une voix déjà installée.',
+    'voix.hd.err.tropLong': 'Texte trop long pour la synthèse ({n} caractères sur {max} maximum). Coupe-le en plusieurs projets ou importe un audio.',
+  })),
+  put('en.json', androidStrings(en, {
+    'apropos.confidentialite.texte': 'Your text, projects and playback stay on this device. Lectura only uses the Internet to download HD voices on request. No accounts or trackers.',
+    'voix.err.aucune': 'No local voice available. Install one in your phone settings or download a Lectura HD voice.',
+    'android.terminal.fontSystem': 'System',
+    'android.atlas.recul': 'Back 5 seconds',
+    'android.atlas.avance': 'Forward 5 seconds',
+    'android.video.resolution': 'Video resolution',
+    'android.video.scene': 'The video follows the scene on screen, with padding if the aspect ratios differ.',
+    'android.video.uhdTitle': '4K recording unavailable',
+    'android.video.uhdUnsupported': 'No encoder for {detail} 4K at 30 fps is available on this device. Try HD or the other orientation.',
+    'android.video.uhdFailed': '4K recording at {detail} failed. No video was created. Try HD instead.',
+    'android.video.useHd': 'Choose HD resolution',
+    'android.cadrage.titre': 'Scene layout',
+    'android.cadrage.aide': 'Adjust the terminal window and character independently, with a live preview.',
+    'android.cadrage.ajuster': 'Adjust on stage',
+    'android.cadrage.exports': 'The video follows these adjustments live. PNG snapshots keep their own layout.',
+    'android.cadrage.largeur': 'Terminal width',
+    'android.cadrage.hauteur': 'Terminal height',
+    'android.cadrage.taille': 'Character size',
+    'android.cadrage.horizontal': 'Horizontal position',
+    'android.cadrage.vertical': 'Vertical position',
+    'android.cadrage.reset': 'Reset scene layout',
+    'android.voice.auto': 'Automatic · Estelle first',
+    'android.voice.autoHelp': 'Without Estelle: Siwis, Tom or an already installed local system voice.',
+    'android.voice.main': 'Primary voice',
+    'android.voice.backup': 'Piper fallback',
+    'android.voice.use': 'Use this voice',
+    'android.voice.installedSize': 'Installed size: {taille}',
+    'android.voice.notSupported': 'This voice engine is not available on this device.',
+    'android.voice.extract': 'Verifying and installing the voice…',
+    'android.voice.sources': 'Lectura local voices',
+    'android.voice.fallback': 'Preferred voice unavailable · fallback: {nom}',
+    'android.voice.noAudio': 'Download Estelle or choose an already installed voice.',
+    'voix.hd.err.tropLong': 'Text too long for synthesis ({n} characters; maximum {max}). Split it into projects or import audio.',
+  })),
+  writeFile(resolve(output, 'lectrices.json'), JSON.stringify(intentions, (_, value) => value instanceof RegExp ? value.source : value)),
+  put('robot-stage.json', { digits: DIGITS, segments: SEGMENTS, digitX: DIGIT_X, digitY: DIGIT_Y }),
+  put('defaults.json', defaults),
+  put('themes.json', { app: themes, terminal: THEMES }), put('expressions.json', { neutral: NEUTRE, expressions: EXPRESSIONS, visages: VISAGES }),
+  put('g2p.json', { ...phonemes, CLITIQUES: [...phonemes.CLITIQUES], TIRET: [...phonemes.TIRET] }),
+  put('hd-voices.json', { voices }), put('icons.json', await table('src/ui/icons.js', 'TRACES')),
+  put('version.json', { version, native: process.env.LECTURA_BUILD || 'android', base: '39e429522cc715aeda6ce0db9d3eb5690ba1f2fd' }),
+]);

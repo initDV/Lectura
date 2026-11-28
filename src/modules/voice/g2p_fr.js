@@ -3,6 +3,7 @@
 // Remplace espeak-ng (GPLv3, exclu par la règle de licences du projet). Voir docs/DECISIONS.md.
 import { LEXIQUE, LETTRES, SYMBOLES, CLITIQUES, TIRET, LIAISONS } from './g2p_lexique.js';
 import { nombresEnMots } from './nombres.js';
+import { heuresEnMots, huitTrente } from '../horaire.js';
 
 const VOY = 'aeiouyàâäéèêëîïôöùûüœæ';
 const V = (c) => !!c && VOY.includes(c);
@@ -156,7 +157,8 @@ const SIGLE_NON = new Set(['non', 'oui', 'eau', 'ami', 'bon', 'mal', 'cas', 'vie
 export function motEnPhonemes(brut) {
   const m = brut.toLowerCase();
   const ton = CLITIQUES.has(m) ? (x) => x : accent;
-  if (LEXIQUE[m]) return ton(LEXIQUE[m]);
+  const lex = LEXIQUE[m] || LEXIQUE[m.replace(/oe/g, 'œ')];
+  if (lex) return ton(lex);
   const sigle = brut.length > 1 && brut === brut.toUpperCase() && /[A-Z]/.test(brut) &&
     (!/[aeiouy]/.test(m) ? brut.length <= 6 : brut.length <= 3 && !SIGLE_NON.has(m) && !CLITIQUES.has(m));
   if (sigle || (m.length === 1 && !'aày'.includes(m)) || (m.length > 1 && !/[aeiouyàâäéèêëîïôöùûüœ]/.test(m))) return epeler(m).map(accent).join(' ');
@@ -164,27 +166,48 @@ export function motEnPhonemes(brut) {
 }
 
 const ELISION = /^(l|d|j|n|s|m|t|c|qu|jusqu|lorsqu|puisqu|quelqu)'$/;
-const ELIDE = { l: 'l', d: 'd', j: 'ʒ', n: 'n', s: 's', m: 'm', t: 't', c: 's', qu: 'k', jusqu: 'ʒysk', lorsqu: 'lɔʁsk', puisqu: 'pyisk', quelqu: 'kɛlk' };
+const ELIDE = { l: 'l', d: 'd', j: 'ʒ', n: 'n', s: 's', m: 'm', t: 't', c: 's', qu: 'k', jusqu: 'ʒysk', lorsqu: 'lɔʁsk', puisqu: 'pɥisk', quelqu: 'kɛlk' };
+
+// Désambiguïsation conservatrice : le groupe qui suit doit fournir un indice lexical clair.
+function contexte(mot, precedent, avant, apres, suivant) {
+  if (mot === 'fils' && (/^(électriques?|métalliques?)$/.test(apres) ||
+      (apres === 'de' && /^(cuivre|coton|soie|laine|fer|nylon)$/.test(suivant)) ||
+      (apres === 'du' && /^c[âa]ble$/.test(suivant)))) return 'fil';
+  if (mot === 'couvent' && !/^(ils|elles)$/.test(precedent) && /^(le|un|du|au|ce|son|mon|ton|notre|votre|leur)$/.test(avant)) return 'kuvɑ̃';
+  if (mot === 'président' && /^(ils|elles)$/.test(avant)) return 'pʁezid';
+  return null;
+}
+
+function liaisonPermise(suiv) {
+  if (suiv === 'yeux' || /^hommes?$/.test(suiv)) return true;
+  return /^[aeiouyhàâéèêîôûœ]/.test(suiv) && !/^(h[aiou]|onze|oui|y[aeo]|héros$)/.test(suiv);
+}
 
 /** Phrase → chaîne de phonèmes (ponctuation conservée), prête à être convertie en identifiants Piper. */
-export function phonemiser(texte) {
+export function phonemiser(texte, siwis = false) {
   let t = texte.normalize('NFC').replace(/[’`]/g, "'").replace(/[«»“”"()[\]{}]/g, ' ').replace(/\.{3}|…/g, '.').replace(/aujourd'hui/gi, 'aujourdhui');
-  t = nombresEnMots(t.replace(/(\d)\s*%/g, '$1 pour cent'));
-  t = t.replace(/[@%&+=/\\#$€*_|<>~°]/g, (s) => ` ${SYMBOLES[s]} `).replace(/([A-Za-zÀ-ÿ])-(?=[A-Za-zÀ-ÿ])/g, '$1 ').replace(/(^|\s)-+(?=\S)/g, '$1');
-  const jetons = t.match(/[A-Za-zÀ-ÿœŒ]+'?|[.,;:!?]/g) || [];
+  t = nombresEnMots(heuresEnMots(t).replace(/(\d)\s*%/g, '$1 pour cent'));
+  t = t.replace(/[@%&+=/\\#$€*_|<>~°]/g, (s) => ` ${SYMBOLES[s]} `).replace(/(^|\s)-+(?=\S)/g, '$1');
+  const matches = [...t.matchAll(/(?<![\p{L}\p{M}\p{N}'-])(?:(?:qu|n)')?est[-‐‑]ce(?![\p{L}\p{M}\p{N}])|[A-Za-zÀ-ÿœŒ]+'?|[.,;:!?]/giu)];
+  const jetons = matches.map((m) => m[0]), heuresSiwis = siwis ? huitTrente(t) : null;
   const out = [];
   for (let k = 0; k < jetons.length; k++) {
     const j = jetons[k];
     if (/^[.,;:!?]$/.test(j)) { if (out.length) out[out.length - 1] = out[out.length - 1].replace(/ $/, '') + j + ' '; continue; }
     const m = j.toLowerCase();
+    if (/est[-‐‑]ce$/.test(m)) { out.push(`${m.startsWith("qu'") ? 'kɛs' : m.startsWith("n'") ? 'nˈɛs' : 'ɛs'} `); continue; }
     if (ELISION.test(m)) { out.push(ELIDE[m.slice(0, -1)] || 'k'); continue; }
-    let ph = motEnPhonemes(j.replace(/'$/, ''));
-    const suiv = jetons[k + 1];
+    const avant = jetons[k - 1]?.toLowerCase() || '', suiv = jetons[k + 1]?.toLowerCase() || '';
+    const variante = contexte(m, jetons[k - 2]?.toLowerCase() || '', avant, suiv, jetons[k + 2]?.toLowerCase() || '');
+    let ph = variante ? accent(variante) : motEnPhonemes(j.replace(/'$/, ''));
+    // Ces deux codages sont propres au modèle Siwis Piper ; pas de remplacement général de /ɥ/.
+    if (heuresSiwis?.has(matches[k].index)) ph = 'yˈit';
+    if (siwis && m === 'nuit') ph = 'nyˈi';
     if (TIRET.has(m)) ph += '-';
-    if (LIAISONS[m] && suiv && /^[aeiouyhàâéèêîôûœAEIOUYHÀÂÉÈÊÎÔÛŒ]/.test(suiv) && !/^(h[aiou]|onze|oui|y[aeo])/i.test(suiv)) ph += LIAISONS[m];
+    if (LIAISONS[m] && liaisonPermise(suiv)) ph += LIAISONS[m];
     out.push(`${ph} `);
   }
-  return out.join('').trim().replace(/\s+/g, ' ').replace(/g/g, 'ɡ').replace(/ɥ/g, 'y').replace(/ɲ/g, 'nj');
+  return out.join('').trim().replace(/\s+/g, ' ').replace(/g/g, 'ɡ').replace(/ɲ/g, 'nj');
 }
 
 /**
@@ -193,7 +216,7 @@ export function phonemiser(texte) {
  */
 export function phonemesEnIds(phonemes, carte) {
   const ids = [...carte['^'], ...carte['_']];
-  for (const p of phonemes.normalize('NFD')) { const v = carte[p]; if (v) ids.push(...v, ...carte['_']); }
+  for (const p of phonemes.normalize('NFD')) { const v = carte[p] ?? (p === 'ɥ' ? carte.y : null); if (v) ids.push(...v, ...carte['_']); }
   ids.push(...carte['$']);
   return ids;
 }

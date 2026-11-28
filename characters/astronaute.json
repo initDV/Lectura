@@ -1,5 +1,0 @@
-{"id": "astronaute", "nom": "Astronaute", "role": "pro", "pro": true, "svg": "astronaute.svg",
- "couleurContour": "#ffc233", "couleurRemplissage": "#1c1830", "couleurYeux": "#3ddc84", "couleurBouche": "#38bdf8",
- "pivots": {"epaule_g": [34, 224], "epaule_d": [208, 224]},
- "mouvements": {"vitesseIdle": 1, "amplitudeBras": 1, "style": "flottant"},
- "voixSuggeree": {"hauteur": 1, "vitesse": 0.9}, "accessoires": ["casque_bulle"]}

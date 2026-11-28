@@ -1,0 +1,50 @@
+name: Contrat des packs de voix Android
+on:
+  push:
+    branches: ['arena/d2229c4f-lectura']
+    paths: ['.github/workflows/android-voice-packs.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Générer du PCM Estelle avec le port Android et les fichiers publics
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/pocket-check"
+          mkdir -p "$d"
+          curl -fsSL --retry 2 'https://github.com/ByBrawe/Okuvia-models/releases/download/pocket-multilingual-preset-20261026/fr-pocket-tts-202610-preset.zip' -o "$d/estelle.zip"
+          (cd "$d" && echo '6068d9e5fa2b91c92bda8a3d874c34a3f99799cd5bef45634644b4e37febf718  estelle.zip' | sha256sum -c && unzip -q estelle.zip)
+          curl -fsSL --retry 2 'https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime/1.24.3/onnxruntime-1.24.3.jar' -o "$d/ort.jar"
+          out="$RUNNER_TEMP/estelle-audio"
+          mkdir -p "$out"
+          javac -encoding UTF-8 -d "$d" android/src/io/github/initdv/lectura/{LocalUnigram,OrtLocal,Pocket,Mimi,QuestionPitch}.java android/tests/host/EstelleCheck.java
+          check=(java -Xmx128m -cp "$d:$d/ort.jar" io.github.initdv.lectura.EstelleCheck "$d" "$out")
+          "${check[@]}" prepare
+          # Each measurement starts a fresh process loading only the decoder, so the flow model
+          # and Java heap from latent generation cannot mask the difference in peak RSS.
+          for version in v28 v29; do
+            /usr/bin/time -f '%M KiB RSS max ; %e s' -o "$out/memoire-$version.txt" "${check[@]}" "$version"
+            echo "::notice title=Mémoire Mimi $(uname -m) $version::$(cat "$out/memoire-$version.txt")"
+          done
+          "${check[@]}" check
+          rm -f "$out"/*.f32
+          cp "$d"/MODEL_LICENSE.txt "$d"/VOICE_ATTRIBUTION.md "$out/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Estelle-${{ matrix.runner }}-PCM
+          path: ${{ runner.temp }}/estelle-audio
+          if-no-files-found: error

@@ -1,12 +1,11 @@
 // @ts-check
 // project.js : modèle de projet (.lectura, JSON version 1), validation, export / import. Module pur.
-import { NOMS_BASE, NOMS_PRO } from './expressions.js';
+import { NOMS } from './expressions.js';
 
 export const VERSION_PROJET = 1;
 export const PERSO_DEFAUT = 'robot_lectura';
 const ANCIENS_PERSOS = { professor_1: 'robot_lectura', robot: 'robot_rouge' }; // projets créés avant le robot « outline »
-export const EXPRESSIONS_BASE = ['auto', ...NOMS_BASE]; // auto, neutre, content, concentre, surpris
-export const EXPRESSIONS_PRO = NOMS_PRO;                 // enthousiaste, rire, fier, tendre, sceptique, gene, triste, fatigue, colere, peur
+export const EXPRESSIONS_PROJET = ['auto', ...NOMS];
 
 export function uuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -48,7 +47,7 @@ export function normalizeProject(o) {
         texte: s.texte,
         debutMs: num(s.debutMs, 0, 0, 1e9),
         finMs: num(s.finMs, 0, 0, 1e9),
-        expression: [...EXPRESSIONS_BASE, ...EXPRESSIONS_PRO].includes(s.expression) ? s.expression : 'auto',
+        expression: EXPRESSIONS_PROJET.includes(s.expression) ? s.expression : 'auto',
       })),
     audio: {
       source: a.source === 'fichier' ? 'fichier' : 'voix',

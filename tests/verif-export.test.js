@@ -1,7 +1,7 @@
 // Tests du contrôle automatique de relecture (§4.4-i) : durée, image, son, index du MP4.
 // La décision est dans `evaluer`, une fonction pure, donc vérifiable sans navigateur.
 import { describe, it, expect } from 'vitest';
-import { analyserImages, evaluer, lireFaststart, resumerVerification, tolere, boite } from '../src/modules/verif-export.js';
+import { analyserImages, evaluer, lireFaststart, mesurerImage, resumerVerification, tolere, boite } from '../src/modules/verif-export.js';
 
 /** Concatène des Uint8Array en un seul. */
 const coller = (...bouts) => {
@@ -181,6 +181,11 @@ describe('resumerVerification', () => {
   it('résume un succès en français', () => {
     expect(resumerVerification(evaluer(bon))).toMatch(/Vérifié : 12\.0 s/);
   });
+  it('décrit un enregistrement volontairement sans son sans le déclarer cassé', () => {
+    const v = evaluer({ ...bon, son: { ok: false, erreur: 'absente' }, attendu: { attendSon: false } });
+    expect(v.ok).toBe(true);
+    expect(resumerVerification(v)).toMatch(/Vérifié.*vidéo sans son/);
+  });
   it('résume les problèmes', () => {
     expect(resumerVerification(evaluer({ ...bon, son: { ok: false, erreur: 'absente' } }))).toMatch(/^Attention :/);
   });
@@ -197,6 +202,14 @@ describe('analyserImages : le contenu, pas seulement les métadonnées', () => {
     expect(r.notes).toEqual([]);
   });
 
+  it('voit un mouvement à gauche de l’image même si le terminal ne change pas', () => {
+    const px = new Uint8ClampedArray(64 * 64 * 4).fill(29);
+    for (let y = 22; y < 35; y++) px.fill(81, (y * 64 + 12) * 4, (y * 64 + 18) * 4);
+    const pose1 = mesurerImage(px);
+    for (let y = 21; y < 24; y++) px.fill(147, (y * 64 + 8) * 4, (y * 64 + 12) * 4);
+    expect(analyserImages([pose1, mesurerImage(px)])).toMatchObject({ ok: true, figee: false });
+    expect(analyserImages([pose1, pose1])).toMatchObject({ ok: false, figee: true });
+  });
   it('détecte une vidéo entièrement noire', () => {
     const r = analyserImages([image(0, 0, 'aaa'), image(0, 0, 'aaa')]);
     expect(r.noire).toBe(true);

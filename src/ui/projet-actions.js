@@ -51,9 +51,8 @@ export async function importerTexte(p) {
   } catch (err) { report('import-texte', err); return false; }
 }
 
-/** Pro : importe des sous-titres .srt / .vtt (texte + dates). */
+/** Importe des sous-titres .srt / .vtt (texte + dates). */
 export async function importerSousTitres(p) {
-  if (!store.pro) { notify(t('pro.requis.sousTitres'), 'info'); return false; }
   const f = await pickFile('.srt,.vtt,text/vtt');
   if (!f) return false;
   try {
@@ -64,9 +63,8 @@ export async function importerSousTitres(p) {
   } catch (err) { report('import-sous-titres', err); return false; }
 }
 
-/** Pro : exporte les phrases prononcées en .srt ou .vtt (les commandes et commentaires ne sont pas des sous-titres). */
+/** Exporte les phrases prononcées en .srt ou .vtt (les commandes et commentaires ne sont pas des sous-titres). */
 export function exporterSousTitres(p, format) {
-  if (!store.pro) return notify(t('pro.requis.sousTitres'), 'info');
   if (!p.texte.trim()) return notify(t('scene.err.texteVide'), 'warn');
   const segs = recalculer(p).filter((s) => s.type !== 'commande' && s.type !== 'commentaire');
   downloadBlob(new Blob([format === 'srt' ? toSrt(segs) : toVtt(segs)], { type: 'text/plain' }), `${fileBase(p)}.${format}`);

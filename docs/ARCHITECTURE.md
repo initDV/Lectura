@@ -2,18 +2,43 @@
 
 ## Vue d'ensemble
 
+Lectura existe en deux incarnations :
+
+- **Web (PWA)** : application installable basée sur HTML/JS/CSS, service worker et IndexedDB.
+- **Android native** : application Java (`io.github.initdv.lectura`), minSdk 31, sans WebView.
+
+Les deux s’appuient sur un socle de ressources et de formats, tout en disposant de moteurs de lecture, de rendu et de stockage spécifiques.
+
+### Ressources et formats
+
+| Élément | Nature | Commentaire |
+|---------|--------|-----------|
+| Personnages (SVG + JSON) | Ressource partagée | Même source. `android/assets.mjs` l’adapte à la compilation Android. |
+| Poses, pivots, lexiques d’émotions | Ressource partagée (en partie) | Même origine. Une partie est transformée lors de la préparation Android. |
+| Traductions (FR/EN) | Ressource partagée (en partie) | Même source, adaptée pour Android via `android/assets.mjs`. |
+| Format de projet `.lectura` v1 | Contrat commun | Mis en œuvre séparément en JavaScript et en Java. Ne transporte pas le fichier audio. Ne garantit pas que la même voix soit disponible sur les deux plateformes. |
+
+**Clarification :**
+
+- **Partagé** : le Web et Android partent de la même source, même si Android l’adapte à la compilation.
+- **Contrat commun** : format ou règle défini une fois et implémenté de façon indépendante sur chaque plateforme (cas du `.lectura` v1).
+
+Les deux applications donnent accès à toutes les fonctions sans clé. Le certificat qui signe l’APK sert à vérifier l’identité de l’éditeur et la continuité des mises à jour, pas à débloquer des fonctions.
+
+## Architecture Web
+
 ```
 index.html ── src/boot.js (garde de démarrage)
-           └─ src/main.js → src/app.js (états, réglages, licence)
+           └─ src/main.js → src/app.js (états et réglages)
                               ├─ src/router.js  → src/ui/<écran>.js   (chargés à la demande)
-                              │    scene (écran principal) · projets · personnages · reglages · pro · apropos
+                              │    scene (écran principal) · projets · personnages · reglages · apropos
                               ├─ src/state.js     bus d'événements + état partagé
                               └─ src/modules/*    logique sans interface
 sw.js        service worker (réseau d'abord, copie locale hors ligne)
 characters/  1 SVG + 1 JSON par personnage, index.json
 data/        dictionnaires de mots-clés, textes d'exemple
 models/      voix HD (hors Git, créé par tools/fetch_voice.mjs)
-tools/       serveur, build, icônes, licences, voix
+tools/       serveur, build, icônes, voix
 tests/       tests Vitest
 ```
 
@@ -58,7 +83,7 @@ quelque chose manque.
 |---|---|
 | `keywords.js` | Repère les mots-clés du terminal ; expression de secours d'une phrase (alerte, commande). |
 | `sentiment.js` | Lexique des sentiments : mots, expressions, négation, intensifs, émojis → émotion et position. |
-| `humeur.js` | Expression à jouer à chaque instant : imposée > sentiment > mots-clés ; version gratuite ou Pro. |
+| `humeur.js` | Expression à jouer à chaque instant : imposée > sentiment > mots-clés. |
 | `expressions.js` | Table des expressions (yeux, sourcils, bouche, tête, bras, corps), force, mélange, transition. |
 | `rig.js` | Regroupe à la volée la tête et les avant-bras du SVG, place les bras devant le corps. |
 | `terminal.js` | Faux terminal ; ne garde que 40 lignes dans la page. |
@@ -66,13 +91,13 @@ quelque chose manque.
 | `subtitles.js` | Lecture et écriture `.srt` / `.vtt`. |
 | `project.js` | Format `.lectura` (création, validation, export, import). |
 | `audio.js` | Un seul `AudioContext`, lecture par `<audio>`, analyse du volume, encodage WAV. |
-| `lipsync.js` | Volume → ouverture de bouche (4 niveaux), formes de bouche par bandes (Pro). |
+| `lipsync.js` | Volume → ouverture de bouche (4 niveaux), formes de bouche par bandes. |
 | `character.js`, `character-loader.js` | Chargement, nettoyage et animation des robots. |
 | `capture.js`, `recorder.js`, `svgframe.js` | Capture PNG et enregistrement vidéo sur canvas ; le robot vient du SVG vivant sérialisé. |
 | `voice/webspeech.js`, `voice/queue.js` | Voix du système, file de phrases, reprise, chien de garde. |
 | `voice/piper.js`, `piper-store.js`, `piper-worker.js` | Voix HD : téléchargement, cache, synthèse dans un worker. |
-| `voice/g2p_fr.js`, `g2p_lexique.js`, `nombres.js` | Texte français → phonèmes. |
-| `license.js`, `license-key.js` | Vérification hors ligne de la clé Pro. |
+| `voice/g2p_fr.js`, `g2p_lexique.js`, `nombres.js`, `horaire.js` | Texte français → phonèmes. |
+| `robot-motion.js`, `robot-stage.js`, `player.js` | Mise en scène liée au temps source et marge finale muette du Robot Lectura. |
 | `storage.js` | IndexedDB : réglages, projets, audio, brouillon. |
 | `pwa.js` | Service worker, installation, quota, verrou d'écran. |
 | `errors.js` | Journal local et messages à l'écran. |
@@ -88,13 +113,13 @@ quelque chose manque.
 | `voix-liste.js` | Liste des voix françaises et import d'un fichier audio. |
 | `menu.js`, `modale.js` | Menu discret et fenêtre modale accessible. |
 | `projet-actions.js` | Enregistrer, importer, exporter le projet et les sous-titres. |
-| `projets.js`, `personnages.js`, `reglages.js`, `pro.js`, `apropos.js` | Écrans ouverts depuis le menu. |
+| `projets.js`, `personnages.js`, `reglages.js`, `apropos.js` | Écrans ouverts depuis le menu. |
 | `styles/tokens.css` | Variables de design (D1). |
 
 ## Bus d'événements (`src/state.js`)
 
 `audio:ready/play/pause/end/error`, `tts:sentence-start/sentence-end/boundary`, `timeline:tick`, `terminal:line`,
-`character:expression`, `license:changed`, `net:online/offline`, `sw:update-available`, plus `app:state`, `ui:toast`,
+`character:expression`, `net:online/offline`, `sw:update-available`, plus `app:state`, `ui:toast`,
 `settings:changed`, `pwa:installable`, `pwa:installed`.
 
 ## Sécurité
@@ -108,3 +133,58 @@ quelque chose manque.
 1. Copier `src/i18n/en.js` et `src/i18n/en-settings.js`, traduire les valeurs.
 2. Déclarer la langue dans `CHARGEURS` et `LANGUES` de `src/modules/i18n.js`.
 3. `npm test` vérifie que les clés et les variables correspondent au français.
+
+## Architecture Android
+
+Point d’entrée unique : `MainActivity`.
+
+### Carte des classes principales
+
+| Classe | Rôle | Relation avec MainActivity |
+|--------|------|---------------------------|
+| `Stage`, `ScenePage`, `Screens`, `ExportUi`, `Ui` | Interface / présentation | Référencent **directement** l’activité |
+| `Reading`, `Talk`, `Hd` | Moteurs (lecture, voix système, voix HD) | Pilotés par MainActivity, reçoivent aussi d’autres dépendances |
+| `Project`, `MediaExport`, `Refs`… | Données, export, utilitaires | Utilisés par l’activité et les moteurs |
+
+### Stockage Android
+
+- Réglages → `SharedPreferences`
+- Projets et audio importé → stockage privé de l’application
+- Voix HD → doivent être téléchargées avant leur première utilisation hors ligne
+
+`MainActivity` concentre actuellement la navigation, le cycle de vie de la lecture, la coordination des téléchargements HD et l’accès aux services système. Les rôles existent déjà dans des classes séparées, mais le couplage reste élevé sur certaines classes d’interface.
+
+## Intégration et branches
+
+Le code Android vit actuellement sur une branche de travail dédiée. Pour préparer son intégration dans `main`, la compilation de contrôle est séparée du workflow d’APK signé.
+
+### Compilation de contrôle
+
+Le [workflow de contrôle](../.github/workflows/android-check.yml) est configuré pour les demandes de fusion vers `main` et les mises à jour de `main` qui touchent Android ou les entrées Web utilisées par le build Android (personnages, données, traductions, polices, icônes, catalogue de voix, etc.).
+
+Sur le runner, le contrôle réutilise un SDK Android accessible en écriture ou crée un répertoire temporaire. Il configure `sdkmanager`, accepte les licences du SDK et installe la plateforme 37 et les Build Tools 37.0.0 s’ils manquent.
+
+Il exécute `bash android/build.sh --check` : l’application et l’instrumentation sont compilées sans clé de signature ni APK conservé. Ce contrôle ne télécharge pas les runtimes vocaux optionnels et n’exécute pas les tests sur appareil.
+
+### Production d’APK signé
+
+Le [workflow d’APK signé](../.github/workflows/android.yml) reste sur son déclenchement et son environnement de signature actuels. Il vérifie les runtimes natifs, le certificat permanent et le fonctionnement sur émulateur. Le contrôle sans signature ne remplace pas ces vérifications.
+
+### Contrôles de non-régression
+
+- Exécuter les tests et le build Web
+- Vérifier la compilation Android sans signature
+- Tester l’échange d’un projet `.lectura` dans les deux sens (Web → Android et Android → Web)
+- Vérifier une lecture hors ligne après mise à jour
+- Respecter les critères de mise à jour :
+  - Même `applicationId`
+  - Même certificat de signature
+  - `versionCode` supérieur
+  - Conservation des projets, réglages et médias locaux
+
+## Principes d’évolution
+
+1. Les ressources partagées restent la source de vérité quand c’est pertinent.
+2. Chaque plateforme garde la liberté de ses moteurs (voix, rendu, stockage).
+3. On documente d’abord les frontières (partagé / contrat commun / spécifique) avant de découpler davantage le code.
+4. Tout refactoring de packages Java est reporté après stabilisation de l’intégration.

@@ -1,5 +1,0 @@
-{"id": "etudiante", "nom": "Étudiante", "role": "pro", "pro": true, "svg": "etudiante.svg",
- "couleurContour": "#ff7fb0", "couleurRemplissage": "#1c1830", "couleurYeux": "#3ddc84", "couleurBouche": "#38bdf8",
- "pivots": {"epaule_g": [34, 224], "epaule_d": [208, 224]},
- "mouvements": {"vitesseIdle": 1, "amplitudeBras": 1, "style": "expressif"},
- "voixSuggeree": {"hauteur": 1.2, "vitesse": 1.05}, "accessoires": ["sac_a_dos", "queue_de_cheval"]}

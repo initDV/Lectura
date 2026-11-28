@@ -39,7 +39,7 @@ export function buildMatcher(dict) {
   };
 }
 
-/** Fusionne plusieurs dictionnaires (base + enrichi Pro + catégories personnalisées). */
+/** Fusionne plusieurs dictionnaires (base + enrichi + catégories personnalisées). */
 export function mergeDicts(base, ...extras) {
   const out = { version: base.version || 1, categories: {}, regles: { ...(base.regles || {}) } };
   for (const d of [base, ...extras]) {

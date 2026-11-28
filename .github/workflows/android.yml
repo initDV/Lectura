@@ -1,0 +1,355 @@
+name: Lectura Android
+
+on:
+  push:
+    branches: ['arena/d2229c4f-lectura']
+    paths: ['android/**', 'characters/**', 'src/modules/aicha/**', 'src/modules/character-spec.js', 'tools/character-catalogue.mjs', '.github/workflows/android.yml']
+  workflow_dispatch:
+    inputs:
+      predecessor_run:
+        description: 'Run Android précédent à comparer pour la signature (facultatif)'
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    if: github.repository == 'initDV/Lectura' && github.ref == 'refs/heads/arena/d2229c4f-lectura'
+    runs-on: ubuntu-24.04
+    # A normal branch push exercises the same Android code without the release key.
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'android-signing' || 'android-recette' }}
+    steps:
+      - name: Exiger les secrets de signature permanente
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          KEYSTORE_PRESENT: ${{ secrets.KEYSTORE_BASE64 != '' && 'yes' || 'no' }}
+          PASSWORD_PRESENT: ${{ secrets.KEYSTORE_PASSWORD != '' && 'yes' || 'no' }}
+        run: |
+          fail=0
+          if [[ "$KEYSTORE_PRESENT" != yes ]]; then
+            echo '::error title=Keystore permanent manquant::KEYSTORE_BASE64 doit être un Environment secret dans android-signing.'
+            fail=1
+          fi
+          if [[ "$PASSWORD_PRESENT" != yes ]]; then
+            echo '::error title=Mot de passe du keystore manquant::KEYSTORE_PASSWORD doit être un Environment secret dans android-signing.'
+            fail=1
+          fi
+          if ((fail)); then exit 1; fi
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Relever l’empreinte publique avant la première signature
+        if: github.event_name == 'workflow_dispatch' && hashFiles('android/signing-cert.sha256') == ''
+        env:
+          LECTURA_KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          LECTURA_STORE_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          LECTURA_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          LECTURA_SIGNING_CERT_SHA256: ${{ vars.LECTURA_SIGNING_CERT_SHA256 }}
+        run: bash android/ci-signing.sh enroll
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Outils SDK
+        run: |
+          if [[ ! -f "$ANDROID_HOME/platforms/android-37.0/android.jar" && ! -f "$ANDROID_HOME/platforms/android-37/android.jar" ]]; then
+            sdkmanager 'platforms;android-37.0'
+          fi
+          [[ -x "$ANDROID_HOME/build-tools/37.0.0/aapt2" ]] || sdkmanager 'build-tools;37.0.0'
+          python3 -m pip install --user fonttools brotli
+      - name: Dépendances natives et catalogue original
+        run: |
+          ort=1.24.3
+          curl --fail --retry 2 --location "https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/$ort/onnxruntime-android-$ort.aar" -o "$RUNNER_TEMP/ort.aar"
+          echo "LECTURA_ORT_AAR=$RUNNER_TEMP/ort.aar" >> "$GITHUB_ENV"
+          bash android/fetch-voice-runtimes.sh "$RUNNER_TEMP/voice-runtime"
+          echo "LECTURA_VOICE_DEPS=$RUNNER_TEMP/voice-runtime" >> "$GITHUB_ENV"
+          if curl --fail --retry 2 --location 'https://initdv.github.io/Lectura/models/index.json' -o "$RUNNER_TEMP/hd.json"; then
+            echo "LECTURA_HD_INDEX=$RUNNER_TEMP/hd.json" >> "$GITHUB_ENV"
+          fi
+      - name: Fichier de parole commun aux deux tests
+        run: |
+          npm install --prefix "$RUNNER_TEMP/lectura-tts" --no-save --ignore-scripts espeak-ng@1.0.2
+          node --input-type=module <<'JS'
+          import { writeFile } from 'node:fs/promises';
+          import { pathToFileURL } from 'node:url';
+          import { lipsFixture } from './android/tests/lips.mjs';
+          import { splitSentences } from './src/modules/timeline.js';
+          const out = process.env.RUNNER_TEMP;
+          const { default: espeak } = await import(pathToFileURL(`${out}/lectura-tts/node_modules/espeak-ng/dist/espeak-ng.js`));
+          const spoken = splitSentences(lipsFixture().data.text).filter(p => p.type === 'parle').map(p => p.texte).join(' ');
+          const synth = await espeak({ arguments: ['-v', 'fr-fr', '-w', 'fixture.wav', spoken] });
+          await writeFile(`${out}/lips-spoken.wav`, synth.FS.readFile('fixture.wav'));
+          JS
+          echo "LECTURA_TEST_SPEECH_WAV=$RUNNER_TEMP/lips-spoken.wav" >> "$GITHUB_ENV"
+      - name: Compiler et signer avec le certificat permanent
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          LECTURA_KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          LECTURA_STORE_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          LECTURA_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          LECTURA_KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+          LECTURA_SIGNING_CERT_SHA256: ${{ vars.LECTURA_SIGNING_CERT_SHA256 }}
+        run: |
+          LECTURA_BUILD="${GITHUB_SHA:0:8}" LECTURA_VERSION_CODE="$GITHUB_RUN_NUMBER" \
+            LECTURA_TEST_APK="$RUNNER_TEMP/LecturaTests.apk" bash android/ci-signing.sh build "$RUNNER_TEMP/Lectura.apk"
+      - name: Compiler uniquement pour l’émulateur, avec une clé jetable
+        if: github.event_name == 'push'
+        env:
+          LECTURA_STORE_PASS: test-only
+        run: |
+          export LECTURA_KEYSTORE="$RUNNER_TEMP/lectura-test.p12"
+          keytool -genkeypair -keystore "$LECTURA_KEYSTORE" -storetype PKCS12 -storepass:env LECTURA_STORE_PASS \
+            -keyalg RSA -keysize 2048 -validity 7 -alias lectura -dname 'CN=Lectura tests uniquement'
+          digest=$(keytool -exportcert -keystore "$LECTURA_KEYSTORE" -storepass:env LECTURA_STORE_PASS -alias lectura | sha256sum)
+          LECTURA_SIGNING_CERT_SHA256="${digest%% *}" LECTURA_BUILD="${GITHUB_SHA:0:8}" LECTURA_VERSION_CODE="$GITHUB_RUN_NUMBER" \
+            LECTURA_TEST_APK="$RUNNER_TEMP/LecturaTests.apk" bash android/build.sh "$RUNNER_TEMP/Lectura.apk"
+          rm -f "$LECTURA_KEYSTORE"
+      - name: Vérifier les bibliothèques 64 bits et le catalogue dans l’APK
+        run: |
+          python3 - "$RUNNER_TEMP/Lectura.apk" <<'PY'
+          import json
+          import struct
+          import sys
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          with ZipFile(sys.argv[1]) as apk:
+              source = Path('characters')
+              expected = {'index.json'}
+              for ident in json.loads((source / 'index.json').read_bytes())['personnages']:
+                  sheet = ident + '.json'
+                  info = json.loads((source / sheet).read_bytes())
+                  expected.update(filter(None, [sheet, info['svg'], info.get('svgScene')]))
+              assets = {n for n in apk.namelist() if n.startswith('assets/characters/') and not n.endswith('/')}
+              if assets != {'assets/characters/' + name for name in expected}:
+                  raise SystemExit('Le catalogue de l’APK diffère de l’index.')
+              for name in expected:
+                  if apk.read('assets/characters/' + name) != (source / name).read_bytes():
+                      raise SystemExit(f'Dessin ou fiche modifié : {name}')
+              print(f'::notice title=Catalogue::Les {len(expected)} fichiers sont identiques aux sources du catalogue.')
+              for abi, machine in [('arm64-v8a', 183), ('x86_64', 62)]:
+                  for lib in ['onnxruntime', 'onnxruntime4j_jni', 'sherpa-onnx-jni']:
+                      path = f'lib/{abi}/lib{lib}.so'
+                      with apk.open(path) as fd:
+                          header = fd.read(20)
+                      if header[:6] != b'\x7fELF\x02\x01' or struct.unpack_from('<H', header, 18)[0] != machine:
+                          raise SystemExit(f'Bibliothèque invalide : {path}')
+              if any(n.endswith(('.onnx', '.preset')) for n in apk.namelist()):
+                  raise SystemExit('Des poids vocaux sont incorporés à l’APK.')
+          print('::notice title=ABI et poids::ONNX et Sherpa présents en ARM64 et x86_64 ; aucun modèle vocal incorporé.')
+          PY
+      - name: Récupérer un candidat de référence sur demande
+        if: github.event_name == 'workflow_dispatch' && inputs.predecessor_run != ''
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: Lectura-Android-API31+
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.predecessor_run }}
+          path: ${{ runner.temp }}/lectura-predecessor
+      - name: Comparer les certificats de signature
+        if: github.event_name == 'workflow_dispatch'
+        timeout-minutes: 4
+        id: certificates
+        env:
+          LECTURA_REPORT: ${{ runner.temp }}/lectura-report
+          REFERENCE_RUN: ${{ inputs.predecessor_run }}
+        run: |
+          signer="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          mkdir -p "$LECTURA_REPORT"
+          fingerprint() { "$signer" verify --print-certs "$1" | awk '/certificate SHA-256 digest:/ {print $NF}'; }
+          current=$(fingerprint "$RUNNER_TEMP/Lectura.apk")
+          test -n "$current"
+          echo "::notice title=Certificat APK Lectura::SHA-256 $current"
+          echo "Nouveau : $current" > "$LECTURA_REPORT/apk-certificates.txt"
+          previous="$RUNNER_TEMP/lectura-predecessor/Lectura.apk"
+          if [[ -z "$REFERENCE_RUN" ]]; then
+            # Test the actual public APK, with a bounded download and its pinned hash.
+            mkdir -p "$(dirname "$previous")"
+            curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 --max-time 85 --retry-max-time 170 \
+              'https://github.com/initDV/Lectura/releases/download/v1.1.5/Lectura.apk' -o "$previous"
+            printf '%s  %s\n' 'f8e94b6e33caf2545e5c7d3899c1f779cd8e5a14c23d61c0ac466980c6c6de79' "$previous" | sha256sum -c -
+          fi
+          if [[ -f "$previous" ]]; then
+            old=$(fingerprint "$previous")
+            test -n "$old"
+            echo "Précédent : $old" >> "$LECTURA_REPORT/apk-certificates.txt"
+            if [[ "$current" != "$old" ]]; then
+              echo '::error title=Pas une mise à jour::Les deux APK n’ont pas le même certificat.'
+              exit 1
+            fi
+            aapt="$ANDROID_HOME/build-tools/37.0.0/aapt2"
+            metadata() { "$aapt" dump badging "$1" | sed -n '1p'; }
+            previous_info=$(metadata "$previous")
+            new_info=$(metadata "$RUNNER_TEMP/Lectura.apk")
+            version() { sed -n "s/.*versionCode='\([0-9][0-9]*\)'.*/\1/p" <<< "$1"; }
+            before=$(version "$previous_info"); after=$(version "$new_info")
+            if [[ $previous_info != "package: name='io.github.initdv.lectura' "* || $new_info != "package: name='io.github.initdv.lectura' "* || -z $before || -z $after ]] || ((after <= before)); then
+              echo '::error title=Pas une mise à jour::Identifiant d’application différent ou versionCode non croissant.'
+              exit 1
+            fi
+            echo "::notice title=Signature de mise à jour::Même certificat, versionCode $before → $after."
+            printf 'versionCode précédent : %s\nversionCode nouveau : %s\n' "$before" "$after" >> "$LECTURA_REPORT/apk-certificates.txt"
+            echo "LECTURA_PREDECESSOR_APK=$previous" >> "$GITHUB_ENV"
+          else
+            echo '::warning title=APK de référence indisponible::Mise à jour en place non testée.'
+            echo 'Précédent : artifact indisponible' >> "$LECTURA_REPORT/apk-certificates.txt"
+          fi
+      - name: Sources correspondantes et notices Android
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p "$RUNNER_TEMP/lectura-sources"
+          git archive --format=tar.gz --prefix=Lectura/ HEAD > "$RUNNER_TEMP/lectura-sources/lectura.tar.gz"
+          rev=582bbba6a12f981b984d8fb9e1874499fed85675
+          curl -fsSL --retry 2 "https://codeload.github.com/zhuker/lamejs/tar.gz/$rev" -o "$RUNNER_TEMP/lectura-sources/lamejs.tar.gz"
+          cp android/README.md android/licenses/*.md android/licenses/*.txt "$RUNNER_TEMP/lectura-sources/"
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: Lectura-Android-sources
+          path: ${{ runner.temp }}/lectura-sources
+          if-no-files-found: error
+      - name: Accélération KVM pour Android 12
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Captures de la référence Pages
+        continue-on-error: true
+        env:
+          LECTURA_REPORT: ${{ runner.temp }}/lectura-report
+        run: |
+          npm install --prefix "$RUNNER_TEMP/lectura-web" playwright@1.57.0
+          cp android/tests/web.mjs "$RUNNER_TEMP/lectura-web/web.mjs"
+          unzip -p "$RUNNER_TEMP/LecturaTests.apk" assets/fixtures.json > "$RUNNER_TEMP/lectura-web/fixtures.json"
+          "$RUNNER_TEMP/lectura-web/node_modules/.bin/playwright" install chromium
+          # Isolate the Linux speech setup from the APK build and the reference WAV check.
+          sources="$RUNNER_TEMP/ubuntu.sources"
+          sed -E 's#http://[^ ]+/ubuntu/?#https://archive.ubuntu.com/ubuntu/#g' /etc/apt/sources.list.d/ubuntu.sources > "$sources"
+          aptopts=(-o "Dir::Etc::SourceList=$sources" -o Dir::Etc::SourceParts=- -o Acquire::Languages=none -o Acquire::IndexTargets::deb::DEP-11::DefaultEnabled=false -o Acquire::https::Timeout=12 -o Acquire::Retries=0)
+          install_speech() {
+            sudo env DEBIAN_FRONTEND=noninteractive timeout 35 apt-get "${aptopts[@]}" install -y --no-install-recommends speech-dispatcher speech-dispatcher-espeak-ng pulseaudio
+          }
+          host_log="$LECTURA_REPORT/web-speech-setup.txt"
+          start_speech() {
+            export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$RUNNER_TEMP/lectura-audio}"
+            mkdir -p -m 700 "$XDG_RUNTIME_DIR"
+            { install_speech || { sudo timeout 50 apt-get "${aptopts[@]}" update -qq && install_speech; }; } &&
+              pulseaudio --start --exit-idle-time=-1 && pactl load-module module-null-sink sink_name=lectura_ci &&
+              pactl set-default-sink lectura_ci && speech-dispatcher -d
+          }
+          if start_speech >"$host_log" 2>&1; then
+            LECTURA_TEST_SYSTEM_VOICE=1 xvfb-run -a node "$RUNNER_TEMP/lectura-web/web.mjs"
+          else
+            tail=$(tail -c 650 "$host_log" | tr '\r\n' ' ')
+            echo "::warning title=Web Speech non testé::Moteur Linux indisponible : ${tail//%/%25}"
+            node "$RUNNER_TEMP/lectura-web/web.mjs"
+          fi
+      - name: Moteur TextToSpeech de l’émulateur (test seulement)
+        run: |
+          curl -fsSL --retry 2 --max-time 25 'https://github.com/espeak-ng/espeak-ng/releases/download/1.52.0/espeak-1.52.0-signed.apk' -o "$RUNNER_TEMP/espeak.apk"
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify "$RUNNER_TEMP/espeak.apk"
+          echo "LECTURA_TEST_TTS_APK=$RUNNER_TEMP/espeak.apk" >> "$GITHUB_ENV"
+      - name: Test Android 12
+        id: android_checks
+        timeout-minutes: 24
+        env:
+          LECTURA_REPORT: ${{ runner.temp }}/lectura-report
+        run: |
+          echo "::notice file=docs/ANDROID_PARITE.md,title=SDK CI::$(command -v sdkmanager) ; $(command -v adb) ; $(pwd)"
+          ls -l android/tests
+          bash android/tests/emulator.sh "$RUNNER_TEMP/Lectura.apk" "$RUNNER_TEMP/LecturaTests.apk"
+      - name: Comparer les surfaces de l’application
+        if: always() && steps.android_checks.outcome != 'skipped' && steps.android_checks.outcome != ''
+        # Pages is an external read-only reference. A missing reference capture cannot
+        # invalidate a signed APK that passed every native assertion.
+        continue-on-error: true
+        env:
+          LECTURA_REPORT: ${{ runner.temp }}/lectura-report
+        run: |
+          python3 -m pip install --user pillow
+          if ! python3 android/tests/compare.py; then
+            echo '::warning title=Comparaison visuelle incomplète::Voir les captures et comparaison.json dans Lectura-comparaison.'
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.android_checks.outcome != 'skipped' && steps.android_checks.outcome != ''
+        with:
+          name: Lectura-comparaison
+          path: ${{ runner.temp }}/lectura-report
+          if-no-files-found: warn
+      - name: Préparer le comparatif Estelle avant/après
+        id: voice_samples
+        if: steps.android_checks.outcome == 'success'
+        continue-on-error: true # The separately validated APK does not depend on transfer of the samples.
+        env:
+          LECTURA_REPORT: ${{ runner.temp }}/lectura-report
+        run: |
+          grep -E '^LECTURA_OK (estelle-auto|kokoro|siwis-piper)-en-avion :' "$LECTURA_REPORT/android-checks.txt" |
+            while IFS= read -r check; do
+              printf '::notice title=Voix testée en mode avion::%s\n' "${check//%/%25}"
+            done || true
+          python3 - "$LECTURA_REPORT/voix" <<'PY'
+          from array import array
+          from pathlib import Path
+          from math import log10
+          import sys
+          import wave
+
+          def energy(pcm):
+              samples = array('h', pcm)
+              if sys.byteorder != 'little':
+                  samples.byteswap()
+              return sum(n * n for n in samples)
+
+          folder = Path(sys.argv[1])
+          try:
+              if not (folder / 'texte.txt').read_text(encoding='utf-8').strip():
+                  raise ValueError('texte.txt vide')
+              estelle = []
+              for i, name in enumerate(('siwis-douce', 'estelle-avant', 'estelle-projetee'), 1):
+                  path = folder / f'{i:02}-{name}.wav'
+                  with wave.open(str(path), 'rb') as f:
+                      rate = 22050 if i == 1 else 24000
+                      frames = f.getnframes()
+                      if f.getparams()[:3] != (1, 2, rate) or not rate <= frames < 60 * rate:
+                          raise ValueError(f'{path.name} : format ou durée inattendus')
+                      pcm = f.readframes(frames)
+                      if len(pcm) != 2 * frames or not any(pcm):
+                          raise ValueError(f'{path.name} : données PCM incomplètes ou muettes')
+                      if i != 1:
+                          estelle.append(pcm)
+                      print(f'{path.name} : {frames / rate:.2f} s, PCM mono 16 bits à {rate} Hz')
+              dry, wet = estelle
+              if len(dry) != len(wet) or dry == wet:
+                  raise ValueError('Estelle : les deux pistes doivent différer sans changer de durée')
+              lift = 10 * log10(energy(wet) / energy(dry))
+              print(f'::notice title=Comparatif Estelle::Durée commune : {len(dry) // 2} échantillons ; différence de niveau RMS : {lift:+.2f} dB.')
+          except (OSError, EOFError, wave.Error, ValueError) as error:
+              print(f'::warning title=Comparatif vocal Android::{error}')
+              raise SystemExit(1)
+          PY
+          cp android/tests/voix-lisez-moi.md "$LECTURA_REPORT/voix/Lisez-moi.md"
+      - uses: actions/upload-artifact@v4
+        if: steps.voice_samples.outcome == 'success'
+        with:
+          name: Lectura-estelle-avant-apres
+          path: ${{ runner.temp }}/lectura-report/voix
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: success() && steps.certificates.outcome == 'success' && steps.android_checks.outcome == 'success'
+        with:
+          name: Lectura-Android-API31+
+          path: ${{ runner.temp }}/Lectura.apk
+          if-no-files-found: error

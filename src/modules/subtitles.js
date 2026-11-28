@@ -1,5 +1,5 @@
 // @ts-check
-// subtitles.js : import / export de sous-titres .srt et .vtt (fonction Pro). Module pur.
+// subtitles.js : import / export de sous-titres .srt et .vtt. Module pur.
 
 const RE_TEMPS = /(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})\s*-->\s*(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})/;
 const ms = (h, m, s, f) => (+(h || 0) * 3600 + +m * 60 + +s) * 1000 + +String(f).padEnd(3, '0');

@@ -1,0 +1,23 @@
+APP NAME
+Lectura
+
+SHORT DESCRIPTION
+Bring your text to life with 43 characters, even offline.
+
+LONG DESCRIPTION
+Turn a text into an animated scene with Lectura. Pick from 43 characters, paste a text or open a script, and start reading. The terminal displays words in time with the audio while your character moves its lips and changes expression.
+
+Read in airplane mode with a local system voice, an installed Lectura HD voice, or your own audio file. Download HD voices such as Siwis and Estelle on compatible devices. Once a voice pack is installed, speech is generated offline on your phone.
+
+Create a lesson, tell a story or record a demonstration. Adjust the speed, customise the terminal, and import or export SRT or VTT subtitles. Record your scene with sound in vertical 9:16 or landscape 16:9 video, depending on your device’s codecs. Find and share your exports in My Videos.
+
+Lectura for Android is 100% free, with no account and no ads. Projects stay on your device unless you choose to export or share files. Requires Android 12 or later.
+
+CATEGORY
+Productivity (use Tools if Productivity is not offered)
+
+KEYWORDS
+text to speech, offline, animated characters, HD voices, video export, subtitles, read aloud, terminal
+
+WHAT’S NEW
+Lectura for Android: 43 characters, downloadable HD voices, offline reading, a local project library and video export with sound.

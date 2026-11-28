@@ -72,10 +72,6 @@ export async function ouvrirListeVoix(projet, onChange) {
     const choisir = (moteur, id) => () => {
       a.source = 'voix'; a.voix.moteur = moteur; a.voix.id = id;
       fermer(); onChange();
-      // Préchargement : on lance la synthèse d'un texte vide en arrière-plan pour préparer le worker.
-      if (moteur === 'piper') {
-        getEngine('piper').then((m) => m.synthesize('a', { voixId: id })).catch(() => {});
-      }
     };
     const ligne = (texte, actif, action, ic) => h('li', null, h('button', { type: 'button', 'aria-pressed': String(actif), onClick: action },
       icon(ic), h('span', { class: 'grow', text: texte })));

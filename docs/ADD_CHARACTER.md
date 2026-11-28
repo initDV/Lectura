@@ -1,8 +1,7 @@
 # Ajouter un personnage
 
 Aucun code à modifier : deux fichiers à créer, une commande à lancer.
-Tous les personnages partagent le même robot (mêmes proportions, mêmes articulations, même style « contour »).
-Seuls changent la couleur du contour et des yeux, et un ou deux accessoires en traits simples.
+Ce guide décrit le rig historique des robots. Les [cinq lectrices](AICHA-PWA.md) ont un rig différent (`rig: "aicha"`) et ne doivent pas être adaptées à ces calques. Seules les fiches de `characters/index.json` sont empaquetées par les deux builds.
 
 ## 1. Copier le robot de référence
 
@@ -57,7 +56,7 @@ Règles pratiques :
 ## 3. Remplir le JSON
 
 ```json
-{"id":"mon_robot","nom":"Mon robot","role":"pro","pro":true,"svg":"mon_robot.svg",
+{"id":"mon_robot","nom":"Mon robot","svg":"mon_robot.svg",
  "couleurContour":"#ff4d4d","couleurRemplissage":"#1c1830","couleurYeux":"#ffd23f","couleurBouche":"#38bdf8",
  "pivots":{"epaule_g":[34,224],"epaule_d":[208,224]},
  "mouvements":{"vitesseIdle":1,"amplitudeBras":1,"style":"fluide"},
@@ -65,7 +64,7 @@ Règles pratiques :
 ```
 
 - `id` doit être identique au nom du fichier.
-- `pro: true` réserve le personnage à Lectura Pro. Gratuits aujourd'hui : `robot_lectura` et `robot_rouge`.
+- Tout personnage ajouté est accessible gratuitement. Le Robot Lectura utilise en plus un `svgScene` articulé en lecture ; les autres dessins continuent à utiliser leur rig habituel.
 - `mouvements.style` : `fluide`, `saccade`, `sec`, `frappe`, `flottant`, `ondulant`, `calme` ou `expressif`.
 - `vitesseIdle` et `amplitudeBras` multiplient la vitesse et l'ampleur des mouvements.
 

@@ -12,12 +12,12 @@ const ANNONCE = 0.35; // part de l'expression montrée avant le premier mot déc
 const MELANGE = 0.3;  // part de l'émotion précédente gardée dans la suivante
 
 /**
- * @param {{ lexique?: any, matcher: (t: string) => {t: string, cat: string|null}[], pro?: boolean, actif?: boolean }} o
- * `actif` = émotions automatiques d'après les mots ; `pro` = expressions avancées et mélanges autorisés.
+ * @param {{ lexique?: any, matcher: (t: string) => {t: string, cat: string|null}[], actif?: boolean }} o
+ * `actif` = émotions automatiques d'après les mots.
  */
-export function creerHumeur({ lexique = null, matcher, pro = false, actif = true }) {
+export function creerHumeur({ lexique = null, matcher, actif = true }) {
   const cache = new Map();
-  const jouable = (e) => expressionJouable(e, pro);
+  const jouable = expressionJouable;
 
   /** Analyse d'une phrase : { expr, force, second, poids, moments, source }. */
   function de(seg) {

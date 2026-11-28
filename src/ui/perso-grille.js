@@ -1,10 +1,9 @@
 // @ts-check
-// perso-grille.js : grille de choix du personnage (vignettes en pose de repos, badge Pro, verrou).
-import { store } from '../state.js';
+// perso-grille.js : grille de choix du personnage (vignettes en pose de repos).
 import { h, clear } from './dom.js';
 import { t } from '../modules/i18n.js';
 import { loadCharacters, thumbnailUrl } from '../modules/character-loader.js';
-import { report, notify } from '../modules/errors.js';
+import { report } from '../modules/errors.js';
 
 /** @param {{ valeur: string, onChange: (id:string)=>void }} o */
 export function characterGrid({ valeur, onChange }) {
@@ -17,13 +16,11 @@ export function characterGrid({ valeur, onChange }) {
       const persos = await loadCharacters();
       clear(el);
       for (const def of persos) {
-        const verrou = def.pro && !store.pro;
         const img = h('img', { alt: '', width: 64, height: 86, src: 'icons/favicon.svg' });
-        const carte = h('button', { type: 'button', class: `char-card${verrou ? ' locked' : ''}`, 'aria-pressed': 'false',
-          'aria-label': `${def.nom}${def.pro ? ' (Pro)' : ''}`, disabled: !!def.erreur, title: def.erreur || def.nom },
-        img, h('span', { text: def.nom }), def.pro ? h('span', { class: 'badge badge-pro', text: 'PRO' }) : null);
+        const carte = h('button', { type: 'button', class: 'char-card', 'aria-pressed': 'false',
+          'aria-label': def.nom, disabled: !!def.erreur, title: def.erreur || def.nom },
+        img, h('span', { text: def.nom }));
         carte.addEventListener('click', () => {
-          if (verrou) { notify(t('pro.requis.personnage', { nom: def.nom }), 'info'); return; }
           valeur = def.id; marquer(); onChange(def.id);
         });
         cartes.set(def.id, carte);
